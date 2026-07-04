@@ -45,6 +45,20 @@ the account-scoped screens (portfolio, assets) have an account to load; the fron
 
 To stop Postgres (and any other containers): `make db-down`.
 
+### Using Podman instead of Docker
+
+The `db-*` targets use `docker compose` by default. Override the `COMPOSE` variable to use Podman
+(the compose file itself needs no changes):
+
+```bash
+make db-up COMPOSE="podman compose"     # Podman 4.1+ compose subcommand
+make db-up COMPOSE=podman-compose       # or the standalone podman-compose
+```
+
+On Windows/macOS, start the Podman VM first (`podman machine init` once, then `podman machine start`).
+Alternatively, point `DOCKER_HOST` at Podman's Docker-compatible socket and the unmodified `make db-up`
+works as-is.
+
 ### Run the frontend standalone (mocks, no backend)
 
 The frontend runs entirely on in-memory fixtures when `VITE_API_URL` is unset — useful for UI work and

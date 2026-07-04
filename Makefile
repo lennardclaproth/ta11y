@@ -27,6 +27,9 @@ RUN_BINARY := ./bin/$(BINARY_NAME)$(EXE)
 COVERAGE_FILE := coverage.out
 MIGRATION_DIR := $(API_DIR)/migrations/postgres
 COMPOSE_FILE := deploy/docker/compose.dev.yaml
+# Compose command used by the db-* targets. Override for Podman, e.g.:
+#   make db-up COMPOSE="podman compose"   (or COMPOSE=podman-compose)
+COMPOSE ?= docker compose
 
 # --- Helpers (cross-platform commands) ---
 ifeq ($(IS_WINDOWS),1)
@@ -53,9 +56,9 @@ help:
 	@echo "  make build            - Build the application binary"
 	@echo "  make run              - Build and run the API (reads apps/api/config.yaml)"
 	@echo "  make dev              - Run API with hot reload (requires air)"
-	@echo "  make db-up            - Start local Postgres (Docker) for the API"
+	@echo "  make db-up            - Start local Postgres for the API (override: COMPOSE=\"podman compose\")"
 	@echo "  make db-up-all        - Start Postgres + Elasticsearch/Kibana/APM (full stack)"
-	@echo "  make db-down          - Stop the local Docker stack"
+	@echo "  make db-down          - Stop the local container stack"
 	@echo "  make db-logs          - Tail Postgres container logs"
 	@echo "  make web-install      - Install frontend dependencies (web/)"
 	@echo "  make web-dev          - Run the SvelteKit dev server (web/, port 5199)"
@@ -156,23 +159,23 @@ env:
 
 ## db-up: Start local Postgres (Docker) for the API
 db-up:
-	@echo "Starting Postgres (Docker)..."
-	@docker compose -f $(COMPOSE_FILE) up -d postgres
+	@echo "Starting Postgres ($(COMPOSE))..."
+	@$(COMPOSE) -f $(COMPOSE_FILE) up -d postgres
 	@echo "Postgres is up on localhost:5432. The API auto-creates the database and runs migrations on start."
 
 ## db-up-all: Start Postgres plus the observability stack (Elasticsearch/Kibana/APM)
 db-up-all:
 	@echo "Starting full local stack (Postgres + Elasticsearch + Kibana + APM)..."
-	@docker compose -f $(COMPOSE_FILE) up -d
+	@$(COMPOSE) -f $(COMPOSE_FILE) up -d
 
-## db-down: Stop the local Docker stack
+## db-down: Stop the local container stack
 db-down:
-	@echo "Stopping local Docker stack..."
-	@docker compose -f $(COMPOSE_FILE) down
+	@echo "Stopping local container stack..."
+	@$(COMPOSE) -f $(COMPOSE_FILE) down
 
 ## db-logs: Tail Postgres container logs
 db-logs:
-	@docker compose -f $(COMPOSE_FILE) logs -f postgres
+	@$(COMPOSE) -f $(COMPOSE_FILE) logs -f postgres
 
 ## web-install: Install frontend dependencies
 web-install:
