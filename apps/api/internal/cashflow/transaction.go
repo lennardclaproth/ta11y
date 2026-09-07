@@ -14,6 +14,46 @@ import (
 )
 
 type CashFlowDirection string
+
+func ParseDirection(raw string) (*CashFlowDirection, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return nil, nil
+	case "in", "income":
+		direction := CashIn
+		return &direction, nil
+	case "out", "expense":
+		direction := CashOut
+		return &direction, nil
+	default:
+		return nil, fmt.Errorf("direction must be either in or out")
+	}
+}
+
+func SplitTags(tags string) []string {
+	if strings.TrimSpace(tags) == "" {
+		return nil
+	}
+
+	raw := strings.Split(tags, ",")
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		tag := strings.TrimSpace(entry)
+		if tag == "" {
+			continue
+		}
+
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
 type AccountType string
 
 type CsvParser interface {
@@ -34,7 +74,7 @@ const (
 
 type Transaction struct {
 	ID          uuid.UUID         `db:"id"`
-	AccountID   *uuid.UUID        `db:"account_id"`
+	AccountID   uuid.UUID         `db:"account_id"`
 	Description string            `db:"description"`
 	Note        string            `db:"note"`
 	Source      string            `db:"source"`
@@ -47,18 +87,8 @@ type Transaction struct {
 	Tag         string            `db:"tag"`
 	RowNumber   int               `db:"row_number"`
 	Ignored     bool              `db:"ignored"`
-	ImportID    uuid.UUID         `db:"import_id"`
+	ImportID    *uuid.UUID        `db:"import_id"`
 	AccountType *AccountType      `db:"account_type"` // Allow nullable account type.
-}
-
-type TransactionData struct {
-	Description string
-	Note        string
-	Source      string
-	Direction   CashFlowDirection
-	Amount      float64
-	Date        time.Time
-	AccountType *AccountType
 }
 
 var (
@@ -68,16 +98,7 @@ var (
 )
 
 // NewTransaction creates a new Transaction instance and generates its checksum.
-func NewTransaction(desc, note, source string, direction CashFlowDirection, amount float64, date time.Time, rowNumber int, importID uuid.UUID, accountType *AccountType, accountID ...*uuid.UUID) (*Transaction, error) {
-	// Guard on domain level against invalid amount values
-	amountCents, err := money.NewPrice(amount)
-	if err != nil {
-		return nil, fmt.Errorf("NewTransaction failed: %w", err)
-	}
-	var accID *uuid.UUID
-	if len(accountID) > 0 {
-		accID = accountID[0]
-	}
+func NewTransaction(desc, note, source, tag string, direction CashFlowDirection, amount money.Price, date time.Time, rowNumber int, importID *uuid.UUID, accountType *AccountType, accID uuid.UUID) (*Transaction, error) {
 	t := &Transaction{
 		ID:          uuid.New(),
 		AccountID:   accID,
@@ -85,13 +106,14 @@ func NewTransaction(desc, note, source string, direction CashFlowDirection, amou
 		Note:        note,
 		Source:      source,
 		Direction:   direction,
-		AmountCents: amountCents,
+		AmountCents: amount,
 		Date:        date,
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 		RowNumber:   rowNumber,
 		ImportID:    importID,
 		AccountType: accountType,
+		Tag:         tag,
 	}
 	t.Checksum = t.generateChecksum()
 	return t, nil
@@ -111,7 +133,7 @@ func (t *Transaction) generateChecksum() string {
 	rowNumber := fmt.Sprintf("%d", t.RowNumber)
 	date := t.Date.Format("20060102") // Standard date format
 	accountID := ""
-	if t.AccountID != nil {
+	if t.AccountID != uuid.Nil {
 		accountID = t.AccountID.String()
 	}
 	// concatenate all fields to form the payload string to generate a checksum

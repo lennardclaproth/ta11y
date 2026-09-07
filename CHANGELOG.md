@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- [020] Integrated Cashflow, Portfolio and Assets creation actions into ruled ledger headers as labeled plus buttons, replacing floating controls.
+- [006][027] Made admin listings creation discoverable through an explicit admin-mode entry screen and a labeled Add listing action, with supported source choices, optional metadata, validation, retryable errors, and session-persistent demo listings.
 - [001] Added dynamic client updates with web sockets.
 - [002] Added CSV import ingestion so users can upload vendor files, persist import jobs, and process them asynchronously in background workers.
 - [003] Added account management endpoints to create and list accounts used across cashflow imports and portfolio calculations.
@@ -26,15 +28,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [017] Added event-driven messaging handlers so account creation and imported transactions propagate to portfolio, cashflow, and importer projections.
 - [018] Added structured observability with request and correlation IDs, operation-level logging, and APM trace propagation across HTTP and jobs.
 - [019] Added automatic database migration execution and bootstrap seeding for vendors, default accounts, and providers at startup.
-- [020] Added a Vue web app experience with cashflow and portfolio pages, plus admin listings and admin dailies pages guarded by admin mode.
+- [020] Added a SvelteKit web app experience with cashflow and portfolio pages, plus admin listings and admin dailies pages guarded by admin mode.
 - [021] Added generated Swagger/OpenAPI documentation and Swagger UI serving for API discoverability and client integration.
 - [022] Added configurable agent auto-tag background control so `TaggerJob` can be enabled or disabled via `agent.enabled`.
 - [023] Added manual cashflow transaction creation with bulk entry support from the cashflow page, including account-scoped API validation and manual-source tagging (`source=manual[:vendor]`).
 - [024] Added account-scoped asset management with manual asset classes, multiple assets per class, worth history, growth views, and class/item worth mutation APIs plus web UI workflows.
 - [025] Added portfolio-linked asset class synchronization so portfolio worth is projected into a read-only assets class only when portfolio rebuild completion events are processed.
 - [024] Added backend-owned daily asset snapshot projection (`GET /assets/snapshots`) with persisted account/day total-worth points and async rebuild events.
+- [003] Added `GET /accounts` (list) to complete the account-management endpoints; the web app resolves its active account id from it via a new `accountStore` instead of a hard-coded constant.
+- [026] Added CORS support to the API — configurable `server.cors_allowed_origins` (default the SvelteKit dev origin `http://localhost:5199`) applied outermost with OPTIONS preflight handling, so the browser frontend can call the API cross-origin.
+- [027] Added a complete frontend write service layer (`apiSend` JSON + `apiUpload` multipart) covering every mutation endpoint — cashflow create/tag/ignore, asset class/asset/worth mutations, listing create/update, manual portfolio transactions + rebuild, and cashflow/portfolio/EOD file imports — each with a mock fallback.
 
 ### Changed
+- [020] Applied ta11y's editorial design to the shared portal: a ruled masthead with desktop navigation and a labeled mobile menu, serif analytics headings, flat KPI sections, square paper content panels, and clearer table headers. Narrow screens can scroll past analytics to a usable table region; financial tables retain column width with horizontal scrolling.
+- [020] Began the SvelteKit visual rebuild per `web/docs/DESIGN_PLAN.md` (Phases 0–2): fixed the theme split so the app and Storybook load the same `app.css`, defined the `taupe` token ramp and valid `@font-face` rules, added a documented z-index scale and a framework-agnostic `charts/theme.ts`, and added foundational molecule primitives (popover, dialog, tabs, sortable-header, breadcrumb, search-input).
+- [020] Added a typed, API-shaped stub-data layer (`$lib/api` types + money helpers, `$lib/data` fixtures, `$lib/services`) with a mocks-on-by-default flag so the web app runs and is testable independently of the Go API.
+- [020] Added Phase 3 web design-system molecules: a calendar core with single date-picker and dual-month date-range-picker (presets, min/max), popover-based filters (text/direction/select/visibility) via a shared filter-popover shell, animated action- and account-menus, and an async listing-search-select autocomplete.
+- [020] Added Phase 4 charts (Chart.js 4 dependency): a `charts/*` layer (theme palette, registration, option builders, dashed-grid/zero-line plugin, area gradients, and a shared drag range-selection plugin emitting ISO `{from,to}`) plus `TimeSeriesChart` (line/bar/area combo, range-select, below-zero flip) and `DonutChart` (click-to-filter, "+N more" popover); all canvas code is client-guarded so SSR builds stay clean.
+- [020] Added Phase 5 toast system: a single runes `toast` store (tone helpers, auto-dismiss/sticky, status→intent heuristic) and one `ToastHost` organism that renders the `alert` molecule top-right with fly/flip transitions and stacking.
+- [020] Added Phase 6 organisms: `KpiRow`, a generic `DataTable` (sticky header, indeterminate multi-select, sort, per-column filter slots, loading/empty/error, footer slot), `FooterBar` (pagination + bulk actions), a right slide-in `Drawer`, `TopNavbar`, and concrete `CashflowTransactionsTable`, `AssetClassDrawer`, and `TransactionFormModal` examples composing those engines.
+- [020] Added Phase 7 templates + state plumbing: `AppShellTemplate` and `PageContentTemplate`, pure URL-as-state helpers (`url/routeQuery.ts`) plus a SvelteKit `pushQuery` wrapper, a localStorage-backed `adminMode` store, and a mock/SSR-safe `connectRealtime` WebSocket service with a debounced refresh.
+- [020] Added Phase 8 pages: SvelteKit routes for `/cashflow` (fully URL-state-driven with analytics charts, transactions table, create modal, toasts, realtime, chart-range→date-filter), `/portfolio`, `/assets` (+ asset-class drawer), and admin-gated `/admin/listings` and `/admin/dailies`; `/` redirects to `/cashflow` and the welcome page is removed. Runs against the mock layer with no backend.
+- [020] Reworked the web UI for visual coherence: a single reusable `AnalyticsCard` (Panel-based) replaces the ad-hoc chart cards across cashflow/assets/portfolio; `TopNavbar` now floats as separate cards (left menu-button `NavMenu` for cross-page navigation with active-route highlighting, centered bare search, and a global date-range selector) and uses the `Heading` typography component for larger page titles; filter-popover triggers became ghost rounded pills with a blue active state; modal footers use semantic `success`/ghost buttons instead of primary; and the chart drag-selection band is recolored blue. The global date range now drives every page's charts and donuts — the cashflow monthly/tag-distribution mocks were made date-aware so the trend zooms and the donuts re-aggregate on selection.
+- [027] Wired the frontend write UIs to the API (they previously only toasted): the cashflow "New transaction" modal and bulk-tag action, the admin listings create dialog, a new assets "New asset class" dialog, and a new portfolio "New transaction" modal plus a portfolio-rebuild navbar action now persist to the backend.
+- Added Makefile targets to run the app end-to-end (`db-up` / `db-up-all` / `db-down`, `web-install` / `web-dev` / `web-build` / `web-env`) and a `web/.env.example`; rewrote the root `README.md` into a full local run guide and refreshed stale `CLAUDE.md` notes (single `cmd/my-finances-tracker` entrypoint with a green build, runtime theme loading, real app routing, working `make web-lint`).
+
+### Fixed
+- [024] Fixed `GET /assets/snapshots` date handling: it used the literal layout `"2026-01-02"` instead of Go's reference layout `"2006-01-02"` when parsing `from`/`to` and formatting the snapshot date (so date-range filtering was wrong), and added the missing early return when query decoding fails.
+- Completed the committed `apps/api/go.sum` (was missing the two `github.com/gorilla/websocket` v1.5.3 hashes) so a clean checkout builds and vets under the default `-mod=readonly`.
+- Fixed CI failing at `actions/setup-go` with "The specified go version file at: go.work does not exist": the workflow read `go-version-file: go.work`, but `go.work` is gitignored and so absent from a fresh checkout. Both jobs now read the tracked `apps/api/go.mod` instead.
+- Added a CodeQL workflow (`.github/workflows/codeql.yml`) analysing Go and JavaScript/TypeScript, so the "require code scanning results" branch rule receives results instead of blocking merges with "Waiting for Code Scanning results". The Go analysis builds explicitly from `apps/api` with `GOWORK=off` rather than relying on autobuild from the repo root.
+- [020] Phase 9 cross-cutting verification fixes: raised muted text from `slate-400` to `slate-500` (WCAG AA contrast, matching the design's "muted = slate-500"), added a default document `<title>`, and enabled the Storybook a11y addon in error mode — a live axe-core scan of the cashflow/portfolio pages now reports zero violations; responsive (navbar stacking, analytics grid collapse) and the single z-index scale were verified.
+- [020] Removed the redundant `sortable-header` molecule (superseded by `DataTable`'s integrated sort+filter header; its `SortDirection` type moved into `data-table.types`) and two dead helper exports (`centsToNumber`, `rampColor`) after a usage audit.
+- [020] Fixed unclickable checkboxes: the `Checkbox` atom's hidden `sr-only` input is now a transparent full-size overlay, so standalone checkboxes (e.g. `DataTable` select-all and per-row selection) respond to clicks instead of relying on an external `<label>`. Also enlarged the too-small `DataTable` sort chevrons (`size-3`→`size-4`).
 - [002] Clarified `/import/csv` feature documentation to describe the raw UUID response format and aligned import enqueue-degraded logging to warning level.
 - [023] Aligned the cashflow create-transaction floating action button behavior/placement with the portfolio and assets pages.
 - [024] Refined asset-management UX with top-card growth/distribution charts, table-level class settings actions, and table styling aligned to the existing app pattern.
@@ -46,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [015] Updated manual portfolio transaction date entry to use the shared custom calendar selector used by navbar date controls.
 - [024] Changed assets-page top growth/current-worth rendering to consume server snapshot points directly instead of client-side class-growth aggregation.
 - [025] Changed portfolio rebuild flow to trigger account-level assets snapshot rebuild requests and realtime `assets.rebuilt` notifications on completion.
+- [019] Consolidated the database schema into a single from-scratch initial migration for SQLite and PostgreSQL, tightening column sizes/types (`VARCHAR(n)` limits), aligning `NULL`/`NOT NULL` with the Go domain model, completing foreign keys/unique constraints/`CHECK`s, and redesigning indexes around the storage layer's real query patterns.
+- [019] Corrected schema/code drift in the initial migration: included the `processing` import status in the status `CHECK`, removed the unused `import.accounts` projection table, and changed `account.accounts.external_id` from `UUID` to a nullable string.
 
 ### Fixed
 - [001] Fixed websocket feature hygiene by adding realtime endpoint Swagger coverage and explicit client-side websocket error handling/logging.
@@ -76,5 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [020] Fixed web-app integration maintainability by documenting shared API DTO contracts used by frontend service consumers.
 - [021] Fixed Makefile lint/vet/fmt execution from repository root by running Go tooling within `apps/api`.
 - [021] Fixed Swagger route observability consistency by applying request-logging middleware to `/swagger/`.
+- [024] Fixed asset worth adjustment rejecting every request by correcting the direction validation (`||` → `&&`) so only directions that are neither `INCREASE` nor `DECREASE` are rejected.
 - [024] Fixed `/assets/classes/{class_id}` growth data to read from the newest bounded history window, preventing stale oldest-window graph values.
 - [024] Fixed assets-page “correct then drop” top worth behavior by removing client recomputation drift after graph load.

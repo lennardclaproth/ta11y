@@ -1,4 +1,4 @@
-.PHONY: help build run test test-coverage clean fmt vet lint web-lint swagger dev install-tools env migrate-up migrate-down migrate-status migrate-create
+.PHONY: help build run test test-integration test-all test-coverage clean fmt vet lint web-lint swagger dev install-tools env migrate-up migrate-down migrate-status migrate-create db-up db-up-all db-down db-logs web-install web-dev web-build web-env
 
 # --- OS detection ---
 ifeq ($(OS),Windows_NT)
@@ -15,27 +15,44 @@ else
   EXE :=
 endif
 
-BINARY_PATH := ./apps/api/bin/$(BINARY_NAME)$(EXE)
-MAIN_PATH := ./apps/api/cmd/server/main.go
+# Single entrypoint: cmd/my-finances-tracker (the old cmd/server was removed).
+# The frontend lives in web/, not apps/web.
 API_DIR := ./apps/api
-WEB_DIR := ./apps/web
+WEB_DIR := ./web
+CMD_PKG := cmd/my-finances-tracker
+MAIN_PKG := $(API_DIR)/$(CMD_PKG)
+BIN_DIR := $(API_DIR)/bin
+BINARY_PATH := $(BIN_DIR)/$(BINARY_NAME)$(EXE)
+RUN_BINARY := ./bin/$(BINARY_NAME)$(EXE)
+# cmd.exe requires backslashes when invoking a relative executable path.
+ifeq ($(IS_WINDOWS),1)
+  RUN_COMMAND := .\bin\$(BINARY_NAME)$(EXE)
+else
+  RUN_COMMAND := $(RUN_BINARY)
+endif
 COVERAGE_FILE := coverage.out
-MIGRATION_DIR := ./apps/api/migrations/postgres
+MIGRATION_DIR := $(API_DIR)/migrations/postgres
+COMPOSE_FILE := ./deploy/docker/compose.dev.yaml
+# Compose command used by the db-* targets. Override for Docker, e.g.:
+#   make db-up COMPOSE="docker compose"
+COMPOSE ?= podman compose
 
 # --- Helpers (cross-platform commands) ---
 ifeq ($(IS_WINDOWS),1)
   # PowerShell helpers
-  MKDIR_BIN = powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force 'bin' | Out-Null"
-  RM_BIN    = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path 'bin') { Remove-Item -Recurse -Force 'bin' }"
+  MKDIR_BIN = powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force '$(BIN_DIR)' | Out-Null"
+  RM_BIN    = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '$(BIN_DIR)') { Remove-Item -Recurse -Force '$(BIN_DIR)' }"
   RM_COV    = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '$(COVERAGE_FILE)') { Remove-Item -Force '$(COVERAGE_FILE)' }"
   ENV_COPY  = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (!(Test-Path '.env')) { Write-Host 'Creating .env from config.example.env...'; Copy-Item 'config.example.env' '.env'; Write-Host '.env created. Please update with your local settings.' }"
+  WEB_ENV_COPY = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (!(Test-Path '$(WEB_DIR)/.env')) { Write-Host 'Creating web/.env from web/.env.example...'; Copy-Item '$(WEB_DIR)/.env.example' '$(WEB_DIR)/.env'; Write-Host 'web/.env created.' } else { Write-Host 'web/.env already exists; leaving it untouched.' }"
   REQUIRE_NAME = powershell -NoProfile -ExecutionPolicy Bypass -Command "if ([string]::IsNullOrWhiteSpace('$(name)')) { Write-Error 'Error: migration name is required. Usage: make migrate-create name=migration_name'; exit 1 }"
 else
   # POSIX helpers
-  MKDIR_BIN = mkdir -p bin
-  RM_BIN    = rm -rf bin/
+  MKDIR_BIN = mkdir -p $(BIN_DIR)
+  RM_BIN    = rm -rf $(BIN_DIR)
   RM_COV    = rm -f $(COVERAGE_FILE)
   ENV_COPY  = sh -c 'if [ ! -f .env ]; then echo "Creating .env from config.example.env..."; cp config.example.env .env; echo ".env created. Please update with your local settings."; fi'
+  WEB_ENV_COPY = sh -c 'if [ ! -f $(WEB_DIR)/.env ]; then echo "Creating web/.env from web/.env.example..."; cp $(WEB_DIR)/.env.example $(WEB_DIR)/.env; echo "web/.env created."; else echo "web/.env already exists; leaving it untouched."; fi'
   REQUIRE_NAME = sh -c 'if [ -z "$(name)" ]; then echo "Error: migration name is required. Usage: make migrate-create name=migration_name"; exit 1; fi'
 endif
 
@@ -43,9 +60,19 @@ endif
 help:
 	@echo "Available targets:"
 	@echo "  make build            - Build the application binary"
-	@echo "  make run              - Build and run the application"
-	@echo "  make dev              - Run application with hot reload (requires air)"
-	@echo "  make test             - Run all tests"
+	@echo "  make run              - Build and run the API (reads apps/api/config.yaml)"
+	@echo "  make dev              - Run API with hot reload (requires air)"
+	@echo "  make db-up            - Start local Postgres for the API using Podman"
+	@echo "  make db-up-all        - Start Postgres + Elasticsearch/Kibana/APM (full stack)"
+	@echo "  make db-down          - Stop the local container stack"
+	@echo "  make db-logs          - Tail Postgres container logs"
+	@echo "  make web-install      - Install frontend dependencies (web/)"
+	@echo "  make web-dev          - Run the SvelteKit dev server (web/, port 5199)"
+	@echo "  make web-build        - Build the frontend for production (web/)"
+	@echo "  make web-env          - Create web/.env from web/.env.example if missing"
+	@echo "  make test             - Run unit tests (fast, no infra)"
+	@echo "  make test-integration - Run integration tests (real DB; SQLite, no extra infra)"
+	@echo "  make test-all         - Run unit and integration tests"
 	@echo "  make test-coverage    - Run tests with coverage report"
 	@echo "  make fmt              - Format code with go fmt"
 	@echo "  make vet              - Run go vet"
@@ -64,23 +91,31 @@ help:
 build:
 	@echo "Building $(BINARY_NAME)..."
 	@$(MKDIR_BIN)
-	@go build -o $(BINARY_PATH) $(MAIN_PATH)
+	@go build -o $(BINARY_PATH) $(MAIN_PKG)
 	@echo "Build complete: $(BINARY_PATH)"
 
 ## run: Build and run the application
 run: build
 	@echo "Running $(BINARY_NAME)..."
-	@$(BINARY_PATH)
+	@cd $(API_DIR) && $(RUN_COMMAND)
 
 ## dev: Run with hot reload using air
 dev: env
 	@echo "Starting development server with hot reload..."
-	@air
+	@cd $(API_DIR) && air --build.cmd "go build -o $(RUN_BINARY) ./$(CMD_PKG)" --build.bin "$(RUN_BINARY)"
 
-## test: Run all tests
+## test: Run unit tests (fast, no infra; integration tests are excluded by build tag)
 test:
-	@echo "Running tests..."
+	@echo "Running unit tests..."
 	@go test -v $(API_DIR)/...
+
+## test-integration: Run integration tests (real DB; SQLite in-process, no extra infra)
+test-integration:
+	@echo "Running integration tests..."
+	@go test -v -tags=integration $(API_DIR)/...
+
+## test-all: Run unit and integration tests
+test-all: test test-integration
 
 ## test-coverage: Run tests with coverage
 test-coverage:
@@ -114,8 +149,8 @@ web-lint:
 ## swagger: Generate Swagger documentation
 swagger:
 	@echo "Generating Swagger documentation..."
-	@swag init -g $(MAIN_PATH) -o ./apps/api/docs
-	@echo "Swagger docs generated in ./apps/api/docs"
+	@cd $(API_DIR) && swag init -g $(CMD_PKG)/main.go -o docs
+	@echo "Swagger docs generated in $(API_DIR)/docs"
 
 ## clean: Remove binary and coverage files
 clean:
@@ -126,7 +161,46 @@ clean:
 
 ## env: Create .env from example if it doesn't exist
 env:
-	@$(ENV_COPY)
+	@cd $(API_DIR) && $(ENV_COPY)
+
+## db-up: Start local Postgres (Podman by default) for the API
+db-up:
+	@echo "Starting Postgres ($(COMPOSE))..."
+	@$(COMPOSE) -f $(COMPOSE_FILE) up -d postgres
+	@echo "Postgres is up on localhost:5432. The API auto-creates the database and runs migrations on start."
+
+## db-up-all: Start Postgres plus the observability stack (Elasticsearch/Kibana/APM)
+db-up-all:
+	@echo "Starting full local stack (Postgres + Elasticsearch + Kibana + APM)..."
+	@$(COMPOSE) -f $(COMPOSE_FILE) up -d
+
+## db-down: Stop the local container stack
+db-down:
+	@echo "Stopping local container stack..."
+	@$(COMPOSE) -f $(COMPOSE_FILE) down
+
+## db-logs: Tail Postgres container logs
+db-logs:
+	@$(COMPOSE) -f $(COMPOSE_FILE) logs -f postgres
+
+## web-install: Install frontend dependencies
+web-install:
+	@echo "Installing frontend dependencies..."
+	@cd $(WEB_DIR) && npm install
+
+## web-env: Create web/.env from web/.env.example if it doesn't exist
+web-env:
+	@$(WEB_ENV_COPY)
+
+## web-dev: Run the SvelteKit dev server (port 5199)
+web-dev: web-env
+	@echo "Starting SvelteKit dev server on http://localhost:5199 ..."
+	@cd $(WEB_DIR) && npm run dev -- --port 5199 --strictPort
+
+## web-build: Build the frontend for production
+web-build:
+	@echo "Building frontend..."
+	@cd $(WEB_DIR) && npm run build
 
 ## install-tools: Install required development tools
 install-tools:

@@ -31,21 +31,21 @@ const (
 )
 
 const (
-	TableVendors       = "vendors"
-	TableTransactions  = "transactions"
-	TableImports       = "imports"
-	TableListings      = "listings"
-	TableHistories     = "dailies"
-	TableDailyUploads  = "daily_uploads"
-	TableProviders     = "providers"
-	TableAccounts      = "accounts"
-	TablePositions     = "positions"
-	TablePosSnapshots  = "position_snapshots"
-	TablePortSnapshots = "portfolio_snapshots"
-	TableAssetClasses  = "classes"
-	TableAssetItems    = "items"
-	TableAssetHistory  = "histories"
-	TableAssetSnapshot = "snapshots"
+	TableVendors        = "vendors"
+	TableTransactions   = "transactions"
+	TableImports        = "imports"
+	TableListings       = "listings"
+	TableEOD            = "eods"
+	TableEODUploads     = "eod_uploads"
+	TableProviders      = "providers"
+	TableAccounts       = "accounts"
+	TablePositions      = "positions"
+	TablePosSnapshots   = "position_snapshots"
+	TablePortSnapshots  = "portfolio_snapshots"
+	TableAssetClasses   = "classes"
+	TableAssetItems     = "items"
+	TableAssetMutations = "mutations"
+	TableAssetSnapshot  = "snapshots"
 )
 
 type DB struct {
@@ -80,6 +80,17 @@ func qualifyTable(db *DB, schema, table string) string {
 		return table
 	}
 	return fmt.Sprintf("%s.%s", schema, table)
+}
+
+// qualifyTableAs resolves a table name across dialects when the SQLite name is not
+// the bare Postgres table name. On Postgres it returns the schema-qualified name; on
+// SQLite (which has no schemas) it returns the flattened, prefixed name the
+// migrations use (e.g. portfolio.accounts -> portfolio_accounts).
+func qualifyTableAs(db *DB, schema, pgTable, sqliteTable string) string {
+	if db == nil || db.DriverName() == string(Sqlite) {
+		return sqliteTable
+	}
+	return fmt.Sprintf("%s.%s", schema, pgTable)
 }
 
 func (db *DB) GetExecutor(ctx context.Context) sqlx.ExtContext {

@@ -1,0 +1,299 @@
+package assets
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lennardclaproth/my-finances-tracker/internal/account"
+	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
+	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+)
+
+// TODO: fix interfaces
+
+// CommandStore persists assets, classes, accounts, and mutations.
+type CommandStore interface {
+	CreateAsset(ctx context.Context, asset *Asset) error
+	CreateAccount(ctx context.Context, account *Account) error
+	SetWorth(ctx context.Context, asset *Asset) error
+	CreateClass(ctx context.Context, class *Class) error
+	UpdateClass(ctx context.Context, class *Class) error
+	CreateMutation(ctx context.Context, mut *Mutation) error
+	DeleteClass(ctx context.Context, classID uuid.UUID) error
+}
+
+// CommandGetter reads a single class/asset aggregate for command validation.
+type CommandGetter interface {
+	Class(ctx context.Context, classID uuid.UUID) (*Class, error)
+	Asset(ctx context.Context, assetID uuid.UUID) (*Asset, error)
+}
+
+// ClassAggregator computes the aggregated worth of a class.
+type ClassAggregator interface {
+	AggregateValue(ctx context.Context, accID, classID uuid.UUID) (money.Price, error)
+}
+
+// UnitOfWork runs a function within a single database transaction.
+type UnitOfWork interface {
+	Do(ctx context.Context, fn func(txCtx context.Context) error) error
+}
+
+type Commands struct {
+	cs  CommandStore
+	cg  CommandGetter
+	aq  account.Queries
+	uow UnitOfWork
+	ca  ClassAggregator
+	bus eventbus.Bus
+}
+
+// NewCommands constructs the assets write-side use cases. The bus may be nil,
+// in which case snapshot rebuild events are not published.
+func NewCommands(
+	cs CommandStore,
+	cg CommandGetter,
+	aq account.Queries,
+	uow UnitOfWork,
+	ca ClassAggregator,
+	bus eventbus.Bus,
+) *Commands {
+	return &Commands{
+		cs:  cs,
+		cg:  cg,
+		aq:  aq,
+		uow: uow,
+		ca:  ca,
+		bus: bus,
+	}
+}
+
+func (c *Commands) CreateAsset(
+	ctx context.Context,
+	accID, classID uuid.UUID,
+	name string,
+	initialWorth money.Price,
+	date time.Time,
+	note *string,
+) (*Asset, error) {
+	// Check if account exists
+	exists, err := c.aq.Exists(ctx, accID)
+	if err != nil {
+		return nil, fmt.Errorf("create asset: account existence checker failed: %w", err)
+	}
+	if !exists {
+		return nil, ErrAccountNotFound
+	}
+	// Get class and check if it exists
+	class, err := c.cg.Class(ctx, classID)
+	if err != nil {
+		return nil, fmt.Errorf("create asset: get class failed: %w", err)
+	}
+	if class == nil {
+		return nil, ErrClassNotFound
+	}
+	asset, err := NewAsset(accID, classID, name, initialWorth, *note)
+	if err != nil {
+		return nil, fmt.Errorf("create asset: failed to create new asset: %w", err)
+	}
+	// Start a transaction to ensure atomicity
+	err = c.uow.Do(ctx, func(txCtx context.Context) error {
+		// Create the asset
+		if err := c.cs.CreateAsset(txCtx, asset); err != nil {
+			return fmt.Errorf("create asset: failed to store asset: %w", err)
+		}
+		// Get current value of class
+		classTotal, err := c.ca.AggregateValue(txCtx, accID, classID)
+		if err != nil {
+			return fmt.Errorf("create asset: could not aggregate the class total : %w", err)
+		}
+		// Create mutation entry for initial worth with class total aggregated
+		c.CreateMutation(txCtx,
+			accID, classID, asset.ID,
+			ChangeTypeSet, nil,
+			initialWorth, 0, classTotal,
+			date, note)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create asset: failed to execute transaction: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, accID)
+	return asset, nil
+}
+
+// CreateClass creates a manual class for an account.
+func (c *Commands) CreateClass(
+	ctx context.Context,
+	accID uuid.UUID,
+	name string,
+) (*Class, error) {
+	// Guard against account existence
+	exists, err := c.aq.Exists(ctx, accID)
+	if err != nil {
+		return nil, fmt.Errorf("create class: failed to check account existence: %w", err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("create class: %w", ErrAccountNotFound)
+	}
+	// Create new class
+	class, err := NewClass(accID, nil, name)
+	if err != nil {
+		return nil, fmt.Errorf("create class: failed to create domain model: %w", err)
+	}
+	// Store class
+	err = c.cs.CreateClass(ctx, class)
+	if err != nil {
+		return nil, fmt.Errorf("create class: failed to store class: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, accID)
+	return class, nil
+}
+
+func (c *Commands) CreateMutation(
+	ctx context.Context,
+	accID, classID, assetID uuid.UUID,
+	changeType ChangeType,
+	direction *ChangeDirection,
+	amount, previousWorth, classTotalWorth money.Price,
+	effectiveDate time.Time,
+	note *string) (*Mutation, error) {
+	// TODO: add total worth calculation, this should be determined by the newworth - previousworth
+	// the delta here should be added to the class total worth because as input here
+	// we get the current class total worth.
+	mutation, err := NewMutation(
+		accID, classID, assetID,
+		changeType, direction,
+		amount, previousWorth, classTotalWorth,
+		effectiveDate, note,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create mutation: failed to create domain model: %w", err)
+	}
+	err = c.cs.CreateMutation(ctx, mutation)
+	if err != nil {
+		return nil, fmt.Errorf("create mutation: failed to store mutation: %w", err)
+	}
+	return mutation, nil
+}
+
+func (c *Commands) UpdateAssetWorth(
+	ctx context.Context,
+	accID, assetID uuid.UUID,
+	worth money.Price,
+	changeType ChangeType,
+	direction *ChangeDirection,
+	effectiveDate time.Time,
+	note *string,
+) error {
+	err := c.uow.Do(ctx, func(txCtx context.Context) error {
+		// Get the asset and guard against false values
+		// We assume that the asset is returned with the
+		// related class
+		asset, err := c.cg.Asset(txCtx, assetID)
+		if err != nil {
+			return fmt.Errorf("update asset worth: failed to get asset: %w", err)
+		}
+		if asset == nil {
+			return fmt.Errorf("update asset worth: %w", ErrAssetNotFound)
+		}
+		if asset.Class == nil {
+			return fmt.Errorf("update asset worth: asset is not populated from database, this error should not occur")
+		}
+		if asset.Class.AccountID != accID {
+			return fmt.Errorf("update asset worth: %w", ErrClassAccountMismatch)
+		}
+		if asset.Class.Source != ClassSourceManual && changeType != ChangeTypeSet {
+			// Portfolio worth is set only by sync flow.
+			return fmt.Errorf("update asset worth: %w", ErrClassNotManual)
+		}
+		if asset.Class.Source == ClassSourcePortfolio {
+			return fmt.Errorf("update asset worth: %w", ErrClassReserved)
+		}
+		previousWorth := asset.CurrentWorth
+		classTotal, err := c.ca.AggregateValue(txCtx, accID, asset.ClassID)
+		// Create mutation for change
+		m, err := c.CreateMutation(txCtx, accID, asset.ClassID, asset.ID,
+			changeType, direction,
+			worth, previousWorth, classTotal,
+			effectiveDate, note)
+		if err != nil {
+			return fmt.Errorf("update asset worth: failed to create mutation: %w", err)
+		}
+		asset.CurrentWorth = m.NewWorth
+		err = c.cs.SetWorth(txCtx, asset)
+		if err != nil {
+			return fmt.Errorf("update asset worth: setting the new worth failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("update asset worth: failed to execute transaction: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, accID)
+	return nil
+}
+
+// UpdateClass mutates a manual class name/archive status.
+func (c *Commands) UpdateClass(ctx context.Context, classID uuid.UUID, name *string, archived *bool) error {
+	class, err := c.cg.Class(ctx, classID)
+	if err != nil {
+		return fmt.Errorf("update class: fetch class: %w", err)
+	}
+	if class == nil {
+		return fmt.Errorf("update class: %w", ErrClassNotFound)
+	}
+	if class.Source != ClassSourceManual {
+		return fmt.Errorf("update class: %w", ErrClassNotManual)
+	}
+	if err := class.Update(name, archived); err != nil {
+		return fmt.Errorf("update class: failed to update domain model: %w", err)
+	}
+	if err := c.cs.UpdateClass(ctx, class); err != nil {
+		return fmt.Errorf("update class: failed to store changes: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, class.AccountID)
+	return nil
+}
+
+// DeleteClass removes a manual class and related items/mutations.
+func (c *Commands) DeleteClass(ctx context.Context, accountID, classID uuid.UUID) error {
+	class, err := c.cg.Class(ctx, classID)
+	if err != nil {
+		return fmt.Errorf("delete asset: failed to get class: %w", err)
+	}
+	if class == nil {
+		return ErrClassNotFound
+	}
+	if class.AccountID != accountID {
+		return fmt.Errorf("delete asset: failed to delete: %w", ErrClassAccountMismatch)
+	}
+	if class.Source != ClassSourceManual {
+		return ErrClassNotManual
+	}
+	if err := c.cs.DeleteClass(ctx, classID); err != nil {
+		return fmt.Errorf("delete asset: failed to delete: %w", err)
+	}
+
+	c.publishSnapshotsRebuildRequested(ctx, accountID)
+	return nil
+}
+
+func (c *Commands) CreateAccount(ctx context.Context, accountID uuid.UUID) (*Account, error) {
+	acc := NewAccount(accountID)
+	if err := c.cs.CreateAccount(ctx, acc); err != nil {
+		return nil, fmt.Errorf("create account: failed to store account: %w", err)
+	}
+	return acc, nil
+}
+
+// publishSnapshotsRebuildRequested asks the assets feature to rebuild
+// account-level snapshots after a mutation. It is a no-op when no bus is
+// configured.
+func (c *Commands) publishSnapshotsRebuildRequested(ctx context.Context, accID uuid.UUID) {
+	if c.bus == nil {
+		return
+	}
+	_ = c.bus.Publish(ctx, TopicSnapshotsRebuildRequested, SnapshotsRebuildRequested{AccID: accID})
+}
