@@ -13,12 +13,23 @@ type Account struct {
 	// ExternalID in the account domain is an optional identifier that can come from an external system (i.e. Google or EntraID)
 	ExternalID *string   `db:"external_id"`
 	Name       string    `db:"name"`
-	CreatedAt  time.Time `db:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at"`
+	// Admin marks accounts allowed to reach admin-only screens. The API is
+	// unauthenticated today, so this records intent and does not enforce it.
+	Admin     bool      `db:"admin"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
+}
+
+// AccountOption mutates optional account fields during construction.
+type AccountOption func(*Account)
+
+// AsAdmin marks the account as an administrator.
+func AsAdmin() AccountOption {
+	return func(a *Account) { a.Admin = true }
 }
 
 // NewAccount constructs a validated account instance with generated identity and timestamps.
-func NewAccount(name string, id *uuid.UUID, externalID *string) (*Account, error) {
+func NewAccount(name string, id *uuid.UUID, externalID *string, options ...AccountOption) (*Account, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return nil, ErrAccountNameRequired
@@ -31,11 +42,15 @@ func NewAccount(name string, id *uuid.UUID, externalID *string) (*Account, error
 
 	now := time.Now().UTC()
 
-	return &Account{
+	acc := &Account{
 		ID:         resolvedID,
 		ExternalID: externalID,
 		Name:       trimmed,
 		CreatedAt:  now,
 		UpdatedAt:  now,
-	}, nil
+	}
+	for _, option := range options {
+		option(acc)
+	}
+	return acc, nil
 }

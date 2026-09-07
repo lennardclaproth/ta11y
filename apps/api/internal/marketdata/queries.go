@@ -20,6 +20,9 @@ type QueryStore interface {
 	CountEODByListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time) (int, error)
 	GetEODForListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time, limit, offset *int, sort string) ([]*EOD, error)
 	GetProviderByName(ctx context.Context, name ProviderName) (*Provider, error)
+	SearchCatalogue(ctx context.Context, q string, scope CatalogueScope, limit, offset int) ([]*CatalogueSearchResult, int, error)
+	CountProviderListings(ctx context.Context, source Source) (int, error)
+	LatestCatalogueSync(ctx context.Context, source Source) (*CatalogueSync, error)
 }
 
 type Queries struct {
@@ -80,6 +83,43 @@ func (q *Queries) SearchListings(ctx context.Context, qs string, limit, offset i
 		return nil, 0, fmt.Errorf("search listings: failed to execute query: %w", err)
 	}
 	return listings, total, nil
+}
+
+// SearchCatalogue searches tracked listings and the cached provider catalogue as
+// one result set. The scope decides which sides participate; tracked rows always
+// sort ahead of catalogue rows.
+//
+// This never reaches the provider. Filling the catalogue is an explicit, metered
+// action (see Catalogue.Refresh and Catalogue.StartSeed), so a search can never
+// silently spend provider requests.
+func (q *Queries) SearchCatalogue(
+	ctx context.Context,
+	qs string,
+	scope CatalogueScope,
+	limit, offset int,
+) ([]*CatalogueSearchResult, int, error) {
+	if !scope.IsValid() {
+		return nil, 0, ErrCatalogueScopeInvalid
+	}
+	results, total, err := q.qs.SearchCatalogue(ctx, qs, scope, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("search catalogue: failed to execute query: %w", err)
+	}
+	return results, total, nil
+}
+
+// CatalogueStatus reports how much of a provider's catalogue is cached locally and
+// when it was last seeded, so callers can warn that the cache has gone stale.
+func (q *Queries) CatalogueStatus(ctx context.Context, source Source) (*CatalogueStatus, error) {
+	entries, err := q.qs.CountProviderListings(ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("catalogue status: failed to count entries: %w", err)
+	}
+	latest, err := q.qs.LatestCatalogueSync(ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("catalogue status: failed to read latest sync: %w", err)
+	}
+	return &CatalogueStatus{Source: source, Entries: entries, LatestSync: latest}, nil
 }
 
 type Metadata struct {

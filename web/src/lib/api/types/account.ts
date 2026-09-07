@@ -2,6 +2,11 @@
 export interface Account {
 	id: string;
 	name: string;
+	/**
+	 * Whether this account may reach admin-only screens. The API records this but does
+	 * not enforce it, so clients use it to hide screens, not to protect them.
+	 */
+	admin: boolean;
 	external_id?: string | null;
 }
 

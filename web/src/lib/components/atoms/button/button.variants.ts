@@ -7,7 +7,9 @@ export const baseButtonClasses = [
   'inline-flex items-center justify-center gap-1',
   'select-none whitespace-nowrap',
   'transition-all duration-150 ease-out',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+  // Amber is the app's focus colour; intents may override it, but the default keeps
+  // keyboard focus consistent across every button.
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-300',
   'disabled:pointer-events-none disabled:opacity-50',
   'active:scale-[0.98]'
 ].join(' ');
@@ -31,13 +33,15 @@ export const buttonShapeClasses = {
 } satisfies Record<ButtonShape, string>;
 
 export const intentVariantClasses = {
+  // Primary is amber-filled with slate ink; the outline/ghost variants invert that
+  // into slate-on-transparent for secondary actions. All three focus amber.
   primary: {
     solid:
-      'bg-slate-600 text-amber-200 hover:bg-slate-500 border-1 border-amber-200 focus:ring-slate-300 focus:ring-2 focus:bg-slate-600 active:bg-slate-600',
+      'bg-amber-400 text-slate-800 border border-slate-800 hover:bg-amber-300 focus:ring-amber-300 focus:ring-2 focus:bg-amber-400 active:bg-amber-400',
     outline:
-      'border border-slate-700 text-slate-700 hover:bg-slate-100 focus:ring-slate-50 focus:ring-2 focus:bg-slate-200 active:bg-slate-200',
+      'border border-slate-700 text-slate-700 hover:bg-amber-100 focus:ring-amber-300 focus:ring-2 focus:bg-amber-100 active:bg-amber-200',
     ghost:
-      'text-slate-700 hover:bg-slate-100 focus:ring-slate-50 focus:ring-2 focus:bg-slate-200 active:bg-slate-200'
+      'text-slate-700 hover:bg-amber-100 focus:ring-amber-300 focus:ring-2 focus:bg-amber-100 active:bg-amber-200'
   },
 
   secondary: {

@@ -3,11 +3,11 @@
 	import Spinner from '$lib/components/atoms/spinner/Spinner.svelte';
 	import { zClasses } from '$lib/styles/z-index';
 	import { searchListings } from '$lib/services/marketdata';
-	import type { Listing } from '$lib/api/types';
+	import type { ListingSearchRow } from '$lib/api/types';
 
 	type Props = {
 		/** Bindable selected listing. */
-		value?: Listing | null;
+		value?: ListingSearchRow | null;
 		/** Bindable query text. */
 		query?: string;
 		placeholder?: string;
@@ -17,8 +17,8 @@
 		limit?: number;
 		disabled?: boolean;
 		/** Injectable search fn (defaults to the marketdata service, so it works on mocks or live API). */
-		search?: (query: string) => Promise<Listing[]>;
-		onSelect?: (listing: Listing) => void;
+		search?: (query: string) => Promise<ListingSearchRow[]>;
+		onSelect?: (listing: ListingSearchRow) => void;
 		ariaLabel?: string;
 		class?: string;
 	};
@@ -39,14 +39,14 @@
 
 	const listboxId = $props.id();
 
-	const defaultSearch = async (q: string): Promise<Listing[]> =>
+	const defaultSearch = async (q: string): Promise<ListingSearchRow[]> =>
 		(await searchListings({ q, limit })).data;
 	const runSearch = $derived(search ?? defaultSearch);
 
 	let open = $state(false);
 	let loading = $state(false);
 	let error = $state(false);
-	let results = $state<Listing[]>([]);
+	let results = $state<ListingSearchRow[]>([]);
 	let activeIndex = $state(-1);
 	let inputEl = $state<HTMLInputElement | null>(null);
 
@@ -88,7 +88,7 @@
 		return () => clearTimeout(timer);
 	});
 
-	function select(listing: Listing) {
+	function select(listing: ListingSearchRow) {
 		suppress = true;
 		value = listing;
 		query = listing.symbol;

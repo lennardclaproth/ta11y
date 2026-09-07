@@ -16,6 +16,12 @@
 		selectable?: boolean;
 		/** Bindable selected row ids. */
 		selectedIds?: string[];
+		/**
+		 * Rows this returns false for cannot be selected: their checkbox is disabled
+		 * and "select all" skips them. Use it when a row is visible for context but
+		 * not a valid target for the bulk action.
+		 */
+		isRowSelectable?: (row: T) => boolean;
 		sortKey?: string;
 		sortDirection?: SortDirection;
 		onSort?: (key: string, direction: SortDirection) => void;
@@ -34,6 +40,7 @@
 		emptyText = 'No results',
 		selectable = false,
 		selectedIds = $bindable([]),
+		isRowSelectable = () => true,
 		sortKey,
 		sortDirection = 'asc',
 		onSort,
@@ -48,9 +55,11 @@
 		right: 'text-right'
 	} satisfies Record<ColumnAlign, string>;
 
-	const allIds = $derived(rows.map(getRowId));
+	// Only selectable rows take part in the header checkbox, so "select all" never
+	// implies it picked up rows the bulk action would refuse.
+	const allIds = $derived(rows.filter((row) => isRowSelectable(row)).map(getRowId));
 	const allSelected = $derived(
-		selectable && rows.length > 0 && allIds.every((id) => selectedIds.includes(id))
+		selectable && allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))
 	);
 	const someSelected = $derived(
 		selectable && allIds.some((id) => selectedIds.includes(id)) && !allSelected
@@ -69,6 +78,7 @@
 	}
 
 	function toggleRow(id: string) {
+		if (!allIds.includes(id)) return;
 		selectedIds = selectedIds.includes(id)
 			? selectedIds.filter((x) => x !== id)
 			: [...selectedIds, id];
@@ -103,6 +113,7 @@
 							<Checkbox
 								checked={allSelected}
 								indeterminate={someSelected}
+								disabled={allIds.length === 0}
 								onchange={toggleAll}
 								aria-label="Select all"
 							/>
@@ -190,10 +201,12 @@
 					{#each rows as row (getRowId(row))}
 						{@const id = getRowId(row)}
 						{@const selected = selectable && selectedIds.includes(id)}
+						{@const rowSelectable = !selectable || isRowSelectable(row)}
 						<tr
 							class={[
 								'border-b border-slate-100 transition-colors',
 								selected ? 'bg-amber-50' : 'hover:bg-slate-50',
+								rowSelectable ? '' : 'text-slate-400',
 								onRowClick ? 'cursor-pointer' : ''
 							]
 								.filter(Boolean)
@@ -204,6 +217,7 @@
 								<td class="px-3 py-2">
 									<Checkbox
 										checked={selected}
+										disabled={!rowSelectable}
 										onchange={() => toggleRow(id)}
 										aria-label="Select row"
 									/>

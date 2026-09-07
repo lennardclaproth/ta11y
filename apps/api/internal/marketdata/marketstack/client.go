@@ -251,8 +251,3 @@ func (c *MarketStackClient) yieldEODs(
 	}
 	return true
 }
-
-// // 'https://api.marketstack.com/v2/tickers/TDT.AS?access_key=XXXX'
-// func (c *MarketStackClient) GetInformation(ctx context.Context, symbol string) (Listing, error) {
-
-// }

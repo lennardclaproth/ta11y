@@ -32,7 +32,7 @@
 </Story>
 
 <Story name="Admin (minimal)" asChild>
-	<TopNavbar title="Listings" accountName="Admin User" adminMode={true} />
+	<TopNavbar title="Listings" accountName="Admin User" />
 </Story>
 
 <Story name="Long page title" asChild>

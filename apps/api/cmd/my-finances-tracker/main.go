@@ -74,6 +74,8 @@ type application struct {
 	importerCommands   *importer.Commands
 	marketDataCommands *marketdata.Commands
 	marketDataQueries  *marketdata.Queries
+	marketDataCatalog  *marketdata.Catalogue
+	marketDataCreds    *marketdata.Credentials
 }
 
 func main() {
@@ -153,6 +155,10 @@ func buildApplication(
 	})
 	marketDataCommands := marketdata.NewCommands(marketDataStore, marketDataSyncer)
 	marketDataQueries := marketdata.NewQueries(marketDataStore, marketDataSyncer)
+	marketDataCatalog := marketdata.NewCatalogue(marketDataStore, map[marketdata.Source]marketdata.TickerSearcher{
+		marketdata.SourceMarketStack: marketStackClient,
+	})
+	marketDataCreds := marketdata.NewCredentials(marketDataStore)
 
 	accountCommands := account.NewCommands(accountStore, bus)
 	accountQueries := account.NewQueries(accountStore)
@@ -208,6 +214,8 @@ func buildApplication(
 		importerCommands:   importerCommands,
 		marketDataCommands: marketDataCommands,
 		marketDataQueries:  marketDataQueries,
+		marketDataCatalog:  marketDataCatalog,
+		marketDataCreds:    marketDataCreds,
 	}
 }
 
@@ -271,6 +279,12 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	handle("PATCH /marketdata/listing", marketdatahttp.UpdateListingFields(app.log, app.marketDataCommands))
 	handle("GET /marketdata/listings", marketdatahttp.GetListings(app.log, app.marketDataQueries))
 	handle("GET /marketdata/listings/search", marketdatahttp.SearchListings(app.log, app.marketDataQueries))
+	handle("POST /marketdata/catalogue/search", marketdatahttp.SearchProviderCatalogue(app.log, app.marketDataCatalog, app.marketDataQueries))
+	handle("POST /marketdata/catalogue/sync", marketdatahttp.StartCatalogueSync(app.log, app.marketDataCatalog))
+	handle("GET /marketdata/catalogue/status", marketdatahttp.GetCatalogueStatus(app.log, app.marketDataQueries))
+	handle("GET /marketdata/providers", marketdatahttp.GetProviderCredentials(app.log, app.marketDataCreds))
+	handle("PATCH /marketdata/providers/{provider_id}/credentials", marketdatahttp.UpdateProviderCredentials(app.log, app.marketDataCreds))
+	handle("POST /marketdata/providers/{provider_id}/credentials/reveal", marketdatahttp.RevealProviderAPIKey(app.log, app.marketDataCreds))
 	handle("GET /marketdata/eods", marketdatahttp.GetEOD(app.log, app.marketDataQueries))
 
 	handle("GET /cashflow/transactions", cashflowhttp.GetTransactions(app.log, app.cashflowQueries))

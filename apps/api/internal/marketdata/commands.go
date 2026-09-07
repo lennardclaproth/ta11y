@@ -38,11 +38,26 @@ func (c *Commands) CreateProvider(ctx context.Context, provider *Provider) error
 	return nil
 }
 
+// PriceSync selects whether creating a listing immediately backfills its price
+// history. Backfilling is a synchronous, paged provider fetch, so adopting a batch
+// of catalogue entries must defer it rather than firing one full history sync per
+// entry.
+type PriceSync bool
+
+const (
+	// SyncPricesNow backfills price history before returning.
+	SyncPricesNow PriceSync = true
+	// DeferPriceSync leaves the listing with no accumulated range, so the first
+	// end-of-day read triggers the backfill instead.
+	DeferPriceSync PriceSync = false
+)
+
 // CreateListing creates a new listing and persists it.
 func (c *Commands) CreateListing(
 	ctx context.Context,
 	symbol, name string,
 	source Source,
+	priceSync PriceSync,
 	options ...ListingOption,
 ) (*Listing, error) {
 	listing, err := NewListing(symbol, name, source, options...)
@@ -58,7 +73,9 @@ func (c *Commands) CreateListing(
 		return nil, fmt.Errorf("create listing: failed to persist listing: %w", err)
 	}
 
-	if listing.Source.IsManualIngestion() {
+	// A manual-ingestion source has nothing to fetch, and a deferred sync is picked
+	// up by the first EOD read because the listing has no accumulated range yet.
+	if listing.Source.IsManualIngestion() || priceSync == DeferPriceSync {
 		return listing, nil
 	}
 	c.s.SyncEOD(ctx, listing.ID, nil, nil)

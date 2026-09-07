@@ -10,6 +10,7 @@
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 	import type { NavItem } from '$lib/components/molecules/nav-menu/nav-menu.types';
+	import { accountStore } from '$lib/stores/account.svelte';
 
 	type DateRange = { from: string | null; to: string | null };
 
@@ -26,10 +27,8 @@
 		actions?: MenuItem[];
 		accountName: string;
 		accountEmail?: string;
-		adminMode?: boolean;
-		showAdminToggle?: boolean;
+
 		accountItems?: MenuItem[];
-		onAdminToggle?: (value: boolean) => void;
 		class?: string;
 	};
 
@@ -46,20 +45,38 @@
 		actions = [],
 		accountName,
 		accountEmail,
-		adminMode = $bindable(false),
-		showAdminToggle = true,
 		accountItems = [],
-		onAdminToggle,
 		class: className = ''
 	}: Props = $props();
 
-	// Shared destinations for the desktop masthead and the narrow-screen menu.
-	const navItems: (NavItem & { href: Pathname })[] = [
-		{ label: 'Cashflow', href: '/cashflow', icon: 'heroicons:banknotes' },
-		{ label: 'Assets', href: '/assets', icon: 'heroicons:building-library' },
-		{ label: 'Portfolio', href: '/portfolio', icon: 'heroicons:chart-pie' },
-		{ label: 'Listings', href: '/admin/listings', icon: 'heroicons:cog-6-tooth', divider: true }
-	];
+	// Shared destinations for the desktop masthead and the narrow-screen menu. Admin
+	// destinations are omitted entirely for non-admin accounts rather than shown and
+	// then refused, so the navigation only ever offers reachable pages.
+	const navItems: (NavItem & { href: Pathname })[] = $derived([
+		{ label: 'Cashflow', href: '/cashflow' as Pathname, icon: 'heroicons:banknotes' },
+		{ label: 'Assets', href: '/assets' as Pathname, icon: 'heroicons:building-library' },
+		{ label: 'Portfolio', href: '/portfolio' as Pathname, icon: 'heroicons:chart-pie' },
+		...(accountStore.isAdmin
+			? [
+					{
+						label: 'Listings',
+						href: '/admin/listings' as Pathname,
+						icon: 'heroicons:cog-6-tooth',
+						divider: true
+					},
+					{
+						label: 'Dailies',
+						href: '/admin/dailies' as Pathname,
+						icon: 'heroicons:calendar-days'
+					},
+					{
+						label: 'Credentials',
+						href: '/admin/credentials' as Pathname,
+						icon: 'heroicons:key'
+					}
+				]
+			: [])
+	]);
 </script>
 
 <header class={['px-4 pt-3 pb-4 lg:px-8', className].filter(Boolean).join(' ')}>
@@ -112,14 +129,7 @@
 			{#if actions.length > 0}
 				<ActionMenu items={actions} />
 			{/if}
-			<AccountMenu
-				name={accountName}
-				email={accountEmail}
-				bind:adminMode
-				{showAdminToggle}
-				items={accountItems}
-				{onAdminToggle}
-			/>
+			<AccountMenu name={accountName} email={accountEmail} items={accountItems} />
 		</div>
 	</div>
 </header>

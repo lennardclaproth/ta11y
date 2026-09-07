@@ -1556,6 +1556,169 @@ const docTemplate = `{
                 }
             }
         },
+        "/marketdata/catalogue/search": {
+            "post": {
+                "description": "Run one metered provider ticker search, cache the results locally, and return the matching rows. Costs one provider request.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listings"
+                ],
+                "summary": "Search the provider catalogue",
+                "parameters": [
+                    {
+                        "description": "Catalogue search payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CatalogueSearchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CatalogueSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/catalogue/status": {
+            "get": {
+                "description": "Return the cached entry count and the most recent seed run for a source.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listings"
+                ],
+                "summary": "Provider catalogue status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Listing source",
+                        "name": "source",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CatalogueStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/catalogue/sync": {
+            "post": {
+                "description": "Start a bounded background sync that caches the provider's most-traded entries. Costs one provider request per page.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "listings"
+                ],
+                "summary": "Seed the provider catalogue",
+                "parameters": [
+                    {
+                        "description": "Catalogue sync payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CatalogueSyncRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CatalogueSyncResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/marketdata/eods": {
             "get": {
                 "description": "Get end-of-day market data for a symbol with optional date range and pagination",
@@ -1807,7 +1970,7 @@ const docTemplate = `{
         },
         "/marketdata/listings/search": {
             "get": {
-                "description": "Search market-data listings using a case-insensitive partial query over symbol, name and isin.",
+                "description": "Search market-data listings using a case-insensitive partial query over symbol, name and isin. The optional scope parameter widens the search to cached provider-catalogue entries that are not tracked yet; tracked results always sort first. This never calls the provider.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1837,6 +2000,12 @@ const docTemplate = `{
                         "description": "Offset",
                         "name": "offset",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "tracked (default), catalogue or all",
+                        "name": "scope",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1848,6 +2017,171 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/providers": {
+            "get": {
+                "description": "Return every market-data provider with its ingestion mode, base URI, quota counters, and a masked hint for its API key. The stored key itself is never returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "List provider credentials",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.ProviderCredentialResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/providers/{provider_id}/credentials": {
+            "patch": {
+                "description": "Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Update provider credentials",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "provider_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Credential payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateProviderCredentialsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProviderCredentialResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/providers/{provider_id}/credentials/reveal": {
+            "post": {
+                "description": "Return the stored API key for one provider in full. Every call is logged.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Reveal a provider API key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider ID",
+                        "name": "provider_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RevealProviderAPIKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2364,6 +2698,10 @@ const docTemplate = `{
         "account.AccountResponse": {
             "type": "object",
             "properties": {
+                "admin": {
+                    "description": "Admin gates the admin-only screens in clients. The API does not enforce it.",
+                    "type": "boolean"
+                },
                 "external_id": {
                     "type": "string"
                 },
@@ -2878,6 +3216,105 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.CatalogueSearchRequest": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "q": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.CatalogueSearchResponse": {
+            "type": "object",
+            "properties": {
+                "cached": {
+                    "description": "Cached is how many catalogue entries this search wrote locally.",
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.ListingSearchRow"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.PaginationResponse"
+                },
+                "truncated": {
+                    "description": "Truncated is true when the provider matched more than the single page that\nwas fetched. Clients must say so rather than presenting the page as the\ncomplete answer.",
+                    "type": "boolean"
+                },
+                "upstream_total": {
+                    "description": "UpstreamTotal is how many entries the provider matched in total, which is\nroutinely far more than one page.",
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.CatalogueStatusResponse": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "description": "Entries is how many provider entries are cached locally and therefore\nsearchable without spending a provider request.",
+                    "type": "integer"
+                },
+                "latest_sync": {
+                    "$ref": "#/definitions/handlers.CatalogueSyncResponse"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.CatalogueSyncRequest": {
+            "type": "object",
+            "properties": {
+                "pages": {
+                    "description": "Pages bounds the run. Omitted means marketdata.DefaultSeedPages.",
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.CatalogueSyncResponse": {
+            "type": "object",
+            "properties": {
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "pages_fetched": {
+                    "type": "integer"
+                },
+                "rows_upserted": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "upstream_total": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.CreateListingRequest": {
             "type": "object",
             "properties": {
@@ -2904,6 +3341,10 @@ const docTemplate = `{
                 },
                 "symbol": {
                     "type": "string"
+                },
+                "sync_prices": {
+                    "description": "SyncPrices controls whether creation immediately backfills price history.\nIt defaults to true so existing clients keep the original behaviour. The\ncatalogue drawer sends false when adopting a batch: backfilling is a\nsynchronous paged provider fetch, so one full history sync per adopted\nlisting would stall the request and drain the provider request budget.",
+                    "type": "boolean"
                 },
                 "ticker": {
                     "type": "string"
@@ -2985,13 +3426,75 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.ListingSearchRow": {
+            "type": "object",
+            "properties": {
+                "adoptable": {
+                    "description": "Adoptable is false when a row cannot become a listing, with AdoptableReason\nexplaining why, so clients can disable the row instead of failing on submit.",
+                    "type": "boolean"
+                },
+                "adoptable_reason": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "exchange": {
+                    "type": "string"
+                },
+                "exchange_mic": {
+                    "type": "string"
+                },
+                "has_eod": {
+                    "description": "HasEOD reports whether the provider holds end-of-day history for the symbol.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "isin": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "ticker": {
+                    "type": "string"
+                },
+                "tracked": {
+                    "description": "Tracked marks rows that are already listings rather than catalogue entries.",
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.ListingsSearchResponse": {
             "type": "object",
             "properties": {
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handlers.ListingResponse"
+                        "$ref": "#/definitions/handlers.ListingSearchRow"
                     }
                 },
                 "pagination": {
@@ -3013,6 +3516,52 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.ProviderCredentialResponse": {
+            "type": "object",
+            "properties": {
+                "api_key_hint": {
+                    "type": "string"
+                },
+                "base_uri": {
+                    "type": "string"
+                },
+                "has_api_key": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ingestion_mode": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "remaining": {
+                    "type": "integer"
+                },
+                "resets_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.RevealProviderAPIKeyResponse": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
                 }
             }
         },
@@ -3041,6 +3590,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.UpdateProviderCredentialsRequest": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "base_uri": {
                     "type": "string"
                 }
             }

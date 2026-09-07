@@ -36,8 +36,8 @@ func NewSQLXAccountStore(db *DB) *SQLXAccountStore {
 // account.ErrAccountAlreadyExists.
 func (s *SQLXAccountStore) Create(ctx context.Context, acc *account.Account) error {
 	query := fmt.Sprintf(`
-		INSERT INTO %s (id, external_id, name, created_at, updated_at)
-		VALUES (:id, :external_id, :name, :created_at, :updated_at)
+		INSERT INTO %s (id, external_id, name, admin, created_at, updated_at)
+		VALUES (:id, :external_id, :name, :admin, :created_at, :updated_at)
 	`, s.tableName)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, acc); err != nil {
 		if isUniqueViolation(err) {
@@ -51,7 +51,7 @@ func (s *SQLXAccountStore) Create(ctx context.Context, acc *account.Account) err
 // GetByID returns one account by ID, or account.ErrAccountNotFound when absent.
 func (s *SQLXAccountStore) GetByID(ctx context.Context, id uuid.UUID) (*account.Account, error) {
 	var acc account.Account
-	query := s.db.Rebind(fmt.Sprintf(`SELECT id, external_id, name, created_at, updated_at FROM %s WHERE id = ?`, s.tableName))
+	query := s.db.Rebind(fmt.Sprintf(`SELECT id, external_id, name, admin, created_at, updated_at FROM %s WHERE id = ?`, s.tableName))
 	if err := sqlx.GetContext(ctx, s.db.GetExecutor(ctx), &acc, query, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, account.ErrAccountNotFound
@@ -64,7 +64,7 @@ func (s *SQLXAccountStore) GetByID(ctx context.Context, id uuid.UUID) (*account.
 // List returns all accounts ordered by creation time (oldest first).
 func (s *SQLXAccountStore) List(ctx context.Context) ([]*account.Account, error) {
 	var accounts []*account.Account
-	query := fmt.Sprintf(`SELECT id, external_id, name, created_at, updated_at FROM %s ORDER BY created_at ASC`, s.tableName)
+	query := fmt.Sprintf(`SELECT id, external_id, name, admin, created_at, updated_at FROM %s ORDER BY created_at ASC`, s.tableName)
 	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &accounts, query); err != nil {
 		return nil, err
 	}

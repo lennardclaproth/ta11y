@@ -69,4 +69,3 @@ export type { CashflowTransactionFormValue } from './components/organisms/transa
 export { default as AppShellTemplate } from './components/templates/app-shell/AppShellTemplate.svelte';
 export { default as PageContentTemplate } from './components/templates/page-content/PageContentTemplate.svelte';
 export * from './url/routeQuery';
-export { adminMode } from './stores/admin.svelte';

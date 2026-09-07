@@ -20,7 +20,6 @@
 	} from '$lib/services/cashflow';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import type { CashflowTransactionFormValue } from '$lib/components/organisms/transaction-form-modal/transaction-form-modal.types';
 	import {
@@ -156,6 +155,12 @@
 			monthly = monthlyRes.data;
 			incoming = dist.incoming;
 			outgoing = dist.outgoing;
+		} catch {
+			// Analytics are supplementary: leave the charts to render their own empty
+			// state rather than letting an unhandled rejection escape the page.
+			monthly = [];
+			incoming = [];
+			outgoing = [];
 		} finally {
 			analyticsLoading = false;
 		}
@@ -171,6 +176,7 @@
 	onMount(() => {
 		let realtime: { disconnect: () => void } | null = null;
 		void accountStore.ensureLoaded().then(() => {
+			if (!accountStore.hasAccount) return;
 			realtime = connectRealtime({
 				accountId: accountStore.activeId,
 				events: ['import.completed', 'bulk_tag.completed'],
@@ -283,8 +289,6 @@
 			actions={navActions}
 			accountName="Lennard Claproth"
 			accountEmail="lennard@example.com"
-			adminMode={adminMode.enabled}
-			onAdminToggle={(v) => adminMode.set(v)}
 			{accountItems}
 		/>
 	{/snippet}

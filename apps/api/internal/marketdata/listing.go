@@ -78,6 +78,16 @@ const (
 	SourceBrandNewDay  Source = "brandnewday"
 )
 
+// IsValid reports whether the source is one of the known listing sources.
+func (s Source) IsValid() bool {
+	switch s {
+	case SourceAlphaVantage, SourceMarketStack, SourceBrandNewDay:
+		return true
+	default:
+		return false
+	}
+}
+
 // IsManualIngestion returns true if the source is a manual ingestion provider,
 // which means that data for listings with this source will not be automatically synced
 // and must be ingested manually by the user.

@@ -8,7 +8,7 @@ import type {
 } from '$lib/api/types';
 import { delay, mockId } from './_mock';
 
-const demoAccounts: Account[] = [{ id: DEMO_ACCOUNT_ID, name: 'Demo account' }];
+const demoAccounts: Account[] = [{ id: DEMO_ACCOUNT_ID, name: 'Demo account', admin: true }];
 
 /** `GET /accounts` */
 export async function listAccounts(): Promise<AccountsResponse> {

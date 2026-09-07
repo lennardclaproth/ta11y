@@ -80,7 +80,7 @@
 				<header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
 					<div class="min-w-0 flex-1">
 						{#if title}
-							<h2 class="text-lg">{title}</h2>
+							<h2 class="text-xl">{title}</h2>
 						{/if}
 						{#if header}
 							{@render header()}
