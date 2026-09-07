@@ -1,0 +1,58 @@
+name: CodeQL
+
+# Satisfies the "require code scanning results" rule on the protected branches.
+# Pushes build the baseline the pull-request analyses are diffed against, so the
+# base branch needs a run before PR results are meaningful.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "27 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Go module lives in apps/api and the repo-root go.work is gitignored,
+      # so the build is driven explicitly rather than left to autobuild, which
+      # starts from the repo root.
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - if: matrix.language == 'go'
+        run: go build ./...
+        working-directory: apps/api
+        env:
+          GOWORK: "off"
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
