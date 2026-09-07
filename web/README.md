@@ -1,4 +1,10 @@
-# sv
+# ta11y frontend
+
+The portal follows the [ta11y design system](../DESIGN.html) ([Markdown source](../DESIGN.md)). Consult it before changing shared styles
+or introducing a UI pattern. The canonical theme is `src/app.css`; the existing component catalog
+runs with `npm run storybook`. See the [root README](../README.md) for application setup.
+
+## Original scaffold reference
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 

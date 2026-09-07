@@ -1,4 +1,4 @@
-import { apiGet, apiSend } from '$lib/api/client';
+import { ApiError, apiGet, apiSend } from '$lib/api/client';
 import { useMocks } from '$lib/api/config';
 import type {
 	CreateListingRequest,
@@ -71,8 +71,13 @@ export async function getEOD(query: EODQuery): Promise<EODResponse> {
 export async function createListing(body: CreateListingRequest): Promise<Listing> {
 	if (useMocks) {
 		await delay();
+		if (
+			listings.some((listing) => listing.symbol === body.symbol && listing.source === body.source)
+		) {
+			throw new ApiError(409, 'Listing already exists', { listing: 'listing already exists' });
+		}
 		const now = new Date().toISOString();
-		return {
+		const listing: Listing = {
 			id: mockId(),
 			symbol: body.symbol,
 			name: body.name,
@@ -87,6 +92,9 @@ export async function createListing(body: CreateListingRequest): Promise<Listing
 			created_at: now,
 			updated_at: now
 		};
+		// Share session changes with the list and portfolio listing search in demo mode.
+		listings.push(listing);
+		return clone(listing);
 	}
 	return apiSend<Listing>('POST', '/marketdata/listing', body);
 }

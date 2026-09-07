@@ -1,6 +1,6 @@
-# my-finances-tracker
+# ta11y
 
-A personal finances tracker: a Go backend (`apps/api`) and a SvelteKit frontend (`web`). It tracks
+ta11y (pronounced “tally”) is a personal finances tracker: a Go backend (`apps/api`) and a SvelteKit frontend (`web`). It tracks
 cashflow, an investment portfolio, and other assets, with CSV/statement imports and market data.
 
 - **`apps/api`** — Go 1.25 API (module `github.com/lennardclaproth/my-finances-tracker`). All domain
@@ -10,11 +10,22 @@ cashflow, an investment portfolio, and other assets, with CSV/statement imports 
 
 The `Makefile` at the repo root is the single source of truth for common tasks — run `make help`.
 
+## Design system
+
+Open [ta11y's standalone design system](DESIGN.html) in a browser for the illustrated, offline guide.
+Read the [Markdown source](DESIGN.md) for the portal's visual principles, tokens, component usage,
+financial formatting, responsive layouts, and accessibility acceptance criteria. It documents the
+existing portal and is the reference for future UI work. Preview the existing component catalog with
+`npm run storybook` from `web/` (port 6006).
+Regenerate the HTML after source changes with `node scripts/render-design.cjs`.
+For editorial-shell browser regression checks, run the portal with `VITE_USE_MOCKS=true`, then run
+`node scripts/check-editorial-portal.cjs` (defaults to port 5199; override with `PORTAL_URL`).
+
 ## Prerequisites
 
 - **Go 1.25+**
 - **Node 20+** and npm
-- **Docker** (for local Postgres via `deploy/docker/compose.dev.yaml`)
+- **Podman** with a Compose provider (for local Postgres via `deploy/docker/compose.dev.yaml`)
 - **make**
 - Dev tools (goose, swag, air, golangci-lint): `make install-tools`
 
@@ -22,8 +33,20 @@ The `Makefile` at the repo root is the single source of truth for common tasks �
 
 From the repo root:
 
+On Windows/macOS, prepare the Podman VM before running the app:
+
 ```bash
-# 1. Start Postgres in Docker (the API auto-creates the DB and runs migrations on first start).
+podman machine init    # first time only; skip if a machine already exists
+podman machine start   # skip if already running
+podman compose version # verify a Compose provider is available
+```
+
+`podman compose` requires an external provider such as `docker-compose` or `podman-compose`.
+If none is available, set up Compose through Podman Desktop before continuing.
+See the [Podman Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
+
+```bash
+# 1. Start Postgres in Podman (the API auto-creates the DB and runs migrations on first start).
 make db-up
 
 # 2. Build and run the API on http://localhost:6060 (reads apps/api/config.yaml).
@@ -45,19 +68,19 @@ the account-scoped screens (portfolio, assets) have an account to load; the fron
 
 To stop Postgres (and any other containers): `make db-down`.
 
-### Using Podman instead of Docker
+### Choosing a Compose command
 
-The `db-*` targets use `docker compose` by default. Override the `COMPOSE` variable to use Podman
-(the compose file itself needs no changes):
+The `db-*` targets use `podman compose` by default. Override `COMPOSE` if needed:
 
 ```bash
-make db-up COMPOSE="podman compose"     # Podman 4.1+ compose subcommand
-make db-up COMPOSE=podman-compose       # or the standalone podman-compose
+make db-up COMPOSE=podman-compose       # standalone Podman Compose provider
+make db-up COMPOSE="docker compose"    # Docker, with its engine running
 ```
 
-On Windows/macOS, start the Podman VM first (`podman machine init` once, then `podman machine start`).
-Alternatively, point `DOCKER_HOST` at Podman's Docker-compatible socket and the unmodified `make db-up`
-works as-is.
+Use the same override for `db-down`, `db-logs`, and `db-up-all`.
+If you see a missing `dockerDesktopLinuxEngine` pipe error, the command is trying to reach
+Docker Desktop. Use the default `make db-up` with your Podman machine running, and remove any
+`COMPOSE` environment override selecting Docker.
 
 ### Run the frontend standalone (mocks, no backend)
 
@@ -130,7 +153,7 @@ Run `make help` for the full list. Highlights:
 | --- | --- |
 | `make build` / `make run` | Build / build+run the API |
 | `make dev` | API with hot reload (air) |
-| `make db-up` / `make db-down` | Start / stop local Postgres (Docker) |
+| `make db-up` / `make db-down` | Start / stop local Postgres (Podman) |
 | `make db-up-all` | Start Postgres + Elasticsearch/Kibana/APM |
 | `make web-install` / `make web-dev` / `make web-build` | Frontend install / dev / build |
 | `make web-env` | Create `web/.env` from the example |

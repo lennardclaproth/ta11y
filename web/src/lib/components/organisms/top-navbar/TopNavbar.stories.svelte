@@ -34,3 +34,13 @@
 <Story name="Admin (minimal)" asChild>
 	<TopNavbar title="Listings" accountName="Admin User" adminMode={true} />
 </Story>
+
+<Story name="Long page title" asChild>
+	<TopNavbar
+		title="Portfolio transactions"
+		showSearch
+		showDateRange
+		{actions}
+		accountName="Demo account"
+	/>
+</Story>

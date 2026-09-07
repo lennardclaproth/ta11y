@@ -1,35 +1,22 @@
 <script lang="ts">
-  import Icon from '@iconify/svelte';
+	import Icon, { type IconifyIcon } from '@iconify/svelte';
 
-  type Props = {
-    icon: string;
-    size?: 'sm' | 'md' | 'lg';
-    class?: string;
-    ariaHidden?: boolean;
-  };
+	type Props = {
+		icon: string | IconifyIcon;
+		size?: 'sm' | 'md' | 'lg';
+		class?: string;
+		ariaHidden?: boolean;
+	};
 
-  let {
-    icon,
-    size = 'md',
-    class: className = '',
-    ariaHidden = true
-  }: Props = $props();
+	let { icon, size = 'md', class: className = '', ariaHidden = true }: Props = $props();
 
-  const sizeClasses = {
-    sm: 'size-3',
-    md: 'size-4',
-    lg: 'size-5'
-  };
+	const sizeClasses = {
+		sm: 'size-3',
+		md: 'size-4',
+		lg: 'size-5'
+	};
 
-  const classes = $derived([
-    'shrink-0',
-    sizeClasses[size],
-    className
-  ].filter(Boolean).join(' '));
+	const classes = $derived(['shrink-0', sizeClasses[size], className].filter(Boolean).join(' '));
 </script>
 
-<Icon
-  {icon}
-  class={classes}
-  aria-hidden={ariaHidden}
-/>
+<Icon {icon} class={classes} aria-hidden={ariaHidden} />

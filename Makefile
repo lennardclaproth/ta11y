@@ -24,12 +24,18 @@ MAIN_PKG := $(API_DIR)/$(CMD_PKG)
 BIN_DIR := $(API_DIR)/bin
 BINARY_PATH := $(BIN_DIR)/$(BINARY_NAME)$(EXE)
 RUN_BINARY := ./bin/$(BINARY_NAME)$(EXE)
+# cmd.exe requires backslashes when invoking a relative executable path.
+ifeq ($(IS_WINDOWS),1)
+  RUN_COMMAND := .\bin\$(BINARY_NAME)$(EXE)
+else
+  RUN_COMMAND := $(RUN_BINARY)
+endif
 COVERAGE_FILE := coverage.out
 MIGRATION_DIR := $(API_DIR)/migrations/postgres
-COMPOSE_FILE := deploy/docker/compose.dev.yaml
-# Compose command used by the db-* targets. Override for Podman, e.g.:
-#   make db-up COMPOSE="podman compose"   (or COMPOSE=podman-compose)
-COMPOSE ?= docker compose
+COMPOSE_FILE := ./deploy/docker/compose.dev.yaml
+# Compose command used by the db-* targets. Override for Docker, e.g.:
+#   make db-up COMPOSE="docker compose"
+COMPOSE ?= podman compose
 
 # --- Helpers (cross-platform commands) ---
 ifeq ($(IS_WINDOWS),1)
@@ -56,7 +62,7 @@ help:
 	@echo "  make build            - Build the application binary"
 	@echo "  make run              - Build and run the API (reads apps/api/config.yaml)"
 	@echo "  make dev              - Run API with hot reload (requires air)"
-	@echo "  make db-up            - Start local Postgres for the API (override: COMPOSE=\"podman compose\")"
+	@echo "  make db-up            - Start local Postgres for the API using Podman"
 	@echo "  make db-up-all        - Start Postgres + Elasticsearch/Kibana/APM (full stack)"
 	@echo "  make db-down          - Stop the local container stack"
 	@echo "  make db-logs          - Tail Postgres container logs"
@@ -91,7 +97,7 @@ build:
 ## run: Build and run the application
 run: build
 	@echo "Running $(BINARY_NAME)..."
-	@cd $(API_DIR) && $(RUN_BINARY)
+	@cd $(API_DIR) && $(RUN_COMMAND)
 
 ## dev: Run with hot reload using air
 dev: env
@@ -157,7 +163,7 @@ clean:
 env:
 	@cd $(API_DIR) && $(ENV_COPY)
 
-## db-up: Start local Postgres (Docker) for the API
+## db-up: Start local Postgres (Podman by default) for the API
 db-up:
 	@echo "Starting Postgres ($(COMPOSE))..."
 	@$(COMPOSE) -f $(COMPOSE_FILE) up -d postgres

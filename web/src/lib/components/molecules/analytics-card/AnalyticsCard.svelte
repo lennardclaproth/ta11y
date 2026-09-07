@@ -1,12 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Panel from '$lib/components/atoms/panel/Panel.svelte';
-	import Text from '$lib/components/atoms/typography/Text.svelte';
+	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 
 	type Props = {
-		/** Optional muted label shown above the content (e.g. a chart caption). */
+		/** Section heading for the chart or analytics content. */
 		title?: string;
-		/** Extra classes forwarded to the underlying Panel (e.g. grid column spans). */
+		/** Extra layout classes (e.g. grid column spans). */
 		class?: string;
 		children: Snippet;
 	};
@@ -14,9 +13,11 @@
 	let { title, class: className = '', children }: Props = $props();
 </script>
 
-<Panel shape="xl" shadow="sm" bordered padding="sm" class={className}>
+<section
+	class={['min-w-0 border-t border-slate-400 pt-3 pb-2', className].filter(Boolean).join(' ')}
+>
 	{#if title}
-		<Text as="p" size="xs" tone="muted" weight="medium" class="mb-1">{title}</Text>
+		<Heading level="h2" size="md" weight="medium" class="mb-3">{title}</Heading>
 	{/if}
 	{@render children()}
-</Panel>
+</section>

@@ -2,7 +2,7 @@ export const panelVariants = ['default', 'muted', 'floating', 'ghost'] as const;
 
 export const panelPaddings = ['none', 'sm', 'md', 'lg'] as const;
 
-export const panelShapes = ['sm', 'md', 'xl'] as const;
+export const panelShapes = ['square', 'sm', 'md', 'xl'] as const;
 
 export const panelShadows = ['none', 'sm', 'md'] as const;
 

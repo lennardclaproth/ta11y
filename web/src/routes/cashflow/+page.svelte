@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
@@ -252,10 +253,7 @@
 		}
 	}
 
-	const navActions: MenuItem[] = [
-		{ label: 'New transaction', icon: 'heroicons:plus', onSelect: () => (createOpen = true) },
-		{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }
-	];
+	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
 	const accountItems: MenuItem[] = [
 		{ label: 'Account settings', icon: 'heroicons:cog-6-tooth' },
 		{ label: 'Sign out', icon: 'heroicons:arrow-right-on-rectangle', intent: 'danger' }
@@ -291,7 +289,7 @@
 		/>
 	{/snippet}
 
-	<PageContentTemplate showFab fabLabel="New transaction" onFabClick={() => (createOpen = true)}>
+	<PageContentTemplate>
 		{#snippet analytics()}
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-4">
 				<AnalyticsCard title="Net trend" class="lg:col-span-2">
@@ -333,6 +331,11 @@
 			</div>
 		{/snippet}
 
+		<LedgerToolbar
+			title="Transactions"
+			actionLabel="Add transaction"
+			onAdd={() => (createOpen = true)}
+		/>
 		<CashflowTransactionsTable
 			{rows}
 			{loading}

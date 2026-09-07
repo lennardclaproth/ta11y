@@ -49,6 +49,13 @@
   });
 </script>
 
+<Story name="Editorial content surface" asChild>
+  <Panel variant="muted" shape="square" shadow="none" padding="md">
+    <Heading level="h2" size="lg">Transactions</Heading>
+    <Text class="mt-2">A quiet paper surface for the ledger, with square corners and no shadow.</Text>
+  </Panel>
+</Story>
+
 {#snippet playground(args: PanelProps)}
   <Panel {...args}>
     <Heading level="h3" size="md">
@@ -77,7 +84,7 @@
 
 <Story name="Variants" asChild>
   <div class="grid max-w-3xl gap-4">
-    {#each panelVariants as variant}
+    {#each panelVariants as variant (variant)}
       <Panel
         {variant}
         shadow={variant === 'floating' ? 'md' : 'none'}
@@ -96,7 +103,7 @@
 
 <Story name="Padding" asChild>
   <div class="grid max-w-3xl gap-4">
-    {#each panelPaddings as padding}
+    {#each panelPaddings as padding (padding)}
       <Panel {padding}>
         <Text size="sm" tone="muted">
           Padding: {padding}
@@ -108,7 +115,7 @@
 
 <Story name="Shapes" asChild>
   <div class="grid max-w-3xl gap-4">
-    {#each panelShapes as shape}
+    {#each panelShapes as shape (shape)}
       <Panel {shape}>
         <Text size="sm" tone="muted">
           Shape: {shape}

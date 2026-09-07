@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- [020] Integrated Cashflow, Portfolio and Assets creation actions into ruled ledger headers as labeled plus buttons, replacing floating controls.
+- [006][027] Made admin listings creation discoverable through an explicit admin-mode entry screen and a labeled Add listing action, with supported source choices, optional metadata, validation, retryable errors, and session-persistent demo listings.
 - [001] Added dynamic client updates with web sockets.
 - [002] Added CSV import ingestion so users can upload vendor files, persist import jobs, and process them asynchronously in background workers.
 - [003] Added account management endpoints to create and list accounts used across cashflow imports and portfolio calculations.
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [027] Added a complete frontend write service layer (`apiSend` JSON + `apiUpload` multipart) covering every mutation endpoint — cashflow create/tag/ignore, asset class/asset/worth mutations, listing create/update, manual portfolio transactions + rebuild, and cashflow/portfolio/EOD file imports — each with a mock fallback.
 
 ### Changed
+- [020] Applied ta11y's editorial design to the shared portal: a ruled masthead with desktop navigation and a labeled mobile menu, serif analytics headings, flat KPI sections, square paper content panels, and clearer table headers. Narrow screens can scroll past analytics to a usable table region; financial tables retain column width with horizontal scrolling.
 - [020] Began the SvelteKit visual rebuild per `web/docs/DESIGN_PLAN.md` (Phases 0–2): fixed the theme split so the app and Storybook load the same `app.css`, defined the `taupe` token ramp and valid `@font-face` rules, added a documented z-index scale and a framework-agnostic `charts/theme.ts`, and added foundational molecule primitives (popover, dialog, tabs, sortable-header, breadcrumb, search-input).
 - [020] Added a typed, API-shaped stub-data layer (`$lib/api` types + money helpers, `$lib/data` fixtures, `$lib/services`) with a mocks-on-by-default flag so the web app runs and is testable independently of the Go API.
 - [020] Added Phase 3 web design-system molecules: a calendar core with single date-picker and dual-month date-range-picker (presets, min/max), popover-based filters (text/direction/select/visibility) via a shared filter-popover shell, animated action- and account-menus, and an async listing-search-select autocomplete.

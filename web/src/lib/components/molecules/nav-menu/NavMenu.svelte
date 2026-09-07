@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import type { Pathname } from '$app/types';
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import type { PopoverPlacement } from '$lib/components/molecules/popover/popover.types';
@@ -15,6 +17,8 @@
 		icon?: string;
 		placement?: PopoverPlacement;
 		ariaLabel?: string;
+		/** Optional visible trigger text, useful when the menu is the only narrow-screen navigation. */
+		triggerLabel?: string;
 		class?: string;
 	};
 
@@ -24,6 +28,7 @@
 		icon = 'heroicons:bars-3',
 		placement = 'bottom-start',
 		ariaLabel = 'Open navigation menu',
+		triggerLabel,
 		class: className = ''
 	}: Props = $props();
 
@@ -35,7 +40,7 @@
 
 	function choose(item: NavItem) {
 		open = false;
-		if (!isActive(item.href)) void goto(item.href);
+		if (!isActive(item.href)) void goto(resolve(item.href as Pathname));
 	}
 </script>
 
@@ -47,7 +52,8 @@
 			aria-expanded={api.open}
 			aria-label={ariaLabel}
 			class={[
-				'inline-flex size-9 items-center justify-center rounded-lg text-slate-700 transition-colors',
+				'inline-flex h-9 items-center justify-center gap-2 rounded-lg text-slate-700 transition-colors',
+				triggerLabel ? 'px-2' : 'w-9',
 				'hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none',
 				className
 			]
@@ -56,6 +62,7 @@
 			onclick={api.toggle}
 		>
 			<Icon {icon} size="md" />
+			{#if triggerLabel}<span class="text-sm">{triggerLabel}</span>{/if}
 		</button>
 	{/snippet}
 

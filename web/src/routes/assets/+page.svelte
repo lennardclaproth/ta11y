@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
@@ -143,7 +144,7 @@
 		/>
 	{/snippet}
 
-	<PageContentTemplate showFab fabLabel="New asset class" onFabClick={() => (createOpen = true)}>
+	<PageContentTemplate>
 		{#snippet analytics()}
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
 				<AnalyticsCard title="Total worth" class="lg:col-span-2">
@@ -174,6 +175,11 @@
 			</div>
 		{/snippet}
 
+		<LedgerToolbar
+			title="Asset classes"
+			actionLabel="Add asset class"
+			onAdd={() => (createOpen = true)}
+		/>
 		<DataTable
 			rows={classes}
 			{loading}

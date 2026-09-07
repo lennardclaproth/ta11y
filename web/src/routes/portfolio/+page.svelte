@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
@@ -31,10 +32,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { chartColors } from '$lib/charts/theme';
-	import {
-		formatDisplayDate,
-		todayISO
-	} from '$lib/components/molecules/calendar/calendar.utils';
+	import { formatDisplayDate, todayISO } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { KpiItem } from '$lib/components/organisms/kpi-row/kpi-row.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 	import type {
@@ -89,7 +87,11 @@
 	const vendorOptions = $derived(vendors.map((v) => ({ value: v.id, label: v.name })));
 
 	const navActions: MenuItem[] = [
-		{ label: 'Rebuild portfolio', icon: 'heroicons:arrow-path', onSelect: () => void handleRebuild() }
+		{
+			label: 'Rebuild portfolio',
+			icon: 'heroicons:arrow-path',
+			onSelect: () => void handleRebuild()
+		}
 	];
 
 	const monthShort = (iso: string) =>
@@ -284,7 +286,7 @@
 		/>
 	{/snippet}
 
-	<PageContentTemplate showFab fabLabel="New transaction" onFabClick={openTx}>
+	<PageContentTemplate>
 		{#snippet analytics()}
 			<div class="flex flex-col gap-3">
 				<KpiRow items={kpis} columns={3} />
@@ -314,7 +316,7 @@
 		{/snippet}
 
 		<div class="flex min-h-0 flex-1 flex-col">
-			<div class="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+			<LedgerToolbar actionLabel="Add transaction" onAdd={openTx}>
 				<Tabs {tabs} bind:value={tab} ariaLabel="Portfolio view" />
 				{#if tab === 'positions'}
 					<label class="flex items-center gap-2 text-sm text-slate-600">
@@ -322,7 +324,7 @@
 						<Switch bind:checked={includeClosed} aria-label="Include closed positions" />
 					</label>
 				{/if}
-			</div>
+			</LedgerToolbar>
 
 			{#if tab === 'positions'}
 				<DataTable
@@ -412,9 +414,7 @@
 
 		{#if needsListing}
 			<FormField label="Listing" id="ptx-listing">
-				{#snippet children()}
-					<ListingSearchSelect bind:value={txListing} ariaLabel="Listing" />
-				{/snippet}
+				<ListingSearchSelect bind:value={txListing} ariaLabel="Listing" />
 			</FormField>
 		{/if}
 

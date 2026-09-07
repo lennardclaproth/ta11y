@@ -30,6 +30,7 @@ export const panelPaddingClasses = {
 } satisfies Record<PanelPadding, string>;
 
 export const panelShapeClasses = {
+  square: 'rounded-none',
   sm: 'rounded-md',
   md: 'rounded-xl',
   xl: 'rounded-2xl'

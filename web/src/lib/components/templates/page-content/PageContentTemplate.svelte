@@ -31,7 +31,10 @@
 </script>
 
 <div
-	class={['relative flex h-full min-h-0 flex-col gap-3 px-4 pt-3 pb-4', className]
+	class={[
+		'relative flex min-h-full flex-col gap-5 px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8',
+		className
+	]
 		.filter(Boolean)
 		.join(' ')}
 >
@@ -41,15 +44,16 @@
 
 	{#if panel}
 		<Panel
-			shape="xl"
-			shadow="sm"
+			variant="muted"
+			shape="square"
+			shadow="none"
 			padding="none"
-			class="flex min-h-0 flex-1 flex-col overflow-hidden"
+			class="flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1"
 		>
 			{@render children()}
 		</Panel>
 	{:else}
-		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+		<div class="flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
 			{@render children()}
 		</div>
 	{/if}

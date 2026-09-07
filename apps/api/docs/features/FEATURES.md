@@ -10,6 +10,14 @@ doc (e.g. all cashflow and all market-data features).
 
 ## Core (user-facing)
 
+### Web portal [020]
+Cashflow, assets, portfolio, and admin pages share ta11y's editorial shell: a ruled masthead,
+visible desktop navigation, a labeled mobile menu, serif headings, flat analytics sections,
+and square paper table surfaces. Narrow screens scroll through analytics to a dedicated table
+region; wide tables scroll horizontally without widening the page. Existing financial actions,
+filters, date selection, and account controls remain available. Cashflow, Portfolio and Assets
+place labeled creation actions with plus icons above the ledger, alongside its title or view tabs.
+
 ### Account management
 Users create and list accounts. An account is the shared scope that imports, cashflow,
 portfolio, and assets all hang off of.
@@ -64,7 +72,11 @@ and asset snapshots rebuilt — so the UI can refresh without polling.
 
 ### Listing management
 Admins create, update, list, and search market-data listings. Listings are the canonical
-instruments referenced by portfolio transactions and end-of-day pricing.
+instruments referenced by portfolio transactions and end-of-day pricing. In the web app,
+open **Listings** from the navigation, enable admin mode when prompted, then choose
+**Add listing**. The form accepts a name, symbol and supported data source, with optional
+instrument metadata. It preserves input on errors and identifies duplicate symbol/source
+pairs. Demo-mode additions remain available to lists and searches until a page reload.
 
 → Details: [Market data](%5B005%5D_MARKET_DATA.md)
 

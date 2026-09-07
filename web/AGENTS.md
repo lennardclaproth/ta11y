@@ -1,5 +1,16 @@
 # AGENTS.md — `web/` (frontend)
 
+## ta11y design authority
+
+- The product is **ta11y**, pronounced “tally”. Preserve the current portal's calm, precise design.
+- The shared portal now implements the editorial masthead, ruled analytics sections, and square
+  main panels. Continue the newspaper-inspired hierarchy and aligned columns while keeping
+  financial workflows readable; preserve rounded controls and dialog panels where useful.
+- Read [DESIGN.md](../DESIGN.md) before UI work. Reuse its documented theme, component variants,
+  chart styles, and overlay layers; update it when shared design decisions change.
+- `src/app.css` is the canonical theme for both the portal and Storybook. Do not create a second
+  theme in `routes/layout.css` or story files.
+
 Source of truth for working in the SvelteKit frontend. The repo-wide rules in the
 root [CLAUDE.md](../CLAUDE.md) (and the now-commented root `AGENTS.md`) still apply —
 minimal focused diffs, the changelog/feature-doc discipline, "don't add/upgrade deps,
@@ -197,16 +208,10 @@ backgrounds.
   (`bg-taupe-100`) and serif headings. Webfonts live in `static/fonts/`.
 - The prettier `tailwindStylesheet` (for class sorting) points at `src/routes/layout.css`.
 
-⚠️ **Two-stylesheet split — keep these in sync.** The running app's root layout
-(`src/routes/+layout.svelte`) imports `src/routes/layout.css`, which currently only does
-`@import 'tailwindcss'` + the typography plugin. The richer theme in `src/app.css` (the `@theme`
-fonts and `taupe` base styles) is imported **only by Storybook** (`.storybook/preview.ts`). As a
-result the app and Storybook can render differently. If you rely on theme tokens, make sure the app
-actually loads them (import `app.css` from the layout, or move the `@theme` into `layout.css`).
-
-⚠️ **`taupe` is referenced but not defined.** `bg-taupe-100` / `bg-taupe-50` are used without a
-corresponding `--color-taupe-*` declaration in any `@theme` block. Verify/define it before depending
-on those classes.
+**Shared theme.** The root layout imports `src/routes/layout.css`, which imports `src/app.css`.
+Storybook imports `src/app.css` directly. Both use the same fonts, base styles, and complete taupe
+scale (`50` through `900`). Keep these definitions in `app.css` and document shared changes in
+[DESIGN.md](../DESIGN.md).
 
 ## Stories and tests
 

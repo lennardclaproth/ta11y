@@ -95,9 +95,9 @@
 
 <div class={['flex min-h-0 flex-col', className].filter(Boolean).join(' ')}>
 	<div class="min-h-0 flex-1 overflow-auto">
-		<table class="w-full border-collapse text-sm">
-			<thead class={['sticky top-0 bg-white/95 backdrop-blur', zClasses.stickyHeader].join(' ')}>
-				<tr class="border-b border-slate-200">
+		<table class="w-full min-w-[40rem] border-collapse text-sm">
+			<thead class={['sticky top-0 bg-taupe-50', zClasses.stickyHeader].join(' ')}>
+				<tr class="border-b border-slate-400">
 					{#if selectable}
 						<th class="w-10 px-3 py-2">
 							<Checkbox
@@ -113,7 +113,7 @@
 							scope="col"
 							aria-sort={ariaSort(column)}
 							class={[
-								'px-3 py-2 text-xs font-medium text-slate-500',
+								'px-3 py-3 text-xs font-semibold text-slate-700',
 								alignClasses[column.align ?? 'left'],
 								column.width ?? ''
 							]

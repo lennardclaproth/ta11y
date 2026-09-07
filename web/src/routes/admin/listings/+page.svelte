@@ -5,22 +5,18 @@
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
-	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
-	import Input from '$lib/components/atoms/input/Input.svelte';
+	import ListingForm from '$lib/components/organisms/listing-form/ListingForm.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import { listListings, createListing as createListingService } from '$lib/services/marketdata';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { adminMode } from '$lib/stores/admin.svelte';
-	import type { Listing } from '$lib/api/types';
+	import type { CreateListingRequest, Listing } from '$lib/api/types';
 
 	let listings = $state<Listing[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
 	let createOpen = $state(false);
-	let name = $state('');
-	let symbol = $state('');
-	let source = $state('');
 	let creating = $state(false);
 
 	async function load() {
@@ -37,26 +33,13 @@
 
 	onMount(load);
 
-	async function createListing() {
-		if (name.trim() === '' || symbol.trim() === '' || source.trim() === '') return;
-		creating = true;
-		try {
-			await createListingService({
-				name: name.trim(),
-				symbol: symbol.trim().toUpperCase(),
-				source: source.trim()
-			});
-			createOpen = false;
-			toast.success(`Listing ${symbol.toUpperCase()} created`);
-			name = '';
-			symbol = '';
-			source = '';
-			void load();
-		} catch {
-			toast.error('Failed to create listing');
-		} finally {
-			creating = false;
-		}
+	async function createListing(body: CreateListingRequest) {
+		const listing = await createListingService(body);
+		listings = [...listings.filter((item) => item.id !== listing.id), listing].sort((a, b) =>
+			a.symbol.localeCompare(b.symbol)
+		);
+		createOpen = false;
+		toast.success(`Listing ${listing.symbol} created`);
 	}
 </script>
 
@@ -70,12 +53,30 @@
 		/>
 	{/snippet}
 
-	<PageContentTemplate showFab fabLabel="New listing" onFabClick={() => (createOpen = true)}>
+	<PageContentTemplate>
+		<div
+			class="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-4"
+		>
+			<div>
+				<h2 class="text-2xl">Market listings</h2>
+				<p class="mt-1 text-sm text-slate-600">
+					Manage instruments used in your portfolio and price history.
+				</p>
+			</div>
+			<Button disabled={loading} onclick={() => (createOpen = true)}>Add listing</Button>
+		</div>
+		{#if error}
+			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">
+				<p class="text-sm text-red-700">{error}. Check your connection and try again.</p>
+				<Button variant="outline" onclick={load}>Retry loading</Button>
+			</div>
+		{/if}
 		<DataTable
 			rows={listings}
 			{loading}
-			{error}
-			emptyText="No listings"
+			emptyText={error
+				? 'Listings are unavailable. Retry loading above.'
+				: 'No listings yet. Add your first listing to get started.'}
 			columns={[
 				{ key: 'symbol', header: 'Symbol', value: (r: Listing) => r.symbol },
 				{ key: 'name', header: 'Name', value: (r: Listing) => r.name },
@@ -88,26 +89,19 @@
 	</PageContentTemplate>
 </AppShellTemplate>
 
-<Dialog bind:open={createOpen} title="New listing" size="md">
-	<div class="space-y-3">
-		<FormField label="Symbol" id="listing-symbol">
-			{#snippet children(ctx)}
-				<Input id={ctx.id} bind:value={symbol} placeholder="e.g. VWRL" />
-			{/snippet}
-		</FormField>
-		<FormField label="Name" id="listing-name">
-			{#snippet children(ctx)}
-				<Input id={ctx.id} bind:value={name} placeholder="e.g. Vanguard FTSE All-World" />
-			{/snippet}
-		</FormField>
-		<FormField label="Source" id="listing-source">
-			{#snippet children(ctx)}
-				<Input id={ctx.id} bind:value={source} placeholder="e.g. marketstack" />
-			{/snippet}
-		</FormField>
-	</div>
-	{#snippet footer()}
-		<Button variant="ghost" intent="secondary" onclick={() => (createOpen = false)}>Cancel</Button>
-		<Button intent="success" onclick={createListing} loading={creating}>Create</Button>
-	{/snippet}
+<Dialog
+	bind:open={createOpen}
+	title="Add listing"
+	size="lg"
+	dismissible={!creating}
+	closeOnBackdrop={!creating}
+	closeOnEscape={!creating}
+>
+	{#if createOpen}
+		<ListingForm
+			bind:saving={creating}
+			onSave={createListing}
+			onCancel={() => (createOpen = false)}
+		/>
+	{/if}
 </Dialog>

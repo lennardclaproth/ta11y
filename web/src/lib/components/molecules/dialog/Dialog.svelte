@@ -14,6 +14,8 @@
 		dismissible?: boolean;
 		/** Close when the backdrop is clicked. */
 		closeOnBackdrop?: boolean;
+		/** Allow Escape to dismiss; disable while a mutation is pending. */
+		closeOnEscape?: boolean;
 		ariaLabel?: string;
 		onClose?: () => void;
 		class?: string;
@@ -28,6 +30,7 @@
 		title,
 		dismissible = true,
 		closeOnBackdrop = true,
+		closeOnEscape = true,
 		ariaLabel,
 		onClose,
 		class: className = '',
@@ -83,6 +86,9 @@
 	class={dialogClasses}
 	aria-label={ariaLabel ?? title}
 	onclose={handleClose}
+	oncancel={(event) => {
+		if (!closeOnEscape) event.preventDefault();
+	}}
 	onclick={handleClick}
 >
 	<div class="flex max-h-[85vh] flex-col">
