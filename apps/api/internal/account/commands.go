@@ -34,8 +34,8 @@ func NewCommands(c CommandStore, b eventbus.Bus) *Commands {
 // from an external system, such as Google or Entra ID.
 //
 // The name argument is required and must not be empty or whitespace.
-func (c *Commands) Create(ctx context.Context, id *uuid.UUID, externalID *string, name string) (*uuid.UUID, error) {
-	acc, err := NewAccount(name, id, externalID)
+func (c *Commands) Create(ctx context.Context, id *uuid.UUID, externalID *string, name string, options ...AccountOption) (*uuid.UUID, error) {
+	acc, err := NewAccount(name, id, externalID, options...)
 	if err != nil {
 		return nil, fmt.Errorf("create: failed to create new account")
 	}

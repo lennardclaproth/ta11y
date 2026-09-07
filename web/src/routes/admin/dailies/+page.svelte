@@ -6,11 +6,10 @@
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
 	import { getEOD } from '$lib/services/marketdata';
 	import { scaledToNumber } from '$lib/api/money';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
-	import type { EOD, Listing } from '$lib/api/types';
+	import type { EOD, ListingSearchRow } from '$lib/api/types';
 
-	let selected = $state<Listing | null>(null);
+	let selected = $state<ListingSearchRow | null>(null);
 	let rows = $state<EOD[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -20,7 +19,7 @@
 	const price = (value: number) =>
 		scaledToNumber(value).toLocaleString('en', { style: 'currency', currency });
 
-	async function selectListing(listing: Listing) {
+	async function selectListing(listing: ListingSearchRow) {
 		selected = listing;
 		loading = true;
 		error = null;
@@ -36,12 +35,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Dailies"
-			accountName="Admin User"
-			adminMode={adminMode.enabled}
-			onAdminToggle={(v) => adminMode.set(v)}
-		/>
+		<TopNavbar title="Dailies" accountName="Admin User" />
 	{/snippet}
 
 	<PageContentTemplate>

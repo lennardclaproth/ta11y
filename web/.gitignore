@@ -17,6 +17,9 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.test
+# Mock-mode profile for the "web-mocks" launch configuration. Holds no secrets:
+# it only forces the fixture layer on, so it is tracked like .env.example.
+!.env.mocks
 
 # Vite
 vite.config.js.timestamp-*

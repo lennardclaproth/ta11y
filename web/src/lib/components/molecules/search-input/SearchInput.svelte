@@ -59,28 +59,15 @@
 
 	const clearable = $derived(value.length > 0 && !disabled);
 
+	// Only the trailing clear button reserves space; the placeholder and the field's
+	// own affordances already say this is a search box, so a leading icon would be a
+	// second thing to look at for no extra meaning.
 	const inputClasses = $derived(
-		[
-			inputIconPaddingClasses[size].left,
-			clearable ? inputIconPaddingClasses[size].right : '',
-			className
-		]
-			.filter(Boolean)
-			.join(' ')
+		[clearable ? inputIconPaddingClasses[size].right : '', className].filter(Boolean).join(' ')
 	);
 </script>
 
 <div class="group relative w-full">
-	<span
-		class={[
-			'pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center text-slate-500',
-			inputIconContainerSizeClasses[size]
-		].join(' ')}
-		aria-hidden="true"
-	>
-		<Icon icon="heroicons:magnifying-glass" size={inputIconSizeClasses[size]} />
-	</span>
-
 	<Input
 		type="search"
 		bind:value
@@ -100,7 +87,7 @@
 			class={[
 				'absolute inset-y-0 right-0 flex items-center justify-center text-slate-500',
 				'transition-colors hover:text-slate-700',
-				'focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none',
+				'focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none',
 				inputIconContainerSizeClasses[size]
 			].join(' ')}
 			onclick={clear}

@@ -1,38 +1,44 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
-	import Button from '$lib/components/atoms/button/Button.svelte';
+	import { accountStore } from '$lib/stores/account.svelte';
 
 	let { children } = $props();
-	let ready = $state(false);
-	onMount(() => {
-		ready = true;
-	});
 
-	// Keep admin tools gated while explaining how to enter, including on direct links.
+	// Admin screens are simply absent for non-admin accounts: the navigation omits them
+	// and a direct link lands here. This hides pages, it does not protect them -- the API
+	// is unauthenticated, so the admin flag records intent and nothing enforces it.
+	$effect(() => {
+		void accountStore.ensureLoaded();
+	});
 </script>
 
-{#if adminMode.enabled}
+{#if !accountStore.loaded}
+	<!-- Nothing is rendered until the account resolves, so the page never flashes a
+	     "not available" state at an admin who simply has a slow connection. -->
+	<AppShellTemplate>
+		{#snippet top()}
+			<TopNavbar title="Admin" accountName="Account" />
+		{/snippet}
+		<section class="px-6 py-10" aria-busy="true"></section>
+	</AppShellTemplate>
+{:else if accountStore.isAdmin}
 	{@render children()}
 {:else}
 	<AppShellTemplate>
 		{#snippet top()}
-			<TopNavbar
-				title="Admin tools"
-				accountName="Account"
-				adminMode={false}
-				onAdminToggle={(v) => adminMode.set(v)}
-			/>
+			<TopNavbar title="Admin" accountName="Account" />
 		{/snippet}
 		<section class="mx-auto w-full max-w-2xl px-6 py-10">
-			<h2 class="text-3xl">Enable admin mode to continue</h2>
-			<p class="mt-3 mb-6 max-w-prose text-sm leading-relaxed text-slate-600">
-				Listings and daily price uploads are managed in admin mode. Enable it here to open the page
-				you selected. You can turn it off again in the account menu.
+			<h2 class="text-2xl">This page isn't available</h2>
+			<p class="mt-3 max-w-prose text-sm leading-relaxed text-slate-600">
+				{#if accountStore.failed}
+					Your account couldn't be loaded, so admin pages are hidden. Check your connection and
+					reload.
+				{:else}
+					Listings, dailies and provider credentials are only available to admin accounts.
+				{/if}
 			</p>
-			<Button disabled={!ready} onclick={() => adminMode.set(true)}>Enable admin mode</Button>
 		</section>
 	</AppShellTemplate>
 {/if}

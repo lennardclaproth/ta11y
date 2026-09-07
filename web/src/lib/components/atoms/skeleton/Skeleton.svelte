@@ -18,8 +18,10 @@
     circle: 'rounded-full'
   } satisfies Record<SkeletonVariant, string>;
 
+  // Tinted to the warm page background rather than cool grey, and pulsed gently:
+  // a loading placeholder should read as "not here yet", not compete with content.
   const classes = $derived([
-    'block animate-pulse bg-slate-200',
+    'block animate-pulse bg-taupe-200/70',
     variantClasses[variant],
     className
   ]

@@ -6,10 +6,11 @@
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import ListingForm from '$lib/components/organisms/listing-form/ListingForm.svelte';
+	import ProviderCatalogueDrawer from '$lib/components/organisms/provider-catalogue-drawer/ProviderCatalogueDrawer.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import { listListings, createListing as createListingService } from '$lib/services/marketdata';
 	import { toast } from '$lib/stores/toast.svelte';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import type { CreateListingRequest, Listing } from '$lib/api/types';
 
 	let listings = $state<Listing[]>([]);
@@ -18,6 +19,21 @@
 
 	let createOpen = $state(false);
 	let creating = $state(false);
+	let catalogueOpen = $state(false);
+	let filter = $state('');
+
+	// Filtering happens in the browser: the page already holds every listing, so a
+	// round trip would cost more than it saves.
+	const visibleListings = $derived.by(() => {
+		const needle = filter.trim().toLowerCase();
+		if (!needle) return listings;
+		return listings.filter(
+			(listing) =>
+				listing.symbol.toLowerCase().includes(needle) ||
+				listing.name.toLowerCase().includes(needle) ||
+				(listing.isin ?? '').toLowerCase().includes(needle)
+		);
+	});
 
 	async function load() {
 		loading = true;
@@ -45,12 +61,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Listings"
-			accountName="Admin User"
-			adminMode={adminMode.enabled}
-			onAdminToggle={(v) => adminMode.set(v)}
-		/>
+		<TopNavbar title="Listings" accountName="Admin User" />
 	{/snippet}
 
 	<PageContentTemplate>
@@ -63,7 +74,19 @@
 					Manage instruments used in your portfolio and price history.
 				</p>
 			</div>
-			<Button disabled={loading} onclick={() => (createOpen = true)}>Add listing</Button>
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="w-56">
+					<SearchInput
+						bind:value={filter}
+						placeholder="Filter listings…"
+						ariaLabel="Filter listings"
+					/>
+				</div>
+				<Button variant="outline" intent="secondary" onclick={() => (catalogueOpen = true)}>
+					Browse catalogue
+				</Button>
+				<Button disabled={loading} onclick={() => (createOpen = true)}>Add listing</Button>
+			</div>
 		</div>
 		{#if error}
 			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">
@@ -72,11 +95,13 @@
 			</div>
 		{/if}
 		<DataTable
-			rows={listings}
+			rows={visibleListings}
 			{loading}
 			emptyText={error
 				? 'Listings are unavailable. Retry loading above.'
-				: 'No listings yet. Add your first listing to get started.'}
+				: filter.trim()
+					? `No listings match "${filter.trim()}". Try Browse catalogue to add one.`
+					: 'No listings yet. Add your first listing to get started.'}
 			columns={[
 				{ key: 'symbol', header: 'Symbol', value: (r: Listing) => r.symbol },
 				{ key: 'name', header: 'Name', value: (r: Listing) => r.name },
@@ -105,3 +130,11 @@
 		/>
 	{/if}
 </Dialog>
+
+<ProviderCatalogueDrawer
+	bind:open={catalogueOpen}
+	onAdopted={(created) => {
+		toast.success(`Added ${created.length} listing${created.length === 1 ? '' : 's'}`);
+		void load();
+	}}
+/>

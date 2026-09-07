@@ -25,12 +25,12 @@
 
 <Story name="Admin enabled, no extra items" asChild>
 	<div class="flex min-h-56 items-start justify-end">
-		<AccountMenu name="Demo User" adminMode={true} />
+		<AccountMenu name="Demo User" />
 	</div>
 </Story>
 
-<Story name="Without admin toggle" asChild>
+<Story name="Without items" asChild>
 	<div class="flex min-h-56 items-start justify-end">
-		<AccountMenu name="Read Only" email="ro@example.com" showAdminToggle={false} {items} />
+		<AccountMenu name="Read Only" email="ro@example.com" />
 	</div>
 </Story>

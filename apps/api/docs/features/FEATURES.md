@@ -70,6 +70,12 @@ and asset snapshots rebuilt — so the UI can refresh without polling.
 
 ## Market data & admin
 
+Admin screens (listings, dailies, provider credentials) are shown only to accounts flagged
+`admin`; the bootstrapped account is one. Non-admin accounts do not see them in the
+navigation and get an unavailable notice on a direct link. The API does not enforce the
+flag, so this hides screens rather than protecting them -- it needs real authentication
+before the API is reachable beyond localhost.
+
 ### Listing management
 Admins create, update, list, and search market-data listings. Listings are the canonical
 instruments referenced by portfolio transactions and end-of-day pricing. In the web app,
@@ -77,6 +83,32 @@ open **Listings** from the navigation, enable admin mode when prompted, then cho
 **Add listing**. The form accepts a name, symbol and supported data source, with optional
 instrument metadata. It preserves input on errors and identifies duplicate symbol/source
 pairs. Demo-mode additions remain available to lists and searches until a page reload.
+
+Listing search covers both the instruments you track and a locally cached copy of the
+provider's ticker catalogue, selected with `scope` (`tracked` by default, plus `catalogue`
+and `all`); tracked rows always sort first and each row reports whether it is `tracked`
+and whether it can be adopted.
+
+→ Details: [Market data](%5B005%5D_MARKET_DATA.md)
+
+### Provider catalogue search
+**Listings → Browse catalogue** searches the provider's instrument catalogue and adds
+entries to your listings in bulk. Searching the local cache is free; **Search provider**
+makes one metered provider request and merges the results into the cache.
+
+The cache is filled two ways because it can never be assumed complete: the provider
+matches substrings across its whole universe, so a search for `ASM` has far more matches
+(125) than `ASML` (31), and cached results for one query say nothing about another. A
+bounded seed run therefore caches the provider's most-traded instruments — its catalogue
+comes back in popularity order, so a small page budget goes a long way — and each explicit
+provider search tops the cache up for the terms you actually use. A provider search fetches
+a single page: results are relevance-ranked, so the intended instrument is on the first
+page, and the UI says so when the provider matched more than it returned.
+
+Rows the provider gives no name for, or no end-of-day history for, are shown but cannot be
+adopted — a listing requires a name, and one without price history would never yield
+prices. Adopting does not fetch price history; that happens the first time the listing's
+prices are viewed, so adding a batch cannot stall the request or drain the request budget.
 
 → Details: [Market data](%5B005%5D_MARKET_DATA.md)
 
@@ -90,6 +122,15 @@ processing status of an upload.
 The API supports both API-based market-data providers (MarketStack, Alpha Vantage) and a
 manual provider; the configured provider mode controls listing synchronization and whether
 manual EOD uploads are allowed.
+
+### Provider credentials
+**Credentials** (admin) lists each provider with its base URL, request quota and whether an
+API key is configured, and lets you set or replace a key. Stored keys are never included in
+the listing -- only a hint like `****9876` -- so reading one back is a separate, logged
+action. Manual providers ingest uploaded files and have no credentials to configure.
+
+Keys supplied through the environment are seeded at startup, so a key that is still set in
+the environment is re-added on restart alongside anything changed here.
 
 → Details: [Market data](%5B005%5D_MARKET_DATA.md)
 

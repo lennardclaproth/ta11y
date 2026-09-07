@@ -2,20 +2,31 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import ListingSearchSelect from './ListingSearchSelect.svelte';
 	import { listings } from '$lib/data/fixtures/marketdata';
-	import type { Listing } from '$lib/api/types';
+	import type { ListingSearchRow } from '$lib/api/types';
 
 	// Deterministic, offline search fns injected so stories don't depend on the service/network.
-	const stubSearch = (q: string): Promise<Listing[]> =>
+	// Fixtures are listings, so they stand in as tracked rows.
+	const asRow = (listing: (typeof listings)[number]): ListingSearchRow => ({
+		...listing,
+		exchange_mic: null,
+		tracked: true,
+		has_eod: true,
+		adoptable: false,
+		adoptable_reason: 'this instrument is already in your listings'
+	});
+	const stubSearch = (q: string): Promise<ListingSearchRow[]> =>
 		Promise.resolve(
-			listings.filter(
-				(l) =>
-					l.symbol.toLowerCase().includes(q.toLowerCase()) ||
-					l.name.toLowerCase().includes(q.toLowerCase())
-			)
+			listings
+				.filter(
+					(l) =>
+						l.symbol.toLowerCase().includes(q.toLowerCase()) ||
+						l.name.toLowerCase().includes(q.toLowerCase())
+				)
+				.map(asRow)
 		);
-	const neverResolves = (): Promise<Listing[]> => new Promise(() => {});
-	const empty = (): Promise<Listing[]> => Promise.resolve([]);
-	const fails = (): Promise<Listing[]> => Promise.reject(new Error('boom'));
+	const neverResolves = (): Promise<ListingSearchRow[]> => new Promise(() => {});
+	const empty = (): Promise<ListingSearchRow[]> => Promise.resolve([]);
+	const fails = (): Promise<ListingSearchRow[]> => Promise.reject(new Error('boom'));
 
 	const { Story } = defineMeta({
 		title: 'Molecules/ListingSearchSelect',

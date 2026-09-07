@@ -20,7 +20,6 @@
 		getAssetClassDetails,
 		createAssetClass
 	} from '$lib/services/assets';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
@@ -58,6 +57,12 @@
 		error = null;
 		try {
 			await accountStore.ensureLoaded();
+			// No account yet is an empty state, not a failure.
+			if (!accountStore.hasAccount) {
+				classes = [];
+				snapshots = [];
+				return;
+			}
 			const accountId = accountStore.activeId;
 			const [cls, snaps] = await Promise.all([
 				listAssetClasses({ account_id: accountId }),
@@ -139,8 +144,6 @@
 				to = r.to ?? '';
 			}}
 			accountName="Lennard Claproth"
-			adminMode={adminMode.enabled}
-			onAdminToggle={(v) => adminMode.set(v)}
 		/>
 	{/snippet}
 

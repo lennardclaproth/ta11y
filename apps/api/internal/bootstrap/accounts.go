@@ -28,7 +28,7 @@ func Accounts(ctx context.Context, commands *account.Commands, queries *account.
 		panic(fmt.Errorf("bootstrap accounts: fetch by id %s: %w", defaultAccountID, err))
 	}
 
-	if _, err := commands.Create(ctx, &defaultAccountID, nil, defaultAccountName); err != nil {
+	if _, err := commands.Create(ctx, &defaultAccountID, nil, defaultAccountName, account.AsAdmin()); err != nil {
 		if errors.Is(err, account.ErrAccountAlreadyExists) {
 			logger.Info(ctx, "account already exists by unique constraint, skipping bootstrap", "account_name", defaultAccountName)
 			return

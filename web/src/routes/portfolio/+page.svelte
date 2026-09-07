@@ -27,7 +27,6 @@
 		rebuildPortfolio
 	} from '$lib/services/portfolio';
 	import { listVendors } from '$lib/services/vendors';
-	import { adminMode } from '$lib/stores/admin.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { scaledToNumber } from '$lib/api/money';
@@ -36,7 +35,7 @@
 	import type { KpiItem } from '$lib/components/organisms/kpi-row/kpi-row.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 	import type {
-		Listing,
+		ListingSearchRow,
 		PortfolioPosition,
 		PortfolioSnapshotPoint,
 		PortfolioTransaction,
@@ -59,7 +58,7 @@
 	let vendors = $state<Vendor[]>([]);
 	let vendorId = $state('');
 	let txType = $state<PortfolioTransactionType>('BUY');
-	let txListing = $state<Listing | null>(null);
+	let txListing = $state<ListingSearchRow | null>(null);
 	let txQuantity = $state('');
 	let txAmount = $state('');
 	let txDate = $state(todayISO());
@@ -120,6 +119,10 @@
 
 	async function loadPositions() {
 		await accountStore.ensureLoaded();
+		if (!accountStore.hasAccount) {
+			positions = [];
+			return;
+		}
 		positions = (
 			await listPortfolioPositions({
 				account_id: accountStore.activeId,
@@ -133,6 +136,14 @@
 		error = null;
 		try {
 			await accountStore.ensureLoaded();
+			// No account yet is an empty state, not a failure: firing account-scoped
+			// requests with the placeholder id would 4xx and read as a load error.
+			if (!accountStore.hasAccount) {
+				snapshots = [];
+				transactions = [];
+				positions = [];
+				return;
+			}
 			const accountId = accountStore.activeId;
 			const [snaps, txs] = await Promise.all([
 				getPortfolioSnapshots({
@@ -281,8 +292,6 @@
 			}}
 			actions={navActions}
 			accountName="Lennard Claproth"
-			adminMode={adminMode.enabled}
-			onAdminToggle={(v) => adminMode.set(v)}
 		/>
 	{/snippet}
 

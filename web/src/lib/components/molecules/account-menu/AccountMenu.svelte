@@ -2,7 +2,6 @@
 	import { fly } from 'svelte/transition';
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Avatar from '$lib/components/atoms/avatar/Avatar.svelte';
-	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
@@ -11,24 +10,11 @@
 		email?: string;
 		/** Avatar image; falls back to initials derived from `name`. */
 		src?: string;
-		/** Bindable admin-mode flag, surfaced as a toggle in the menu. */
-		adminMode?: boolean;
-		showAdminToggle?: boolean;
 		items?: MenuItem[];
-		onAdminToggle?: (value: boolean) => void;
 		class?: string;
 	};
 
-	let {
-		name,
-		email,
-		src,
-		adminMode = $bindable(false),
-		showAdminToggle = true,
-		items = [],
-		onAdminToggle,
-		class: className = ''
-	}: Props = $props();
+	let { name, email, src, items = [], class: className = '' }: Props = $props();
 
 	let open = $state(false);
 
@@ -36,11 +22,6 @@
 		if (item.disabled) return;
 		item.onSelect?.();
 		open = false;
-	}
-
-	function toggleAdmin() {
-		adminMode = !adminMode;
-		onAdminToggle?.(adminMode);
 	}
 </script>
 
@@ -72,17 +53,6 @@
 				{/if}
 			</div>
 		</div>
-
-		{#if showAdminToggle}
-			<div class="my-1 border-t border-slate-200"></div>
-			<div class="flex items-center justify-between gap-3 px-3 py-1.5 text-sm text-slate-700">
-				<span class="flex items-center gap-2">
-					<Icon icon="heroicons:shield-check" size="sm" class="text-slate-500" />
-					Admin mode
-				</span>
-				<Switch checked={adminMode} aria-label="Admin mode" onchange={toggleAdmin} />
-			</div>
-		{/if}
 
 		{#if items.length > 0}
 			<div class="my-1 border-t border-slate-200"></div>

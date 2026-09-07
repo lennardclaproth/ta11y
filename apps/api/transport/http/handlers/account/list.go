@@ -10,8 +10,10 @@ import (
 
 // AccountResponse is a single account returned by the list endpoint.
 type AccountResponse struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Admin gates the admin-only screens in clients. The API does not enforce it.
+	Admin      bool    `json:"admin"`
 	ExternalID *string `json:"external_id,omitempty"`
 }
 
@@ -38,6 +40,7 @@ func List(log logging.Logger, queries *account.Queries) http.Handler {
 			res = append(res, AccountResponse{
 				ID:         acc.ID.String(),
 				Name:       acc.Name,
+				Admin:      acc.Admin,
 				ExternalID: acc.ExternalID,
 			})
 		}
