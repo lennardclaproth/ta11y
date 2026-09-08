@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 type Builder struct {
@@ -111,6 +111,13 @@ func (b *Builder) buildPositionSnapshots(
 	if err != nil {
 		return nil, fmt.Errorf("build position snapshots: get eods: %w", err)
 	}
+	// Prices from the split date onward are post-split, so the quantity has to move
+	// with them; otherwise every snapshot after a split understates the position.
+	splits, err := b.mdq.SplitsForListing(ctx, *pos.ListingID)
+	if err != nil {
+		return nil, fmt.Errorf("build position snapshots: get splits: %w", err)
+	}
+	splitsByDay := splitFactorsByDay(splits)
 	// Initialize iterators for transactions and EOD data, and an accumulator for the position state
 	txIdx := 0
 	dIdx := 0
@@ -137,6 +144,11 @@ func (b *Builder) buildPositionSnapshots(
 		dayEnd := date.EndOfDayUTC(d)
 		unitPriceSet := false
 		var unitPrice money.Price
+		// The split rescales what was carried in from the previous day. It runs before
+		// this day's transactions because a trade on the ex-date is already post-split.
+		if factor, ok := splitsByDay[d]; ok {
+			acc.applySplit(factor)
+		}
 		// apply all tx up to this day
 		for txIdx < len(ts) && !ts[txIdx].OccurredAt.UTC().After(dayEnd) {
 			tx := ts[txIdx]
@@ -206,11 +218,48 @@ func (b *Builder) buildPositionSnapshots(
 	return snapshots, nil
 }
 
+// withSplitEvents returns the transaction stream with each instrument's share splits
+// interleaved in chronological order.
+//
+// Instruments are resolved to listings by the same identity the position cycles use, so
+// a split is only injected for something the account actually traded. An instrument
+// that maps to no listing simply contributes no splits, exactly as before.
+func (b *Builder) withSplitEvents(ctx context.Context, transactions []Transaction) ([]Transaction, error) {
+	instruments := collectInstruments(transactions)
+	if len(instruments) == 0 {
+		return transactions, nil
+	}
+
+	var events []Transaction
+	for identity, inst := range instruments {
+		listings, _, err := b.mdq.SearchListings(ctx, identity, 1, 0)
+		if err != nil || len(listings) == 0 {
+			// No listing means no price history and therefore no splits to replay.
+			continue
+		}
+		splits, err := b.mdq.SplitsForListing(ctx, listings[0].ID)
+		if err != nil {
+			return nil, fmt.Errorf("load splits for %s: %w", identity, err)
+		}
+		events = append(events, splitEvents(splits, inst.isin, inst.symbol)...)
+	}
+
+	return mergeChronologically(transactions, events), nil
+}
+
 func (b *Builder) buildPositions(ctx context.Context, accID uuid.UUID) ([]*Position, error) {
 	// Load the event stream (transactions) in chronological order.
 	ts, err := b.ts.TransactionsForAccount(ctx, accID, "ASC")
 	if err != nil {
 		return nil, fmt.Errorf("build positions: failed toload transactions: %w", err)
+	}
+	// Splits belong in the same chronological stream as the trades: a sell after a
+	// split is quoted in post-split shares, so the holding has to be rescaled before
+	// that sell is matched against it, or the position closes at the wrong quantity
+	// and books the wrong realized profit.
+	ts, err = b.withSplitEvents(ctx, ts)
+	if err != nil {
+		return nil, fmt.Errorf("build positions: %w", err)
 	}
 	// One active lifecycle ("cycle") per canonical instrument key at a time.
 	// key = ISIN if available; otherwise symbol (with alias promotion later).
@@ -258,9 +307,9 @@ func (b *Builder) buildPositions(ctx context.Context, accID uuid.UUID) ([]*Posit
 	if err := b.pss.CreateMany(ctx, posList); err != nil {
 		return nil, fmt.Errorf("build positions: persist positions: %w", err)
 	}
-	// Persist transaction->position mapping.
-	// TODO: think of better naming.
-	if err := b.pss.UpdatePositions(ctx, ts); err != nil {
+	// Persist transaction->position mapping. Synthetic split events are filtered out:
+	// they have no stored row to map, and the store keys the update by transaction id.
+	if err := b.pss.UpdatePositions(ctx, storedTransactions(ts)); err != nil {
 		return nil, fmt.Errorf("build positions: persist transaction mapping: %w", err)
 	}
 	return posList, nil

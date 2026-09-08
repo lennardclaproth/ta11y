@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 // SQLXPortfolioStore persists and reads the portfolio aggregate: account projection,

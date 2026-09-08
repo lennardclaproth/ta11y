@@ -1,93 +1,44 @@
-<!-- # AGENTS.md
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
 
-## Scope
-- This repository is a monorepo.
-- Main applications live in `apps/api` (Go backend) and `web` (SvelteKit frontend — the directory is `web/`, not `apps/web`).
-- Apply these instructions for all work unless a more specific `AGENTS.md` exists deeper in the tree.
+This project is indexed by GitNexus as **ta11y** (5362 symbols, 14736 relationships, 377 execution flows).
 
-## Commands
-- Use the `Makefile` as the source of truth for project commands.
-- Prefer `make build`, `make lint`, `make test`, and `make swagger`.
-- Do not invent alternative commands when a Make target exists.
-- Frontend scripts may exist, but default to the Makefile unless a task explicitly requires otherwise.
+> Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
 
-## Execution and validation
-- Always run the full test suite with `make test` after code changes.
-- When finalizing relevant changes, also run `make lint` and `make build`.
-- Always run `make swagger` when finalizing API-related changes.
-- Do not claim work is complete if relevant validation has not been run.
+## Always Do
 
-## Planning
-- For complex or non-trivial tasks, create `tmp/plan.md` before making substantial changes.
-- Use `tmp/plan.md` for cross-cutting work, multi-file feature work, refactors, or tasks requiring several ordered steps.
-- Keep the plan concise and task-specific.
-- Update the plan as work progresses.
-- Delete `tmp/plan.md` when the task is complete.
+- **MUST run impact before editing.** Use `impact({target: "symbolName", direction: "upstream"})` or `node .gitnexus/run.cjs impact "symbolName" --direction upstream --repo .`; report callers, processes, and risk. Never substitute grep for graph analysis.
+- **MUST analyze graph changes before committing.** Use `detect_changes({scope: "all"})` (MCP) or `node .gitnexus/run.cjs detect-changes --scope all --repo .` (CLI fallback). `partial: true` or `truncated: true` is not a clean check — a zero means unseen, not unaffected; re-run it. For regression review: `detect_changes({scope: "compare", base_ref: "main"})` or `node .gitnexus/run.cjs detect-changes --scope compare --base-ref "main" --repo .`.
+- MUST warn on HIGH/CRITICAL `risk` pre-edit; never use `riskSharedAxes` to waive a HIGH/CRITICAL `risk` warning. Compare File/symbol: MCP File omits axes; Graph-RAG expands File.
+- **MUST treat `risk: UNKNOWN` as unresolved, not as low.** An empty caller set is not evidence the symbol is unused — it can also mean the callers are not resolvable by the index (plain-object property access, dynamic dispatch, cross-language calls). `impact` pairs `UNKNOWN` with a `riskNote` saying so. Confirm with a text search before treating the symbol as safe to change or delete; do not proceed on the strength of a zero.
+- **MUST use `query({search_query: "concept"})` for concepts/flows, `context({name: "symbolName"})` for a named symbol, or `impact` for blast radius, on read-only callers, dependencies, imports, or execution flow.** Graph first; text search only for empty/`UNKNOWN`/literals.
+- For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
 
-## Change discipline
-- Prefer minimal diffs.
-- Do not refactor unrelated code.
-- Prefer editing existing files over introducing new files or abstractions unless there is a clear benefit.
-- Create new files when necessary to avoid bloated files or to preserve maintainability.
+## Never Do
 
-## Dependencies and restricted changes
-- Do not add, remove, upgrade, or replace dependencies without explicit approval.
-- Do not modify database migrations, CI/CD files, Docker files, infrastructure files, or similar operational files unless explicitly instructed.
-- Do not delete documentation files unless explicitly told which files may be deleted.
+- NEVER edit a function, class, or method before MCP/CLI impact analysis.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis, and never read `UNKNOWN` as an all-clear — it means the walk could not answer, which is the one verdict that requires confirming by other means.
+- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
+- NEVER commit before MCP/CLI graph change analysis.
 
-## Backend architecture (`apps/api`)
-- Prefer package-by-feature organization.
-- Existing feature-oriented packages such as account, portfolio, cashflow, and vendor should remain coherent.
-- Keep controllers thin.
-- Controllers may parse requests, validate inputs, and map transport models to application/domain inputs.
-- Controllers must not contain business rules, orchestration logic, or domain decision-making.
-- Place business behavior in the appropriate feature/domain/application code, not in controllers.
+## Resources
 
-## Backend coding conventions
-- Use idiomatic Go.
-- Add clear comments describing intent and behavior.
-- Do not write numbered step comments.
-- Document exported functions and types.
-- Also document important unexported functions and types when their purpose is not obvious.
-- Keep comments aligned with actual behavior; update comments when behavior changes.
-- Use proper error handling everywhere.
-- Use structured logging through the project's `slog` wrapper.
-- Use appropriate log levels: debug, info, warning, error.
-- Avoid logging sensitive data.
+| Resource | Use for |
+| --- | --- |
+| `gitnexus://repo/ta11y/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/ta11y/clusters` | All functional areas |
+| `gitnexus://repo/ta11y/processes` | All execution flows |
+| `gitnexus://repo/ta11y/process/{name}` | Step-by-step execution trace |
 
-## Frontend architecture (`web`)
-- Follow the Atomic Design pattern strictly.
-- Preserve and extend the established atom/molecule/organism/template/page structure.
-- Do not bypass the Atomic Design structure without explicit instruction.
-- Keep frontend comments clear and useful, and update them when behavior changes.
-- Handle errors explicitly; do not silently swallow them.
-- Surface user-relevant failures appropriately in the UI.
-- Where appropriate, add or maintain error reporting that can be observed server-side.
-- Elastic APM integration may be extended when implementing new error reporting paths.
+## CLI
 
-## Testing expectations
-- Add or update tests when behavior changes.
-- Do not change tests only to force a pass without understanding intended behavior.
-- Prefer unit tests first, and add integration tests when they are the right fit.
+| Task | Read this skill file |
+| --- | --- |
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
 
-## OpenAPI and Swagger
-- Keep OpenAPI/Swagger documentation in sync with API changes.
-- Run `make swagger` for API-related work before finalizing.
-
-## Feature documentation
-- Feature documentation is consolidated in `apps/api/docs/features/FEATURES.md` — a single short overview of all features.
-- The legacy per-feature numbered files (`001_FEATURE_NAME.md`, …) under `/docs/features` have been removed; do not recreate them without explicit instruction.
-- Read `FEATURES.md` before editing an existing feature.
-- When a feature's behavior changes, update its entry in `FEATURES.md` in the same task.
-- Also update the root `CHANGELOG.md` in the same task.
-- Changelog entries go under `Unreleased` and use the Keep a Changelog categories `Added`, `Changed`, and `Fixed`.
-
-## Feature identification rules
-- The `CHANGELOG.md` still tracks features with `[NNN]` IDs (at least three digits).
-- Existing feature IDs will usually be provided; for new features, infer the next ID from `CHANGELOG.md`.
-- If a changed feature cannot be mapped confidently to an existing changelog feature, stop and ask.
-- A feature is generally large enough to warrant a changelog entry when it introduces a new user-visible capability, meaningful backend domain behavior, or a substantial UI workflow change.
-- Changelog entries for feature work must explicitly mention the feature ID.
-
-## Maintaining this file
-- If the user corrects recurring behavior or adds durable repo rules, update `AGENTS.md` so the guidance persists. -->
+<!-- gitnexus:end -->

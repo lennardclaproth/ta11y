@@ -201,7 +201,7 @@ These are consequences of the in-progress backend refactor, already noted in the
 feature docs' "Refactor state" sections. They are tracked here only so they aren't
 re-discovered as bugs.
 
-- **No compiling composition root.** The new `cmd/my-finances-tracker/main.go` is an empty
+- **No compiling composition root.** The new `cmd/ta11y/main.go` is an empty
   stub; `cmd/server/main.go` is stale (imports removed `internal/bus`, `internal/jobs`,
   `internal/http`, `internal/cashflow/service`, and reads a non-existent `cfg.Agent.*`).
   Nothing wires the new HTTP routes or bus subscriptions yet.

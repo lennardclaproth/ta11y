@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/files"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/files"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 // Processor parses and persists accepted EOD CSV imports.

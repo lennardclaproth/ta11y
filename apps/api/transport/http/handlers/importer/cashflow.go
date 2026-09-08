@@ -7,10 +7,10 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // maxImportUploadBytes caps the size of an uploaded import CSV file.
@@ -18,18 +18,14 @@ const maxImportUploadBytes = 10 << 20 // 10MB
 
 // importCashflowRequest is the multipart payload accepted for a cashflow CSV import.
 type importCashflowRequest struct {
-	File      multipart.File `multipart:"file"`
-	VendorID  uuid.UUID      `form:"vendor_id"`
-	AccountID uuid.UUID      `form:"account_id"`
+	File     multipart.File `multipart:"file"`
+	VendorID uuid.UUID      `form:"vendor_id"`
 }
 
 func (r importCashflowRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
 	if r.VendorID == uuid.Nil {
 		problems["vendor_id"] = "vendor_id is required"
-	}
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
 	}
 	return len(problems) == 0, problems
 }
@@ -49,7 +45,6 @@ type ImportAcceptedResponse struct {
 // @Produce     application/json
 // @Param       file formData file true "Cashflow CSV file"
 // @Param       vendor_id formData string true "Vendor UUID"
-// @Param       account_id formData string true "Account UUID"
 // @Success     202 {object} ImportAcceptedResponse
 // @Failure     400 {object} map[string]string "Bad request"
 // @Failure     404 {object} map[string]string "Not found"
@@ -58,6 +53,10 @@ type ImportAcceptedResponse struct {
 // @Router      /imports/cashflow [post]
 func ImportCashflow(log logging.Logger, commands *importer.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeMultipartFile[importCashflowRequest](r, httpx.MultipartFileDecoderOptions{
 			FieldName: "file",
 			MaxBytes:  maxImportUploadBytes,
@@ -78,7 +77,7 @@ func ImportCashflow(log logging.Logger, commands *importer.Commands) http.Handle
 		importID, err := commands.ImportCashflowCSV(r.Context(), importer.CashflowCSVImportCommand{
 			File:      req.File,
 			VendorID:  req.VendorID,
-			AccountID: req.AccountID,
+			AccountID: accountID,
 		})
 		if err != nil {
 			switch {

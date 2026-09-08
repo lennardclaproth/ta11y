@@ -219,7 +219,6 @@
 		try {
 			await accountStore.ensureLoaded();
 			await createCashflowTransactions({
-				account_id: accountStore.activeId,
 				transactions: [
 					{
 						date: value.date,
@@ -260,10 +259,6 @@
 	}
 
 	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
-	const accountItems: MenuItem[] = [
-		{ label: 'Account settings', icon: 'heroicons:cog-6-tooth' },
-		{ label: 'Sign out', icon: 'heroicons:arrow-right-on-rectangle', intent: 'danger' }
-	];
 </script>
 
 <AppShellTemplate>
@@ -287,9 +282,6 @@
 				syncUrl();
 			}}
 			actions={navActions}
-			accountName="Lennard Claproth"
-			accountEmail="lennard@example.com"
-			{accountItems}
 		/>
 	{/snippet}
 

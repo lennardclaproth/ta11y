@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type CreateAssetRequest struct {
-	AccountID     uuid.UUID `json:"account_id"`
 	ClassID       uuid.UUID `json:"class_id"`
 	Name          string    `json:"name"`
 	InitialWorth  string    `json:"initial_worth"`
@@ -67,6 +66,10 @@ func (r CreateAssetRequest) isValid() (bool, map[string]string) {
 // @Router /assets [post]
 func CreateAsset(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[CreateAssetRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -93,7 +96,7 @@ func CreateAsset(log logging.Logger, commands assets.Commands) http.Handler {
 		// 	httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid effective date format"})
 		// 	return
 		// }
-		asset, err := commands.CreateAsset(r.Context(), req.AccountID, req.ClassID, req.Name, initWorth, effectiveDate, req.Note)
+		asset, err := commands.CreateAsset(r.Context(), accountID, req.ClassID, req.Name, initWorth, effectiveDate, req.Note)
 		if err != nil {
 			log.Error(r.Context(), "failed to create asset", err)
 			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset"})

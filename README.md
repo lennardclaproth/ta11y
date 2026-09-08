@@ -3,7 +3,7 @@
 ta11y (pronounced “tally”) is a personal finances tracker: a Go backend (`apps/api`) and a SvelteKit frontend (`web`). It tracks
 cashflow, an investment portfolio, and other assets, with CSV/statement imports and market data.
 
-- **`apps/api`** — Go 1.25 API (module `github.com/lennardclaproth/my-finances-tracker`). All domain
+- **`apps/api`** — Go 1.25 API (module `github.com/lennardclaproth/ta11y`). All domain
   logic lives here. HTTP transport under `transport/http`, features under `internal/`.
 - **`web`** — SvelteKit 2 / Svelte 5 frontend. Runs standalone against mock fixtures, or against the
   live API by setting one env var.
@@ -101,7 +101,7 @@ The API allows the frontend dev origin (`http://localhost:5199`) out of the box 
 `apps/api` (`make run` and the VS Code "Launch Server" config already do this).
 
 - **Database**: `database.type` is `postgres` (default; local via `make db-up`, or deployed) or
-  `sqlite3` (zero-infra local — set a file connection string like `file:mft.db`). Either way the app
+  `sqlite3` (zero-infra local — set a file connection string like `file:ta11y.db`). Either way the app
   creates the database if missing and runs migrations on startup.
 - **Server**: `server.port` (default `6060`) and `server.cors_allowed_origins`.
 - **APM** (Elastic) is configured but optional to run locally — the app boots even if no APM server is
@@ -172,6 +172,13 @@ Run `make help` for the full list. Highlights:
 
 ## Agent / contributor guidance
 
-Conventions live in [AGENTS.md](AGENTS.md) (repo-wide), [apps/api/AGENTS.md](apps/api/AGENTS.md)
-(backend), and [web/AGENTS.md](web/AGENTS.md) (frontend). The `CLAUDE.md` files summarize them for
-Claude Code.
+Repo-wide conventions live in [CLAUDE.md](CLAUDE.md): commands, change discipline, validation, and
+the feature-doc/changelog rules. Area-specific conventions live in [.claude/rules/](.claude/rules/)
+as path-scoped rule files (Go backend, HTTP transport, storage, migrations, event bus, Atomic
+Design, SvelteKit); Claude Code loads each one automatically when the matching files are edited.
+[apps/api/AGENTS.md](apps/api/AGENTS.md) and [web/AGENTS.md](web/AGENTS.md) are pointers into that
+set for other tools and for reading by hand.
+
+The `.claude/` directory also holds shared permissions and hooks (`settings.json`), slash commands
+(`/verify`, `/feature`, `/migration`, `/fe-check`), skills, and review subagents. See
+[.claude/README.md](.claude/README.md).

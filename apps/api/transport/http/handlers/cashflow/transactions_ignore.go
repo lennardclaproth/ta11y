@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // IgnoreTransactionsBySelectionRequest toggles ignored-state for selected transaction IDs.
@@ -56,6 +56,11 @@ func (r IgnoreTransactionsBySelectionRequest) isValid() map[string]string {
 // @Tags        Transactions
 func IgnoreTransactionsBySelection(log logging.Logger, commands *cashflow.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.JSONDecode[IgnoreTransactionsBySelectionRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -71,7 +76,7 @@ func IgnoreTransactionsBySelection(log logging.Logger, commands *cashflow.Comman
 		}
 
 		ignored := ignoreState(req.Ignored)
-		updated, err := commands.IgnoreByIDs(r.Context(), req.IDs, ignored)
+		updated, err := commands.IgnoreByIDs(r.Context(), accountID, req.IDs, ignored)
 		if err != nil {
 			log.Error(r.Context(), "cashflow ignore selection: failed to update transactions", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to ignore selected cashflow transactions"})
@@ -99,6 +104,11 @@ func IgnoreTransactionsBySelection(log logging.Logger, commands *cashflow.Comman
 // @Tags        Transactions
 func IgnoreTransactionsByFilter(log logging.Logger, commands *cashflow.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.JSONDecode[IgnoreTransactionsByFilterRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -113,6 +123,7 @@ func IgnoreTransactionsByFilter(log logging.Logger, commands *cashflow.Commands)
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
 		}
+		filters.AccountID = accountID
 
 		ignored := ignoreState(req.Ignored)
 		updated, err := commands.IgnoreByFilter(r.Context(), filters, ignored)

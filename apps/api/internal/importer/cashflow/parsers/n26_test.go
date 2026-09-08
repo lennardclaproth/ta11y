@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 func TestN26Parser_ParseAll_EnglishHeaders(t *testing.T) {

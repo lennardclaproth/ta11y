@@ -125,7 +125,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Credentials" accountName="Admin" />
+		<TopNavbar title="Credentials" />
 	{/snippet}
 
 	<PageContentTemplate>

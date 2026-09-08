@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/date"
 )
 
 type EODFetcher interface {

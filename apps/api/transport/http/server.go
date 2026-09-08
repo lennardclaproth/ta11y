@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
 )
@@ -51,12 +51,15 @@ func (s *Server) Run(ctx context.Context) error {
 		return apm.DefaultTracer().IgnoredTransactionURL(r.URL)
 	}))
 	handler = WithRequestIdentifiers()(handler)
+	// Origin is checked inside CORS so preflight is still answered, but before routing
+	// so a rejected cross-site mutation never reaches a handler.
+	handler = WithOriginCheck(s.corsOrigins)(handler)
 	handler = WithCORS(s.corsOrigins)(handler)
 
 	server := s.newHTTPServer(handler)
 
 	s.log.Info(context.Background(),
-		"My Finances Tracker is listening for incoming requests...",
+		"ta11y is listening for incoming requests...",
 		"addr", s.addr,
 		"swagger_url", fmt.Sprintf("http://localhost%s/swagger/index.html", s.addr),
 	)

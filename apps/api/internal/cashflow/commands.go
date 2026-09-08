@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 type Commands struct {
@@ -23,9 +23,9 @@ type accountExistenceChecker interface {
 // CommandStore persists cashflow transaction mutations.
 type CommandStore interface {
 	CreateTransactions(ctx context.Context, txs []*Transaction) (int, error)
-	UpdateTagByIDs(ctx context.Context, ids []uuid.UUID, tag string) (int, error)
+	UpdateTagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error)
 	UpdateTagByFilter(ctx context.Context, filters TransactionFilters, tag string) (int, error)
-	UpdateIgnoredByIDs(ctx context.Context, ids []uuid.UUID, ignored bool) (int, error)
+	UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error)
 	UpdateIgnoredByFilter(ctx context.Context, filters TransactionFilters, ignored bool) (int, error)
 }
 
@@ -197,8 +197,8 @@ type TagByFilterCommand struct {
 }
 
 // TagByID applies a tag to one cashflow transaction.
-func (c *Commands) TagByID(ctx context.Context, id uuid.UUID, tag string) error {
-	_, err := c.TagByIDs(ctx, []uuid.UUID{id}, tag)
+func (c *Commands) TagByID(ctx context.Context, accountID, id uuid.UUID, tag string) error {
+	_, err := c.TagByIDs(ctx, accountID, []uuid.UUID{id}, tag)
 	if err != nil {
 		return fmt.Errorf("cashflow tag by id: %w", err)
 	}
@@ -206,8 +206,8 @@ func (c *Commands) TagByID(ctx context.Context, id uuid.UUID, tag string) error 
 }
 
 // TagByIDs applies a tag to the selected cashflow transactions.
-func (c *Commands) TagByIDs(ctx context.Context, ids []uuid.UUID, tag string) (int, error) {
-	updated, err := c.cs.UpdateTagByIDs(ctx, ids, tag)
+func (c *Commands) TagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error) {
+	updated, err := c.cs.UpdateTagByIDs(ctx, accountID, ids, tag)
 	if err != nil {
 		return 0, fmt.Errorf("cashflow tag by ids: %w", err)
 	}
@@ -216,6 +216,8 @@ func (c *Commands) TagByIDs(ctx context.Context, ids []uuid.UUID, tag string) (i
 
 // TagByFilter applies or schedules tagging based on total matched rows and async policy.
 func (c *Commands) TagByFilter(ctx context.Context, tag string, accID uuid.UUID, filters TransactionFilters) (BulkTagResult, error) {
+	// The account is authoritative over anything the filters carried in.
+	filters.AccountID = accID
 	total, err := c.qs.CountByFilter(ctx, filters)
 	if err != nil {
 		return BulkTagResult{}, fmt.Errorf("cashflow tag by filter count: %w", err)
@@ -233,8 +235,8 @@ func (c *Commands) TagByFilter(ctx context.Context, tag string, accID uuid.UUID,
 }
 
 // IgnoreByIDs sets the ignored flag for the selected cashflow transactions.
-func (c *Commands) IgnoreByIDs(ctx context.Context, ids []uuid.UUID, ignored bool) (int, error) {
-	updated, err := c.cs.UpdateIgnoredByIDs(ctx, ids, ignored)
+func (c *Commands) IgnoreByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error) {
+	updated, err := c.cs.UpdateIgnoredByIDs(ctx, accountID, ids, ignored)
 	if err != nil {
 		return 0, fmt.Errorf("cashflow ignore by ids: %w", err)
 	}

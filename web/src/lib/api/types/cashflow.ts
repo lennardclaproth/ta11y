@@ -66,7 +66,6 @@ export interface CreateManualCashflowTransaction {
 
 /** `POST /cashflow/transactions/manual` request — mirrors `cashflow.CreateTransactionsRequest`. */
 export interface CreateCashflowTransactionsRequest {
-	account_id: string;
 	transactions: CreateManualCashflowTransaction[];
 }
 
@@ -106,7 +105,6 @@ export interface TagTransactionsBySelectionRequest {
 /** `POST /cashflow/transactions/tag/filter` request. */
 export interface TagTransactionsByFilterRequest {
 	tag: string;
-	account_id?: string;
 	filters: CashflowTransactionFilters;
 }
 

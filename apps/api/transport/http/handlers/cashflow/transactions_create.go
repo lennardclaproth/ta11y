@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // CreateManualCashflowTransactionRequest represents one manual cashflow transaction row.
@@ -26,15 +26,11 @@ type CreateManualCashflowTransactionRequest struct {
 
 // CreateTransactionsRequest creates one or more manual cashflow transactions.
 type CreateTransactionsRequest struct {
-	AccountID    uuid.UUID                                `json:"account_id"`
 	Transactions []CreateManualCashflowTransactionRequest `json:"transactions"`
 }
 
 func (r CreateTransactionsRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	if len(r.Transactions) == 0 {
 		problems["transactions"] = "transactions is required"
 		return len(problems) == 0, problems
@@ -101,6 +97,10 @@ func CreateTransactions(
 	commands *cashflow.Commands,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[CreateTransactionsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -121,7 +121,7 @@ func CreateTransactions(
 			return
 		}
 
-		result, err := commands.CreateMany(r.Context(), req.AccountID, nil, transactions)
+		result, err := commands.CreateMany(r.Context(), accountID, nil, transactions)
 		if err != nil {
 			switch {
 			case errors.Is(err, cashflow.ErrAccountNotFound):

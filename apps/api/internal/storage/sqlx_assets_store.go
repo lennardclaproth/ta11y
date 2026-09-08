@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 // SQLXAssetsStore persists the assets aggregate: account projection, classes, items,

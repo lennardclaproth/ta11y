@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 type Syncer struct {

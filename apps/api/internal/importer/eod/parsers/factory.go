@@ -3,7 +3,7 @@ package parsers
 import (
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 func CreateEODParser(source marketdata.Source) (EODParser, error) {

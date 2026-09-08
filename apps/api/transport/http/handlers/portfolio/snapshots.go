@@ -5,27 +5,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // GetSnapshotsRequest contains query filters for portfolio snapshot history.
 type GetSnapshotsRequest struct {
-	AccountID uuid.UUID `query:"account_id"`
-	From      string    `query:"from"`
-	To        string    `query:"to"`
+	From string `query:"from"`
+	To   string `query:"to"`
 }
 
 func (r GetSnapshotsRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	return len(problems) == 0, problems
 }
 
@@ -49,7 +44,6 @@ type SnapshotPointResponse struct {
 // @Tags portfolio
 // @Accept json
 // @Produce json
-// @Param account_id query string true "Account ID"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
 // @Success 200 {array} SnapshotPointResponse
@@ -63,6 +57,10 @@ func GetPortfolioSnapshots(
 	queries *portfoliodomain.Queries,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetSnapshotsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -87,12 +85,12 @@ func GetPortfolioSnapshots(
 			return
 		}
 
-		if _, err := fetcher.GetByID(r.Context(), req.AccountID); err != nil {
+		if _, err := fetcher.GetByID(r.Context(), accountID); err != nil {
 			if errors.Is(err, account.ErrAccountNotFound) {
 				_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"account_id": account.ErrAccountNotFound.Error()})
 				return
 			}
-			log.Error(r.Context(), "portfolio snapshots: failed to fetch account", err, "account_id", req.AccountID.String())
+			log.Error(r.Context(), "portfolio snapshots: failed to fetch account", err, "account_id", accountID.String())
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio snapshots"})
 			return
 		}
@@ -108,9 +106,9 @@ func GetPortfolioSnapshots(
 		}
 
 		sort := sorting.ASC
-		snapshots, err := queries.SnapshotsForAccount(r.Context(), req.AccountID, nil, nil, from, to, &sort)
+		snapshots, err := queries.SnapshotsForAccount(r.Context(), accountID, nil, nil, from, to, &sort)
 		if err != nil {
-			log.Error(r.Context(), "portfolio snapshots: failed to list snapshots", err, "account_id", req.AccountID.String())
+			log.Error(r.Context(), "portfolio snapshots: failed to list snapshots", err, "account_id", accountID.String())
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio snapshots"})
 			return
 		}

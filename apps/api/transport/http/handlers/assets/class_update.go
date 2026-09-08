@@ -5,16 +5,15 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type UpdateClassRequest struct {
-	AccountID uuid.UUID `json:"account_id"`
-	ID        uuid.UUID `json:"id"`
-	Name      *string   `json:"name,omitempty"`
-	Archived  *bool     `json:"archived,omitempty"`
+	ID       uuid.UUID `json:"id"`
+	Name     *string   `json:"name,omitempty"`
+	Archived *bool     `json:"archived,omitempty"`
 }
 
 func (r UpdateClassRequest) isValid() (bool, map[string]string) {
@@ -45,6 +44,10 @@ func (r UpdateClassRequest) isValid() (bool, map[string]string) {
 // @Router /assets/classes [patch]
 func UpdateClass(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[UpdateClassRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -53,7 +56,7 @@ func UpdateClass(log logging.Logger, commands assets.Commands) http.Handler {
 			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
-		err = commands.UpdateClass(r.Context(), req.ID, req.Name, req.Archived)
+		err = commands.UpdateClass(r.Context(), accountID, req.ID, req.Name, req.Archived)
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while updating a class", err)
 			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update class"})

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/files"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/files"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 // Processor parses and persists accepted portfolio CSV imports.

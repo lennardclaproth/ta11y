@@ -211,7 +211,7 @@ Both go through request-identifier + request-logging middleware. The `docs/` pac
 
 ## Refactor state / not implemented
 
-- **No compiling entrypoint wires this stack.** `cmd/my-finances-tracker/main.go` is an empty
+- **No compiling entrypoint wires this stack.** `cmd/ta11y/main.go` is an empty
   stub; `cmd/server/main.go` imports removed packages (`internal/bus`, `internal/jobs`,
   `internal/http`, `internal/cashflow/service`) and reads a non-existent `cfg.Agent.*`, so it
   does not compile. Consequently `transport/http`, `internal/bootstrap`, `internal/eventbus`,

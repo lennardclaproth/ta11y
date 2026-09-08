@@ -89,7 +89,7 @@ components:
 
 ta11y (pronounced “tally”) helps people understand cashflow, assets, and investments. Its portal pairs warm paper-like surfaces with precise financial information: serif headings establish hierarchy, sans-serif controls support scanning, and slate-and-amber actions provide a recognizable signature.
 
-This document captures the existing light-theme portal. It is the shared design reference for new screens and changes to reusable components. The product spelling is **ta11y**; repository names and API module paths may retain `my-finances-tracker`. Existing SVG lockups contain “Tally”; preserve those supplied assets until a revised wordmark is provided rather than silently redrawing them.
+This document captures the existing light-theme portal. It is the shared design reference for new screens and changes to reusable components. The product spelling is **ta11y**, which is also the repository name and the Go module path (`github.com/lennardclaproth/ta11y`). Existing SVG lockups contain “Tally”; preserve those supplied assets until a revised wordmark is provided rather than silently redrawing them.
 
 **Key Characteristics:**
 

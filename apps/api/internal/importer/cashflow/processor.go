@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	cashflowdomain "github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/files"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	cashflowdomain "github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/files"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 // Processor parses and persists accepted cashflow CSV imports.

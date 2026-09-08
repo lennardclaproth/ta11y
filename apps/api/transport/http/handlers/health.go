@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	apphttp "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	apphttp "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // HealthHandler returns a simple health check handler.

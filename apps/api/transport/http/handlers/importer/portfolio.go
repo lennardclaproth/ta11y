@@ -6,26 +6,22 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // importPortfolioRequest is the multipart payload accepted for a portfolio CSV import.
 type importPortfolioRequest struct {
-	File      multipart.File `multipart:"file"`
-	VendorID  uuid.UUID      `form:"vendor_id"`
-	AccountID uuid.UUID      `form:"account_id"`
+	File     multipart.File `multipart:"file"`
+	VendorID uuid.UUID      `form:"vendor_id"`
 }
 
 func (r importPortfolioRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
 	if r.VendorID == uuid.Nil {
 		problems["vendor_id"] = "vendor_id is required"
-	}
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
 	}
 	return len(problems) == 0, problems
 }
@@ -39,7 +35,6 @@ func (r importPortfolioRequest) isValid() (bool, map[string]string) {
 // @Produce     application/json
 // @Param       file formData file true "Portfolio CSV file"
 // @Param       vendor_id formData string true "Brokerage vendor UUID"
-// @Param       account_id formData string true "Account UUID"
 // @Success     202 {object} ImportAcceptedResponse
 // @Failure     400 {object} map[string]string "Bad request"
 // @Failure     404 {object} map[string]string "Not found"
@@ -48,6 +43,10 @@ func (r importPortfolioRequest) isValid() (bool, map[string]string) {
 // @Router      /imports/portfolio [post]
 func ImportPortfolio(log logging.Logger, commands *importer.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeMultipartFile[importPortfolioRequest](r, httpx.MultipartFileDecoderOptions{
 			FieldName: "file",
 			MaxBytes:  maxImportUploadBytes,
@@ -68,7 +67,7 @@ func ImportPortfolio(log logging.Logger, commands *importer.Commands) http.Handl
 		importID, err := commands.ImportPortfolioCSV(r.Context(), importer.PortfolioCSVImportCommand{
 			File:      req.File,
 			VendorID:  req.VendorID,
-			AccountID: req.AccountID,
+			AccountID: accountID,
 		})
 		if err != nil {
 			switch {

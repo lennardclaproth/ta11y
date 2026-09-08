@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -17,8 +18,61 @@ type Config struct {
 	Database    Database    `yaml:"database"`
 	Logging     Logging     `yaml:"logging"`
 	APM         APMConfig   `yaml:"apm"`
+	Auth        Auth        `yaml:"auth"`
 	DiskStorage DiskStorage `yaml:"disk_storage"`
 	Providers   Providers   `yaml:"providers"`
+}
+
+// Auth configures OpenID Connect sign-in. Client credentials are never read from
+// config.yaml -- each provider's id and secret come from the environment, named
+// <SLUG>_CLIENT_ID / <SLUG>_CLIENT_SECRET (e.g. GOOGLE_CLIENT_ID).
+type Auth struct {
+	// Enabled turns sign-in on. With it off the API boots without contacting any
+	// provider, which keeps local development and the test suite self-contained.
+	Enabled bool `yaml:"enabled"`
+	// SessionTTL is how long a session stays valid. Zero means auth.DefaultSessionTTL.
+	SessionTTL time.Duration `yaml:"session_ttl"`
+	// FrontendURL is where the browser is sent once a login completes, and the default
+	// origin for the session cookie. It must be an origin the frontend is served from.
+	FrontendURL string `yaml:"frontend_url"`
+	// CookieDomain scopes the session cookie. Empty leaves it host-only, which is
+	// correct whenever the API and frontend share a host.
+	CookieDomain string `yaml:"cookie_domain"`
+	// CookieSecure forces the Secure attribute. It defaults to true outside development
+	// and must stay true wherever the site is served over HTTPS.
+	CookieSecure *bool `yaml:"cookie_secure"`
+	// AllowedEmails restricts who may sign in. Empty means anyone the provider
+	// authenticates, which for a public issuer such as Google means anyone at all --
+	// so it is required outside development. Compared case-insensitively.
+	AllowedEmails []string `yaml:"allowed_emails"`
+	// BootstrapAdminEmail claims the seeded account on first sign-in, so pre-existing
+	// data is adopted rather than orphaned behind a freshly provisioned account. Read
+	// from AUTH_BOOTSTRAP_ADMIN_EMAIL when absent here.
+	BootstrapAdminEmail string `yaml:"bootstrap_admin_email"`
+	// Providers lists the identity providers to discover at start-up, keyed by the slug
+	// that appears in /auth/{provider}/login.
+	Providers map[string]AuthProvider `yaml:"providers"`
+}
+
+// AuthProvider is one OpenID Connect identity provider.
+type AuthProvider struct {
+	// Issuer is the provider's issuer URL; everything else is fetched by discovery.
+	Issuer string `yaml:"issuer"`
+	// RedirectURL must match the redirect registered with the provider exactly.
+	RedirectURL string `yaml:"redirect_url"`
+	// ClientID and ClientSecret are populated from the environment, not from yaml.
+	ClientID     string `yaml:"-"`
+	ClientSecret string `yaml:"-"`
+}
+
+// IsCookieSecure reports whether the session cookie carries the Secure attribute,
+// defaulting to true anywhere but development so a misconfigured production never
+// downgrades by omission.
+func (a Auth) IsCookieSecure(environment string) bool {
+	if a.CookieSecure != nil {
+		return *a.CookieSecure
+	}
+	return !strings.EqualFold(strings.TrimSpace(environment), "development")
 }
 
 type DiskStorage struct {
@@ -100,7 +154,104 @@ func (c *Config) Validate() error {
 	if c.DiskStorage.BasePath == "" {
 		return fmt.Errorf("disk storage base path cannot be empty")
 	}
+	if err := c.Auth.validate(); err != nil {
+		return err
+	}
+	if err := c.validateAuthPosture(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validateAuthPosture refuses the two configurations that would quietly expose data
+// outside development: running with sign-in off, and running with sign-in on but no
+// allowlist, which for a public issuer lets anyone with an account at that provider in.
+func (c *Config) validateAuthPosture() error {
+	if isDevelopment(c.Server.Environment) {
+		return nil
+	}
+	if !c.Auth.Enabled {
+		return fmt.Errorf("auth must be enabled outside development: every request would run as the bootstrapped account")
+	}
+	if len(c.Auth.AllowedEmails) == 0 {
+		return fmt.Errorf("auth.allowed_emails must list at least one address outside development: an empty allowlist lets anyone with an account at the identity provider sign in")
+	}
+	return nil
+}
+
+// isDevelopment reports whether an environment may run without authentication. The
+// list is an allowlist rather than a "not production" check: an unfamiliar name such as
+// "staging" is treated as production-like, so a new environment is strict by default
+// instead of silently unauthenticated.
+func isDevelopment(environment string) bool {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "", "development", "dev", "local", "test", "ci":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsEmailAllowed reports whether an address may sign in. An empty allowlist admits
+// everyone, which validate() permits only in development.
+func (a Auth) IsEmailAllowed(email string) bool {
+	if len(a.AllowedEmails) == 0 {
+		return true
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	for _, allowed := range a.AllowedEmails {
+		if strings.EqualFold(strings.TrimSpace(allowed), email) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a Auth) validate() error {
+	if !a.Enabled {
+		return nil
+	}
+	if len(a.Providers) == 0 {
+		return fmt.Errorf("auth is enabled but no identity providers are configured")
+	}
+	if strings.TrimSpace(a.FrontendURL) == "" {
+		return fmt.Errorf("auth frontend_url is required when auth is enabled")
+	}
+	for slug, provider := range a.Providers {
+		if strings.TrimSpace(provider.Issuer) == "" {
+			return fmt.Errorf("auth provider %q is missing an issuer", slug)
+		}
+		if strings.TrimSpace(provider.RedirectURL) == "" {
+			return fmt.Errorf("auth provider %q is missing a redirect_url", slug)
+		}
+		if provider.ClientID == "" || provider.ClientSecret == "" {
+			return fmt.Errorf(
+				"auth provider %q is missing credentials: set %s_CLIENT_ID and %s_CLIENT_SECRET",
+				slug, envPrefix(slug), envPrefix(slug),
+			)
+		}
+	}
+	return nil
+}
+
+// hydrateAuthEnv fills each provider's credentials from the environment and applies the
+// bootstrap admin email, keeping secrets out of config.yaml entirely.
+func (c *Config) hydrateAuthEnv() {
+	if c.Auth.BootstrapAdminEmail == "" {
+		c.Auth.BootstrapAdminEmail = strings.TrimSpace(os.Getenv("AUTH_BOOTSTRAP_ADMIN_EMAIL"))
+	}
+	for slug, provider := range c.Auth.Providers {
+		prefix := envPrefix(slug)
+		provider.ClientID = strings.TrimSpace(os.Getenv(prefix + "_CLIENT_ID"))
+		provider.ClientSecret = strings.TrimSpace(os.Getenv(prefix + "_CLIENT_SECRET"))
+		c.Auth.Providers[slug] = provider
+	}
+}
+
+// envPrefix maps a provider slug to its environment-variable prefix ("google" ->
+// "GOOGLE", "entra-id" -> "ENTRA_ID").
+func envPrefix(slug string) string {
+	return strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(strings.TrimSpace(slug)))
 }
 
 func ReadConfig() (*Config, error) {
@@ -117,6 +268,7 @@ func ReadConfig() (*Config, error) {
 	}
 
 	cfg.hydrateProviderEnv()
+	cfg.hydrateAuthEnv()
 	cfg.applyAPMDefaults()
 
 	apmEnv := []struct {

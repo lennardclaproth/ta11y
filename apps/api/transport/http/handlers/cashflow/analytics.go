@@ -3,10 +3,10 @@ package cashflow
 import (
 	"net/http"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // MonthlyAnalyticsRequest contains query filters for monthly cashflow analytics.
@@ -45,6 +45,10 @@ type CashflowMonthlyAnalyticsResponse struct {
 // @Router      /cashflow/analytics/monthly [get]
 func GetMonthlyAnalytics(log logging.Logger, queries *cashflow.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[MonthlyAnalyticsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -64,6 +68,7 @@ func GetMonthlyAnalytics(log logging.Logger, queries *cashflow.Queries) http.Han
 		}
 
 		points, err := queries.MonthlyAnalytics(r.Context(), cashflow.AnalyticsFilter{
+			AccountID:      accountID,
 			From:           from,
 			To:             to,
 			IncludeIgnored: req.IncludeIgnored,

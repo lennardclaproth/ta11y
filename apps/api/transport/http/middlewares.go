@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/observability"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/observability"
 )
 
 // WithRequestLogging returns middleware that logs request metadata after handler execution.
@@ -48,6 +48,11 @@ func WithRequestLogging(logger logging.Logger) func(http.Handler) http.Handler {
 // browser origins and short-circuits preflight (OPTIONS) requests with 204. It
 // must wrap the router so preflight requests are answered before Go's
 // method-based route matching would reject an unregistered OPTIONS pattern.
+//
+// Access-Control-Allow-Credentials is always sent, because the session lives in a
+// cookie and the browser drops it otherwise. The allow-origin header therefore always
+// echoes the caller's origin: the wildcard is invalid alongside credentials, so a "*"
+// configuration widens which origins are accepted but never emits "*" itself.
 func WithCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	allowAll := false
 	allowed := make(map[string]struct{}, len(allowedOrigins))
@@ -69,6 +74,7 @@ func WithCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 			if origin != "" {
 				if _, ok := allowed[origin]; allowAll || ok {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
 					w.Header().Add("Vary", "Origin")
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 					if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {

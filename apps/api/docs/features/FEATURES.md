@@ -1,6 +1,6 @@
 # Features
 
-A concise overview of what My Finances Tracker does. Each entry is the application
+A concise overview of what ta11y does. Each entry is the application
 capability, not its implementation; see the code under `apps/api/internal/<feature>`
 and `apps/api/transport` for details.
 
@@ -17,6 +17,32 @@ and square paper table surfaces. Narrow screens scroll through analytics to a de
 region; wide tables scroll horizontally without widening the page. Existing financial actions,
 filters, date selection, and account controls remain available. Cashflow, Portfolio and Assets
 place labeled creation actions with plus icons above the ledger, alongside its title or view tabs.
+
+### Authentication [030]
+People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow
+itself, verifies the ID token once and throws it away, then issues its own opaque,
+revocable session cookie -- no provider token is ever stored and the browser never handles
+one. Google ships first; any compliant provider is added by configuration alone, since
+every provider is resolved through discovery.
+
+The application keeps as little as it can about a person: an account id, an email, and one
+pseudonymous `(issuer, subject)` row per identity provider. Signing in through a second
+provider with the same **verified** email resolves to the same account; an unverified email
+is refused, because a provider that accepts arbitrary addresses could otherwise claim
+someone else’s data.
+
+Access is allowlisted: authenticating with a provider proves who someone is, `auth.allowed_emails`
+decides who is admitted, and the check runs on every sign-in so removing an address locks it out.
+
+Authentication is enforced. Routes are default-deny — only health, the API docs and the sign-in
+endpoints are public, and account administration, market-data curation, provider credentials and
+EOD imports additionally require the `admin` flag, which the API answers 403 on rather than merely
+hiding the screen. Every account-scoped request takes its account from the session; clients no
+longer send an `account_id` anywhere.
+
+Sign-in is off by default (`auth.enabled`) so a fresh checkout boots without provider credentials,
+in which case the API runs as the single bootstrapped account. Configuration refuses that outside
+development, and refuses an empty allowlist there too.
 
 ### Account management
 Users create and list accounts. An account is the shared scope that imports, cashflow,
@@ -44,6 +70,13 @@ them from totals.
 Users read portfolio snapshots, current positions, and transaction history, add manual
 portfolio transactions, and request asynchronous portfolio rebuilds that recompute
 positions and snapshots from transactions and market data.
+
+Rebuilds account for share splits. A split changes the share count without changing the
+money invested, so it is replayed as an event in the same chronological stream as the
+trades: holdings are rescaled on the split date, before any trade that day, which is
+already quoted in post-split shares. Cost basis, realized profit and income are untouched.
+The factors come from the end-of-day series the provider already returns, so no separate
+corporate-actions feed is fetched; manually imported price files report no splits.
 
 → Details: [Portfolio](%5B013%5D_PORTFOLIO.md)
 

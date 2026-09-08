@@ -1,8 +1,8 @@
 package cashflow
 
 import (
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/date"
 )
 
 // TransactionFilters contains transaction filters for bulk tag mutations.

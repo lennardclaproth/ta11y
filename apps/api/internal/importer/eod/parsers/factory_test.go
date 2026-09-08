@@ -3,7 +3,7 @@ package parsers
 import (
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 func TestCreateEODParser_BrandNewDay(t *testing.T) {

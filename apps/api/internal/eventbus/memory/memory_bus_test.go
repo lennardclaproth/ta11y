@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	memorybus "github.com/lennardclaproth/my-finances-tracker/internal/eventbus/memory"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	memorybus "github.com/lennardclaproth/ta11y/internal/eventbus/memory"
 )
 
 type ping struct{ N int }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 // CommandStore persists market-data listings, EOD datapoints, and providers.
@@ -158,7 +158,9 @@ func (c *Commands) CreateEODs(ctx context.Context, listingID uuid.UUID, symbol s
 
 	eods := make([]*EOD, 0, len(inputs))
 	for _, in := range inputs {
-		eod, err := NewEOD(symbol, in.Date, in.Open, in.Close, in.High, in.Low, in.Volume)
+		// Manually uploaded end-of-day files carry prices only, no corporate actions,
+		// so every row reports the neutral split factor.
+		eod, err := NewEOD(symbol, in.Date, in.Open, in.Close, in.High, in.Low, in.Volume, 1)
 		if err != nil {
 			return CreateEODsResult{}, fmt.Errorf("create eods: %w", err)
 		}

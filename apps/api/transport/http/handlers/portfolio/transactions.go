@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type portfolioTransactionLister interface {
@@ -25,25 +25,21 @@ type portfolioTransactionLister interface {
 
 // GetPortfolioTransactionsRequest contains filters, sorting, and pagination for portfolio transactions.
 type GetPortfolioTransactionsRequest struct {
-	AccountID uuid.UUID `query:"account_id"`
-	From      string    `query:"from"`
-	To        string    `query:"to"`
-	Limit     int       `query:"limit"`
-	Offset    int       `query:"offset"`
-	SortBy    string    `query:"sort_by"`
-	SortOrder string    `query:"sort_order"`
-	Q         string    `query:"q"`
-	Type      string    `query:"type"`
-	Origin    string    `query:"origin"`
-	Source    string    `query:"source"`
-	Listing   string    `query:"listing"`
+	From      string `query:"from"`
+	To        string `query:"to"`
+	Limit     int    `query:"limit"`
+	Offset    int    `query:"offset"`
+	SortBy    string `query:"sort_by"`
+	SortOrder string `query:"sort_order"`
+	Q         string `query:"q"`
+	Type      string `query:"type"`
+	Origin    string `query:"origin"`
+	Source    string `query:"source"`
+	Listing   string `query:"listing"`
 }
 
 func (r GetPortfolioTransactionsRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	if r.Limit < 0 {
 		problems["limit"] = "limit must be greater than or equal to 0"
 	}
@@ -87,7 +83,6 @@ func (r GetPortfolioTransactionsRequest) isValid() (bool, map[string]string) {
 
 // CreateManualPortfolioTransactionRequest creates a manual portfolio transaction.
 type CreateManualPortfolioTransactionRequest struct {
-	AccountID   uuid.UUID  `json:"account_id"`
 	VendorID    uuid.UUID  `json:"vendor_id"`
 	OccurredAt  string     `json:"occurred_at"`
 	Type        string     `json:"type"`
@@ -99,9 +94,6 @@ type CreateManualPortfolioTransactionRequest struct {
 
 func (r CreateManualPortfolioTransactionRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	if r.VendorID == uuid.Nil {
 		problems["vendor_id"] = "vendor_id is required"
 	}
@@ -176,7 +168,6 @@ type ManualPortfolioTransactionResponse struct {
 // @Tags portfolio
 // @Accept json
 // @Produce json
-// @Param account_id query string true "Account ID"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
 // @Param limit query int false "Page size (10, 25, 50, 100)"
@@ -199,6 +190,10 @@ func GetPortfolioTransactions(
 	lister portfolioTransactionLister,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetPortfolioTransactionsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -222,17 +217,17 @@ func GetPortfolioTransactions(
 			return
 		}
 
-		if _, err := fetcher.GetByID(r.Context(), req.AccountID); err != nil {
+		if _, err := fetcher.GetByID(r.Context(), accountID); err != nil {
 			if errors.Is(err, account.ErrAccountNotFound) {
 				_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"account_id": account.ErrAccountNotFound.Error()})
 				return
 			}
-			log.Error(r.Context(), "portfolio transactions: failed to fetch account", err, "account_id", req.AccountID.String())
+			log.Error(r.Context(), "portfolio transactions: failed to fetch account", err, "account_id", accountID.String())
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
 			return
 		}
 
-		query, problems := toPortfolioTransactionListQuery(req)
+		query, problems := toPortfolioTransactionListQuery(accountID, req)
 		if len(problems) > 0 {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
@@ -240,7 +235,7 @@ func GetPortfolioTransactions(
 
 		result, err := lister.FetchForAccount(r.Context(), query)
 		if err != nil {
-			log.Error(r.Context(), "portfolio transactions: failed to list transactions", err, "account_id", req.AccountID.String())
+			log.Error(r.Context(), "portfolio transactions: failed to list transactions", err, "account_id", accountID.String())
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
 			return
 		}
@@ -261,7 +256,7 @@ func GetPortfolioTransactions(
 	})
 }
 
-func toPortfolioTransactionListQuery(req GetPortfolioTransactionsRequest) (portfoliodomain.TransactionListQuery, map[string]string) {
+func toPortfolioTransactionListQuery(accountID uuid.UUID, req GetPortfolioTransactionsRequest) (portfoliodomain.TransactionListQuery, map[string]string) {
 	problems := make(map[string]string)
 	limit := req.Limit
 	if limit == 0 {
@@ -290,7 +285,7 @@ func toPortfolioTransactionListQuery(req GetPortfolioTransactionsRequest) (portf
 	}
 
 	return portfoliodomain.TransactionListQuery{
-		AccountID: req.AccountID,
+		AccountID: accountID,
 		From:      from,
 		To:        to,
 		Limit:     limit,
@@ -353,6 +348,10 @@ func CreateManualPortfolioTransaction(
 	commands *portfoliodomain.Commands,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[CreateManualPortfolioTransactionRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -372,7 +371,7 @@ func CreateManualPortfolioTransaction(
 		}
 
 		result, err := commands.CreateTransaction(r.Context(), portfoliodomain.ManualTransactionInput{
-			AccountID:   req.AccountID,
+			AccountID:   accountID,
 			VendorID:    req.VendorID,
 			OccurredAt:  req.OccurredAt,
 			Type:        req.Type,

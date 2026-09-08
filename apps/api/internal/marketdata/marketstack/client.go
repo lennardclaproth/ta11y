@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"go.elastic.co/apm/module/apmhttp/v2"
 )
 
@@ -84,13 +84,15 @@ type marketstackEODResponse struct {
 		Count  int `json:"count"`
 	} `json:"pagination"`
 	Data []struct {
-		Symbol string           `json:"symbol"`
-		Date   marketstackTime  `json:"date"`
-		Open   float64          `json:"open"`
-		Close  float64          `json:"close"`
-		High   float64          `json:"high"`
-		Low    float64          `json:"low"`
-		Volume marketstackInt64 `json:"volume"`
+		Symbol string          `json:"symbol"`
+		Date   marketstackTime `json:"date"`
+		Open   float64         `json:"open"`
+		Close  float64         `json:"close"`
+		// SplitFactor is 1 on ordinary days and the share multiplier on a split date.
+		SplitFactor float64          `json:"split_factor"`
+		High        float64          `json:"high"`
+		Low         float64          `json:"low"`
+		Volume      marketstackInt64 `json:"volume"`
 	} `json:"data"`
 }
 
@@ -240,7 +242,7 @@ func (c *MarketStackClient) yieldEODs(
 	page marketstackEODResponse,
 ) bool {
 	for _, d := range page.Data {
-		h, err := marketdata.NewEOD(d.Symbol, d.Date.Time, d.Open, d.Close, d.High, d.Low, int64(d.Volume))
+		h, err := marketdata.NewEOD(d.Symbol, d.Date.Time, d.Open, d.Close, d.High, d.Low, int64(d.Volume), d.SplitFactor)
 		if err != nil {
 			continue // skip malformed rows
 		}

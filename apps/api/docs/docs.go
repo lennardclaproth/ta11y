@@ -191,13 +191,6 @@ const docTemplate = `{
                 "summary": "List asset classes",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
                         "type": "boolean",
                         "description": "Include archived classes",
                         "name": "include_archived",
@@ -397,13 +390,6 @@ const docTemplate = `{
                         "name": "class_id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -520,13 +506,6 @@ const docTemplate = `{
                 ],
                 "summary": "List asset snapshots",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "Start date (YYYY-MM-DD)",
@@ -680,6 +659,165 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "description": "Revokes the current session and clears the session cookie.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Sign out",
+                "responses": {
+                    "204": {
+                        "description": "Signed out",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "description": "Returns the signed-in account, or 401 when not signed in.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Current session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.MeResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/providers": {
+            "get": {
+                "description": "Returns the configured OpenID Connect provider slugs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "List identity providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ProvidersResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/{provider}/callback": {
+            "get": {
+                "description": "Handles the identity provider's redirect and issues a session cookie. Browser-facing.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Complete sign-in",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Identity provider slug (e.g. google)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Authorization code",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque state issued at login",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to the frontend",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/{provider}/login": {
+            "get": {
+                "description": "Redirects to the identity provider's authorization endpoint. Browser-facing; not callable from XHR.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Start sign-in",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Identity provider slug (e.g. google)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to the identity provider",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "404": {
@@ -1344,13 +1482,6 @@ const docTemplate = `{
                         "name": "vendor_id",
                         "in": "formData",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Account UUID",
-                        "name": "account_id",
-                        "in": "formData",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -1499,13 +1630,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Brokerage vendor UUID",
                         "name": "vendor_id",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Account UUID",
-                        "name": "account_id",
                         "in": "formData",
                         "required": true
                     }
@@ -2216,13 +2340,6 @@ const docTemplate = `{
                 "summary": "Get portfolio positions",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
                         "type": "boolean",
                         "description": "Include closed positions",
                         "name": "include_closed",
@@ -2358,13 +2475,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Start date (YYYY-MM-DD)",
                         "name": "from",
                         "in": "query"
@@ -2430,13 +2540,6 @@ const docTemplate = `{
                 ],
                 "summary": "Get portfolio transactions",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Account ID",
-                        "name": "account_id",
-                        "in": "query",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "Start date (YYYY-MM-DD)",
@@ -2735,9 +2838,6 @@ const docTemplate = `{
         "assets.AdjustAssetWorthRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "amount": {
                     "type": "string"
                 },
@@ -2841,9 +2941,6 @@ const docTemplate = `{
         "assets.CreateAssetClassRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "name": {
                     "type": "string"
                 }
@@ -2860,9 +2957,6 @@ const docTemplate = `{
         "assets.CreateAssetRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "class_id": {
                     "type": "string"
                 },
@@ -2892,12 +2986,7 @@ const docTemplate = `{
             }
         },
         "assets.DeleteClassRequest": {
-            "type": "object",
-            "properties": {
-                "account_id": {
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "assets.MutationResponse": {
             "type": "object",
@@ -2940,9 +3029,6 @@ const docTemplate = `{
         "assets.SetAssetWorthRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "effective_date": {
                     "type": "string"
                 },
@@ -2968,9 +3054,6 @@ const docTemplate = `{
         "assets.UpdateClassRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "archived": {
                     "type": "boolean"
                 },
@@ -2979,6 +3062,32 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "auth.MeResponse": {
+            "type": "object",
+            "properties": {
+                "admin": {
+                    "description": "Admin gates the admin-only screens.",
+                    "type": "boolean"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.ProvidersResponse": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -3054,9 +3163,6 @@ const docTemplate = `{
         "cashflow.CreateTransactionsRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "transactions": {
                     "type": "array",
                     "items": {
@@ -3166,9 +3272,6 @@ const docTemplate = `{
         "cashflow.TagTransactionsByFilterRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "filters": {
                     "$ref": "#/definitions/transport_http_handlers_cashflow.TransactionFilters"
                 },
@@ -3643,6 +3746,10 @@ const docTemplate = `{
                 "open": {
                     "type": "integer"
                 },
+                "splitFactor": {
+                    "description": "SplitFactor is the share multiplier the instrument underwent on this date: 4\nmeans one share became four. Ordinary days report 1, as do manually imported\nrows that carry no corporate-action data.",
+                    "type": "number"
+                },
                 "symbol": {
                     "description": "Kept for response readability",
                     "type": "string"
@@ -3658,9 +3765,6 @@ const docTemplate = `{
         "portfolio.CreateManualPortfolioTransactionRequest": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string"
-                },
                 "amount": {
                     "type": "string"
                 },
@@ -3871,12 +3975,7 @@ const docTemplate = `{
             }
         },
         "portfolio.RebuildPortfolioRequest": {
-            "type": "object",
-            "properties": {
-                "account_id": {
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "portfolio.SnapshotPointResponse": {
             "type": "object",

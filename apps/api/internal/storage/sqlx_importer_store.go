@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/importer"
 )
 
 // SQLXImporterStore persists and reads import records.

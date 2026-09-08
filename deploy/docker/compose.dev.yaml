@@ -1,4 +1,4 @@
-name: my-finances-tracker
+name: ta11y
 
 services:
   postgres:
@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - mft_db_data:/var/lib/postgresql
-      - C:/mft/db_backup:/backups
+      - C:/ta11y/db_backup:/backups
 
     
   elasticsearch:
@@ -66,4 +66,4 @@ volumes:
 
 networks:
   default:
-    name: my-finances-tracker-network
+    name: ta11y-network

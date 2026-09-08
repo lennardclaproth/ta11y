@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 func TestDegiroParser_ParseAll_HappyPath(t *testing.T) {

@@ -69,7 +69,6 @@ export type AssetSnapshotsResponse = AssetSnapshotPoint[];
 
 /** `POST /assets/classes` request — mirrors `assets.CreateAssetClassRequest`. */
 export interface CreateAssetClassRequest {
-	account_id: string;
 	name: string;
 }
 
@@ -80,7 +79,6 @@ export interface CreateAssetClassResponse {
 
 /** `PATCH /assets/classes` request — mirrors `assets.UpdateClassRequest`. */
 export interface UpdateAssetClassRequest {
-	account_id: string;
 	id: string;
 	name?: string;
 	archived?: boolean;
@@ -88,12 +86,10 @@ export interface UpdateAssetClassRequest {
 
 /** `DELETE /assets/classes/{class_id}` body — mirrors `assets.DeleteClassRequest`. */
 export interface DeleteAssetClassRequest {
-	account_id: string;
 }
 
 /** `POST /assets` request — mirrors `assets.CreateAssetRequest`. */
 export interface CreateAssetRequest {
-	account_id: string;
 	class_id: string;
 	name: string;
 	/** Non-negative decimal string. */
@@ -111,7 +107,6 @@ export interface CreateAssetResponse {
 
 /** `PUT /assets/{asset_id}/worth` request — mirrors `assets.SetAssetWorthRequest`. */
 export interface SetAssetWorthRequest {
-	account_id: string;
 	/** Non-negative decimal string. */
 	worth: string;
 	/** "YYYY-MM-DD". */
@@ -124,7 +119,6 @@ export type AssetWorthDirection = 'INCREASE' | 'DECREASE';
 
 /** `PUT /assets/{asset_id}/adjust` request — mirrors `assets.AdjustAssetWorthRequest`. */
 export interface AdjustAssetWorthRequest {
-	account_id: string;
 	direction: AssetWorthDirection;
 	/** Non-negative decimal string. */
 	amount: string;
@@ -135,13 +129,11 @@ export interface AdjustAssetWorthRequest {
 
 /** Query filters for `GET /assets/classes`. */
 export interface AssetClassesQuery {
-	account_id: string;
 	include_archived?: boolean;
 }
 
 /** Query filters for `GET /assets/snapshots`. */
 export interface AssetSnapshotsQuery {
-	account_id: string;
 	from?: string;
 	to?: string;
 }

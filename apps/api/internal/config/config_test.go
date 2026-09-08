@@ -71,13 +71,13 @@ func validConfigForValidation() Config {
 		},
 		APM: APMConfig{
 			ServerURL:             "http://localhost:8200",
-			ServiceName:           "my-finances-tracker",
+			ServiceName:           "ta11y",
 			Environment:           "development",
 			LogLevel:              "info",
 			TransactionSampleRate: 1,
 		},
 		DiskStorage: DiskStorage{
-			BasePath: "C:\\mft",
+			BasePath: "C:\\ta11y",
 		},
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 type PositionAcc struct {
@@ -32,6 +32,8 @@ func (a *PositionAcc) ApplyTx(tx Transaction) error {
 		if err != nil {
 			return err
 		}
+	case TxSplit:
+		a.applySplit(tx.Quantity)
 	case TxDividend:
 		a.Income += money.Price(tx.AmountCents)
 	case TxFee:
@@ -42,6 +44,17 @@ func (a *PositionAcc) ApplyTx(tx Transaction) error {
 		// ignore unknown types (or panic/error based on strictness)
 	}
 	return nil
+}
+
+// applySplit multiplies the held quantity by the split factor. Cost basis, realized
+// profit and income are untouched: a split changes how many shares represent the same
+// money, not how much money went in. Ignoring it would leave the quantity in pre-split
+// terms while every price after the split is post-split, understating the position.
+func (a *PositionAcc) applySplit(factor float64) {
+	if factor <= 0 || factor == 1 {
+		return
+	}
+	a.Quantity *= factor
 }
 
 func (a *PositionAcc) applyBuy(tx Transaction) error {

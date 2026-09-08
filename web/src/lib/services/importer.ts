@@ -23,7 +23,6 @@ export async function importCashflow(
 	const form = new FormData();
 	form.append('file', input.file);
 	form.append('vendor_id', input.vendor_id);
-	form.append('account_id', input.account_id);
 	return apiUpload<ImportAcceptedResponse>('/imports/cashflow', form);
 }
 
@@ -38,7 +37,6 @@ export async function importPortfolio(
 	const form = new FormData();
 	form.append('file', input.file);
 	form.append('vendor_id', input.vendor_id);
-	form.append('account_id', input.account_id);
 	return apiUpload<ImportAcceptedResponse>('/imports/portfolio', form);
 }
 

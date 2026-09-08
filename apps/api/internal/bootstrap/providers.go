@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/config"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/config"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 type providerBootstrapConfig struct {

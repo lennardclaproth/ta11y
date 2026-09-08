@@ -6,22 +6,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // GetPositionsRequest contains query filters for current portfolio positions.
 type GetPositionsRequest struct {
-	AccountID     uuid.UUID `query:"account_id"`
-	IncludeClosed bool      `query:"include_closed"`
+	IncludeClosed bool `query:"include_closed"`
 }
 
 func (r GetPositionsRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	return len(problems) == 0, problems
 }
 
@@ -54,7 +50,6 @@ type PositionsResponse struct {
 // @Tags portfolio
 // @Accept json
 // @Produce json
-// @Param account_id query string true "Account ID"
 // @Param include_closed query bool false "Include closed positions"
 // @Success 200 {object} PositionsResponse
 // @Failure 400 {object} map[string]string
@@ -66,6 +61,10 @@ func GetPortfolioPositions(
 	queries *portfoliodomain.Queries,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetPositionsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -84,7 +83,7 @@ func GetPortfolioPositions(
 			return
 		}
 
-		rows, err := queries.PositionsForAccount(r.Context(), req.AccountID, req.IncludeClosed)
+		rows, err := queries.PositionsForAccount(r.Context(), accountID, req.IncludeClosed)
 		if err != nil {
 			log.Error(r.Context(), "portfolio positions: failed to list positions", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio positions"})

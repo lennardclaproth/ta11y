@@ -35,7 +35,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Dailies" accountName="Admin User" />
+		<TopNavbar title="Dailies" />
 	{/snippet}
 
 	<PageContentTemplate>

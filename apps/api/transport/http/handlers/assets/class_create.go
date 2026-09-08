@@ -4,14 +4,13 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type CreateAssetClassRequest struct {
-	AccountID uuid.UUID `json:"account_id"`
-	Name      string    `json:"name"`
+	Name string `json:"name"`
 }
 
 type CreateAssetClassResponse struct {
@@ -34,6 +33,10 @@ type CreateAssetClassResponse struct {
 // @Router /assets/classes [post]
 func CreateClass(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[CreateAssetClassRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -41,7 +44,7 @@ func CreateClass(log logging.Logger, commands assets.Commands) http.Handler {
 			}
 			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 		}
-		class, err := commands.CreateClass(r.Context(), req.AccountID, req.Name)
+		class, err := commands.CreateClass(r.Context(), accountID, req.Name)
 		if err != nil {
 			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset class"})
 			log.Error(r.Context(), "create class: failed to create class.", err)

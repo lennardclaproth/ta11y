@@ -85,7 +85,7 @@ func TestHTTPEndpoints(t *testing.T) {
 }
 ```
 
-This is true black-box testing of the real `cmd/my-finances-tracker` binary, so
+This is true black-box testing of the real `cmd/ta11y` binary, so
 it requires **no production code change** — the trade-off is that it is slower
 than an in-process handler (process build + startup + migrations + bootstrap)
 and asserts through HTTP rather than reaching into internal state. The APM agent

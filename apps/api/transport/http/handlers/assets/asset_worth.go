@@ -6,17 +6,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type SetAssetWorthRequest struct {
-	AccountID     uuid.UUID `json:"account_id"`
-	Worth         string    `json:"worth"`
-	EffectiveDate string    `json:"effective_date"`
-	Note          *string   `json:"note,omitempty"`
+	Worth         string  `json:"worth"`
+	EffectiveDate string  `json:"effective_date"`
+	Note          *string `json:"note,omitempty"`
 }
 
 func (r SetAssetWorthRequest) isValid() (bool, map[string]string) {
@@ -50,6 +49,10 @@ func (r SetAssetWorthRequest) isValid() (bool, map[string]string) {
 // @Router /assets/{asset_id}/worth [put]
 func SetAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		// get asset_id from path and validate
 		assetID, err := uuid.Parse(r.PathValue("asset_id"))
 		if err != nil || assetID == uuid.Nil {
@@ -78,7 +81,7 @@ func SetAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 
 		err = commands.UpdateAssetWorth(
 			r.Context(),
-			req.AccountID,
+			accountID,
 			assetID,
 			worth,
 			assets.ChangeTypeSet,
@@ -108,11 +111,10 @@ func SetAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 
 // AdjustAssetWorthRequest applies a directional delta to an item worth.
 type AdjustAssetWorthRequest struct {
-	AccountID     uuid.UUID `json:"account_id"`
-	Direction     string    `json:"direction"`
-	Amount        string    `json:"amount"`
-	EffectiveDate string    `json:"effective_date"`
-	Note          *string   `json:"note,omitempty"`
+	Direction     string  `json:"direction"`
+	Amount        string  `json:"amount"`
+	EffectiveDate string  `json:"effective_date"`
+	Note          *string `json:"note,omitempty"`
 }
 
 func (r AdjustAssetWorthRequest) isValid() (bool, map[string]string) {
@@ -149,6 +151,10 @@ func (r AdjustAssetWorthRequest) isValid() (bool, map[string]string) {
 // @Router /assets/{asset_id}/adjust [put]
 func AdjustAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		// get asset_id from path and validate
 		assetID, err := uuid.Parse(r.PathValue("asset_id"))
 		if err != nil || assetID == uuid.Nil {
@@ -180,7 +186,7 @@ func AdjustAssetWorth(log logging.Logger, commands assets.Commands) http.Handler
 
 		err = commands.UpdateAssetWorth(
 			r.Context(),
-			req.AccountID,
+			accountID,
 			assetID,
 			amount,
 			assets.ChangeTypeAdjust,

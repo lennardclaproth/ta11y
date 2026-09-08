@@ -3,8 +3,8 @@ package parsers
 import (
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 func CreateCsvParser(ID vendor.VendorID) (cashflow.CsvParser, error) {
