@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/observability"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/observability"
 )
 
 // WithRequestLogging returns middleware that logs request metadata after handler execution.

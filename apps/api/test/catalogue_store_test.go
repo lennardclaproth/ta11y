@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/storage"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/storage"
 )
 
 // seedCatalogue caches a few provider entries and returns the store under test.

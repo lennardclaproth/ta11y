@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
 )
@@ -59,7 +59,7 @@ func (s *Server) Run(ctx context.Context) error {
 	server := s.newHTTPServer(handler)
 
 	s.log.Info(context.Background(),
-		"My Finances Tracker is listening for incoming requests...",
+		"ta11y is listening for incoming requests...",
 		"addr", s.addr,
 		"swagger_url", fmt.Sprintf("http://localhost%s/swagger/index.html", s.addr),
 	)

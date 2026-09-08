@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 // TODO: fix interfaces

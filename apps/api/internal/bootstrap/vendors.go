@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 // Vendors bootstraps all supported vendors and skips existing rows.

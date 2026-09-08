@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	memorybus "github.com/lennardclaproth/my-finances-tracker/internal/eventbus/memory"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	memorybus "github.com/lennardclaproth/ta11y/internal/eventbus/memory"
 )
 
 // fakeAccountStore satisfies the account query store so account.Queries reports

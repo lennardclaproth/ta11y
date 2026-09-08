@@ -3,7 +3,7 @@ package assets
 import (
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/assets"
 )
 
 // TestAdjustAssetWorthRequestIsValid verifies that direction validation accepts

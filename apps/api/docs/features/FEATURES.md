@@ -1,6 +1,6 @@
 # Features
 
-A concise overview of what My Finances Tracker does. Each entry is the application
+A concise overview of what ta11y does. Each entry is the application
 capability, not its implementation; see the code under `apps/api/internal/<feature>`
 and `apps/api/transport` for details.
 

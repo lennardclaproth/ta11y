@@ -3,9 +3,9 @@ package auth
 import (
 	"net/http"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // Login starts an OpenID Connect login and redirects the browser to the provider.

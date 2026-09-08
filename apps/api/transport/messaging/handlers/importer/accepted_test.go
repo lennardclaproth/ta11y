@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 // recordingImportStore satisfies the importer command store and records the id

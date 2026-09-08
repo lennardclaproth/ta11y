@@ -1,4 +1,4 @@
-module github.com/lennardclaproth/my-finances-tracker
+module github.com/lennardclaproth/ta11y
 
 go 1.25.5
 

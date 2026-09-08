@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/lennardclaproth/my-finances-tracker/internal/files"
+import "github.com/lennardclaproth/ta11y/internal/files"
 
 // Disk provides filesystem persistence for uploaded CSV files.
 //

@@ -7,10 +7,10 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // maxImportUploadBytes caps the size of an uploaded import CSV file.

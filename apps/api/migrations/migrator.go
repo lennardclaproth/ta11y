@@ -8,8 +8,8 @@ import (
 	"net/url"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/storage"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/storage"
 	"github.com/pressly/goose/v3"
 )
 

@@ -28,13 +28,13 @@
   });
 </script>
 
-<svelte:head><title>Sign in · My Finances Tracker</title></svelte:head>
+<svelte:head><title>Sign in · ta11y</title></svelte:head>
 
 <main class="flex min-h-screen items-center justify-center px-6 py-16">
   <Panel class="w-full max-w-md" padding="lg">
     <Heading level="h1" size="xl">Sign in</Heading>
     <Text class="mt-2 block text-sm leading-relaxed text-slate-600">
-      My Finances Tracker uses your existing account with an identity provider. It never sees or
+      ta11y uses your existing account with an identity provider. It never sees or
       stores a password.
     </Text>
 

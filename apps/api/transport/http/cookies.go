@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/auth"
 )
 
 const (

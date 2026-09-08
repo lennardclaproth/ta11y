@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 // EOD is one OHLCV end-of-day datapoint for a listing/date.

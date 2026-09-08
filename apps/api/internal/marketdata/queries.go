@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 // QueryStore reads market-data listings, EOD datapoints, and providers.

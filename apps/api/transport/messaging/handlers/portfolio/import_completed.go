@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
 )
 
 // ImportCompletedHandler rebuilds an account's portfolio after a portfolio

@@ -3,11 +3,11 @@ package importer
 import (
 	"context"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	eodparsers "github.com/lennardclaproth/my-finances-tracker/internal/importer/eod/parsers"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	eodparsers "github.com/lennardclaproth/ta11y/internal/importer/eod/parsers"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 // CashflowParserFactory resolves a CSV parser for cashflow imports by vendor.

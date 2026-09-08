@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 func day(y int, m time.Month, d int) time.Time {

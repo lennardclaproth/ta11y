@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/storage"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/storage"
 )
 
 // TestMaskAPIKeyWithholdsTheSecret pins the masking rule: a hint must identify a key

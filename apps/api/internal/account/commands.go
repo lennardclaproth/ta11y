@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
 )
 
 // CommandStore persists account mutations.

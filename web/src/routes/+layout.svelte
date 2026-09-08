@@ -35,7 +35,7 @@
 	<main class="mx-auto w-full max-w-2xl px-6 py-16">
 		<h1 class="text-2xl">Can't reach the server</h1>
 		<p class="mt-3 text-sm leading-relaxed text-slate-600">
-			My Finances Tracker couldn't load your session. Check your connection and reload the page.
+			ta11y couldn't load your session. Check your connection and reload the page.
 		</p>
 	</main>
 {:else}

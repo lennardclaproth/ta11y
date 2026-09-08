@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata/marketstack"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata/marketstack"
 )
 
 // SQLXMarketDataStore persists and reads market-data listings, EOD datapoints, and

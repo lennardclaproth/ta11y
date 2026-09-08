@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
 )
 
 func TestNewEnvelopeRootCorrelatesToSelf(t *testing.T) {

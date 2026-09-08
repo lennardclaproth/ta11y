@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 )
 
 // SessionSweepInterval is how often lapsed sessions are removed.

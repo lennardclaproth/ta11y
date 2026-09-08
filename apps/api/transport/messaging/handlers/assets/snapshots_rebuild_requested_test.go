@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	memorybus "github.com/lennardclaproth/my-finances-tracker/internal/eventbus/memory"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	memorybus "github.com/lennardclaproth/ta11y/internal/eventbus/memory"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 // fakeBuilderStore is a no-op assets builder store: no mutations, so RebuildAll

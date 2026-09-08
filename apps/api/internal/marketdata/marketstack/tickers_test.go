@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 // stubProviderStore returns a provider pointed at the test server.

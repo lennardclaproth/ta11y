@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
 )
 
 var tradePattern = regexp.MustCompile(`(?i)(koop|buy|verkoop|sell)\s+([0-9]+(?:[.,][0-9]+)?)\s*@\s*([0-9]+(?:[.,][0-9]+)?)`)

@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
-	"github.com/lennardclaproth/my-finances-tracker/internal/storage"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/storage"
 )
 
 // seedCashflowAccount creates the account plus its cashflow projection, which the

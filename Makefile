@@ -15,11 +15,11 @@ else
   EXE :=
 endif
 
-# Single entrypoint: cmd/my-finances-tracker (the old cmd/server was removed).
+# Single entrypoint: cmd/ta11y (the old cmd/server was removed).
 # The frontend lives in web/, not apps/web.
 API_DIR := ./apps/api
 WEB_DIR := ./web
-CMD_PKG := cmd/my-finances-tracker
+CMD_PKG := cmd/ta11y
 MAIN_PKG := $(API_DIR)/$(CMD_PKG)
 BIN_DIR := $(API_DIR)/bin
 BINARY_PATH := $(BIN_DIR)/$(BINARY_NAME)$(EXE)

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
 )
 
 // SQLXCashflowStore persists and reads cashflow transactions, including the

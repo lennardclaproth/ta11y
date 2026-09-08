@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/auth"
 )
 
 func TestNewSessionStoresOnlyTheTokenHash(t *testing.T) {

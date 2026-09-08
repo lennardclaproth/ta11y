@@ -10,7 +10,7 @@ server:
 database:
   # postgres (deployed / local via deploy/docker/compose.dev.yaml) or sqlite3 (zero-infra local).
   type: postgres
-  connection_string: "postgres://admin:Postgres2026%21@127.0.0.1:5432/my_finances_tracker?sslmode=disable"
+  connection_string: "postgres://admin:Postgres2026%21@127.0.0.1:5432/ta11y?sslmode=disable"
 
 auth:
   # OpenID Connect sign-in. Off by default so a fresh checkout boots without provider
@@ -36,11 +36,11 @@ logging:
 
 apm:
   server_url: http://localhost:8200
-  service_name: my-finances-tracker
+  service_name: ta11y
   environment: development
   secret_token: 
   verify_server_cert: false
   log_level: warn
 
 disk_storage:
-  base_path: C:\mft
+  base_path: C:\ta11y

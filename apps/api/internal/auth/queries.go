@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/account"
 )
 
 // touchInterval is how stale a session's last-seen timestamp may get before it is

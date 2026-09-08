@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/account"
 )
 
 // IdentityStore persists the link between an identity provider's view of a person and

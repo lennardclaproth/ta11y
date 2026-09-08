@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
 )
 
 // Queries exposes read-side cashflow use cases.

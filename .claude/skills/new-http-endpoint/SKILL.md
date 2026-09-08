@@ -79,7 +79,7 @@ Put them on the constructor, above the `func`: `@Summary`, `@Description`, `@Tag
 
 ## 6. Register the route
 
-In `registerRoutes` in `apps/api/cmd/my-finances-tracker/main.go`, using Go 1.22 method+pattern
+In `registerRoutes` in `apps/api/cmd/ta11y/main.go`, using Go 1.22 method+pattern
 syntax and the right tier:
 
 - `protected(...)` — the default; requires a session.

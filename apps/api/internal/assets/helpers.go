@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 func growthPctFromBouds(bound ClassBounds) float64 {

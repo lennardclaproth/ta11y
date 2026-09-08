@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // GetSnapshotsRequest contains query filters for portfolio snapshot history.

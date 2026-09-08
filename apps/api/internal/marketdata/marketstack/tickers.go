@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 var _ marketdata.TickerSearcher = (*MarketStackClient)(nil)

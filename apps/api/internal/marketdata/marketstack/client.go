@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"go.elastic.co/apm/module/apmhttp/v2"
 )
 

@@ -5,8 +5,8 @@ paths:
 
 # Go backend conventions (`apps/api`)
 
-Go module `github.com/lennardclaproth/my-finances-tracker`, single-module `go.work`.
-Single entrypoint: `cmd/my-finances-tracker/main.go`. The 2026 restructure has landed —
+Go module `github.com/lennardclaproth/ta11y`, single-module `go.work`.
+Single entrypoint: `cmd/ta11y/main.go`. The 2026 restructure has landed —
 `go build ./...` and `go vet ./...` are green, `make build` / `make run` / `make test` work.
 Do not treat the codebase as mid-refactor and do not leave known breakage behind.
 

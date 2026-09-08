@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/account"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	portfoliodomain "github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 type portfolioTransactionLister interface {

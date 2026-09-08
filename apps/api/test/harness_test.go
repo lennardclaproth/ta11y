@@ -30,8 +30,8 @@ import (
 
 	"github.com/pressly/goose/v3"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/storage"
-	"github.com/lennardclaproth/my-finances-tracker/migrations"
+	"github.com/lennardclaproth/ta11y/internal/storage"
+	"github.com/lennardclaproth/ta11y/migrations"
 )
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "mft-itest-bin")
+	dir, err := os.MkdirTemp("", "ta11y-itest-bin")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create build dir: %v\n", err)
 		os.Exit(1)
@@ -62,12 +62,12 @@ func TestMain(m *testing.M) {
 func serverBinary(t *testing.T) string {
 	t.Helper()
 	buildOnce.Do(func() {
-		name := "mft-server"
+		name := "ta11y-server"
 		if runtime.GOOS == "windows" {
 			name += ".exe"
 		}
 		builtBin = filepath.Join(buildDir, name)
-		cmd := exec.Command("go", "build", "-o", builtBin, "github.com/lennardclaproth/my-finances-tracker/cmd/my-finances-tracker")
+		cmd := exec.Command("go", "build", "-o", builtBin, "github.com/lennardclaproth/ta11y/cmd/ta11y")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("build server binary: %v\n%s", err, out)
 		}
@@ -195,7 +195,7 @@ logging:
   level: error
 apm:
   server_url: "http://localhost:8200"
-  service_name: "my-finances-tracker-itest"
+  service_name: "ta11y-itest"
   environment: test
   log_level: error
   transaction_sample_rate: 0

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
 
 // SplitSource supplies the share splits recorded against a listing.

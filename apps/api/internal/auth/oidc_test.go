@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/auth"
 )
 
 func TestNewFlowGeneratesDistinctSecrets(t *testing.T) {

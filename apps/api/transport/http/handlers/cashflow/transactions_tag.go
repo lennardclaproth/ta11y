@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/cashflow"
-	"github.com/lennardclaproth/my-finances-tracker/internal/date"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // GetTagDistributionRequest contains date filters for cashflow tag analytics.

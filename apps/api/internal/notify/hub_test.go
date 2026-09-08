@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/auth"
 )
 
 type noopLogger struct{}

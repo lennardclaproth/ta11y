@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
 	"go.elastic.co/apm/v2"
 )
 

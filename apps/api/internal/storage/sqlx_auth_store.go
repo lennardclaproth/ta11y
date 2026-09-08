@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/auth"
 )
 
 // SQLXAuthStore persists federated identities and server-side sessions. It satisfies

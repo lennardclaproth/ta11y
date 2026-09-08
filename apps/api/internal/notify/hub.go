@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 )
 
 const (

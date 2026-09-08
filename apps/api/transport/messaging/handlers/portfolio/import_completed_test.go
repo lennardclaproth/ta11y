@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/eventbus"
-	"github.com/lennardclaproth/my-finances-tracker/internal/importer"
-	"github.com/lennardclaproth/my-finances-tracker/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
 )
 
 // recordingLocker refuses the build lock so Builder.Build returns

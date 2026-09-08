@@ -1,7 +1,7 @@
 ---
 paths:
   - "apps/api/transport/http/**/*.go"
-  - "apps/api/cmd/my-finances-tracker/*.go"
+  - "apps/api/cmd/ta11y/*.go"
 ---
 
 # HTTP transport (`apps/api/transport/http`)
@@ -38,7 +38,7 @@ decoding rejects unknown fields.
 
 `Router` is a thin slice over `http.ServeMux`; patterns use Go 1.22 method+pattern syntax
 (`"POST /accounts"`) via `HandleWithMiddleware`. Route registration in
-`cmd/my-finances-tracker/main.go` goes through one of three helpers:
+`cmd/ta11y/main.go` goes through one of three helpers:
 
 - `protected` — **the default**. A route added without thought requires a session.
 - `public` — health, Swagger, and the sign-in endpoints only.
