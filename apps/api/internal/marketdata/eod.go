@@ -19,8 +19,12 @@ type EOD struct {
 	High      money.Price `db:"high"`
 	Low       money.Price `db:"low"`
 	Volume    int64       `db:"volume"`
-	CreatedAt time.Time   `db:"created_at"`
-	UpdatedAt time.Time   `db:"updated_at"`
+	// SplitFactor is the share multiplier the instrument underwent on this date: 4
+	// means one share became four. Ordinary days report 1, as do manually imported
+	// rows that carry no corporate-action data.
+	SplitFactor float64   `db:"split_factor"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
 }
 
 var (
@@ -31,7 +35,7 @@ var (
 )
 
 // NewEOD constructs an EOD datapoint from decimal prices.
-func NewEOD(symbol string, date time.Time, open, close, high, low float64, volume int64) (EOD, error) {
+func NewEOD(symbol string, date time.Time, open, close, high, low float64, volume int64, splitFactor float64) (EOD, error) {
 	if symbol == "" {
 		return EOD{}, ErrEODSymbolEmpty
 	}
@@ -51,16 +55,22 @@ func NewEOD(symbol string, date time.Time, open, close, high, low float64, volum
 	if err != nil {
 		return EOD{}, fmt.Errorf("NewEOD failed, invalid low price: %w", err)
 	}
+	// A missing or nonsensical factor means "no corporate action", never "zero out
+	// the holding": a provider that omits the field must not silently wipe a position.
+	if splitFactor <= 0 {
+		splitFactor = 1
+	}
 	return EOD{
-		ID:        uuid.New(),
-		Symbol:    symbol,
-		Date:      date,
-		Open:      openCents,
-		Close:     closeCents,
-		High:      highCents,
-		Low:       lowCents,
-		Volume:    volume,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:          uuid.New(),
+		Symbol:      symbol,
+		Date:        date,
+		Open:        openCents,
+		Close:       closeCents,
+		High:        highCents,
+		Low:         lowCents,
+		Volume:      volume,
+		SplitFactor: splitFactor,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}, nil
 }

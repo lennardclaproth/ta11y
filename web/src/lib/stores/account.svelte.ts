@@ -1,32 +1,46 @@
+import { setUnauthorizedHandler } from '$lib/api/client';
 import { DEMO_ACCOUNT_ID } from '$lib/api/config';
-import { listAccounts } from '$lib/services/account';
-import type { Account } from '$lib/api/types';
+import { getSession, logout, type Session } from '$lib/services/auth';
 
-/** How the account list resolved, so callers can tell "none yet" from "request failed". */
+/** How the session resolved, so callers can tell "signed out" from "request failed". */
 export type AccountStatus = 'idle' | 'ready' | 'empty' | 'failed';
 
 /**
- * Active-account context. The portal is single-account today: on first use it fetches `GET /accounts`
- * and adopts the first account as active, so account-scoped screens (portfolio, assets, realtime)
- * send a real backend id instead of a hard-coded one. In mock mode the demo account is returned.
+ * Active-account context, resolved from the signed-in session.
  *
- * `status` matters: an account list that comes back empty is a legitimate empty state, not a
- * failure. Callers must check `hasAccount` before making account-scoped requests — firing them
- * with the placeholder id would 4xx and surface as a data-load error for what is really just an
- * account that has not been created yet.
+ * The account id now comes from `GET /auth/me` rather than `GET /accounts`: the API
+ * derives every account-scoped request from the session cookie, so the client's job is
+ * to know *who* is signed in, not to nominate an account. `GET /accounts` is
+ * administrator-only and no longer part of this path.
+ *
+ * `status` still matters: `empty` means nobody is signed in, which is a redirect to the
+ * sign-in page rather than an error, while `failed` means the API could not be reached
+ * and should surface as one.
  */
-let accounts = $state<Account[]>([]);
-let activeId = $state<string>(DEMO_ACCOUNT_ID);
+let session = $state<Session | null>(null);
 let status = $state<AccountStatus>('idle');
 let loadPromise: Promise<void> | null = null;
 
+/** Where to send the browser when a session is missing or has lapsed. */
+const signInPath = '/login';
+
+function redirectToSignIn(): void {
+	if (typeof window === 'undefined') return;
+	if (window.location.pathname === signInPath) return;
+	window.location.assign(signInPath);
+}
+
 export const accountStore = {
-	get accounts(): Account[] {
-		return accounts;
+	/** The signed-in account, or null when signed out. */
+	get session(): Session | null {
+		return session;
 	},
-	/** The id every account-scoped request should use. Only meaningful once `hasAccount`. */
+	/** The id every account-scoped request is implicitly scoped to. */
 	get activeId(): string {
-		return activeId;
+		return session?.id ?? DEMO_ACCOUNT_ID;
+	},
+	get email(): string {
+		return session?.email ?? '';
 	},
 	get status(): AccountStatus {
 		return status;
@@ -34,38 +48,36 @@ export const accountStore = {
 	get loaded(): boolean {
 		return status !== 'idle';
 	},
-	/** True once a real account has been resolved and account-scoped requests are safe. */
+	/** True once a session has been resolved and account-scoped requests are safe. */
 	get hasAccount(): boolean {
 		return status === 'ready';
 	},
-	/** True when the account list came back but held nothing — an empty state, not an error. */
+	/** True when nobody is signed in — a redirect to sign-in, not an error. */
 	get isEmpty(): boolean {
 		return status === 'empty';
 	},
-	/** True when the account list could not be fetched at all. */
+	/** True when the session could not be fetched at all. */
 	get failed(): boolean {
 		return status === 'failed';
 	},
 	/**
-	 * Whether the active account may reach admin-only screens. Mirrors `accounts.admin` from
-	 * the API, which records intent only — the API does not enforce it, so this hides screens
-	 * rather than protecting them.
+	 * Whether the signed-in account may reach admin-only screens. The API enforces this
+	 * independently; hiding the navigation is a convenience, not the control.
 	 */
 	get isAdmin(): boolean {
-		return accounts.some((account) => account.id === activeId && account.admin);
+		return session?.admin === true;
 	},
-	/** Fetch the account list once and adopt the first account as active. Idempotent. */
+	/** Fetch the session once. Idempotent. */
 	ensureLoaded(): Promise<void> {
 		if (!loadPromise) {
-			loadPromise = listAccounts()
-				.then((list) => {
-					const resolved = list ?? [];
-					if (resolved.length === 0) {
+			loadPromise = getSession()
+				.then((resolved) => {
+					if (!resolved) {
+						session = null;
 						status = 'empty';
 						return;
 					}
-					accounts = resolved;
-					activeId = resolved[0].id;
+					session = resolved;
 					status = 'ready';
 				})
 				.catch(() => {
@@ -73,5 +85,28 @@ export const accountStore = {
 				});
 		}
 		return loadPromise;
+	},
+	/** Drop the cached session so the next `ensureLoaded` refetches it. */
+	reset(): void {
+		session = null;
+		status = 'idle';
+		loadPromise = null;
+	},
+	/** Revoke the session and return to the sign-in page. */
+	async signOut(): Promise<void> {
+		try {
+			await logout();
+		} finally {
+			accountStore.reset();
+			redirectToSignIn();
+		}
 	}
 };
+
+// A 401 from any request means the session lapsed mid-visit; send the browser to sign in
+// rather than letting every screen render its own failure.
+setUnauthorizedHandler(() => {
+	accountStore.reset();
+	status = 'empty';
+	redirectToSignIn();
+});

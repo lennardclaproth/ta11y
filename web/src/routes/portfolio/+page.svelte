@@ -125,7 +125,6 @@
 		}
 		positions = (
 			await listPortfolioPositions({
-				account_id: accountStore.activeId,
 				include_closed: includeClosed
 			})
 		).data;
@@ -144,15 +143,12 @@
 				positions = [];
 				return;
 			}
-			const accountId = accountStore.activeId;
 			const [snaps, txs] = await Promise.all([
 				getPortfolioSnapshots({
-					account_id: accountId,
 					from: from || undefined,
 					to: to || undefined
 				}),
 				listPortfolioTransactions({
-					account_id: accountId,
 					limit: 25,
 					q: searchQuery || undefined,
 					from: from || undefined,
@@ -219,7 +215,6 @@
 		try {
 			await accountStore.ensureLoaded();
 			await createManualPortfolioTransaction({
-				account_id: accountStore.activeId,
 				vendor_id: vendorId,
 				occurred_at: txDate,
 				type: txType,
@@ -243,7 +238,7 @@
 		rebuilding = true;
 		try {
 			await accountStore.ensureLoaded();
-			await rebuildPortfolio({ account_id: accountStore.activeId });
+			await rebuildPortfolio();
 			toast.success('Portfolio rebuild started');
 		} catch {
 			toast.error('Failed to start rebuild');
@@ -291,7 +286,6 @@
 				to = r.to ?? '';
 			}}
 			actions={navActions}
-			accountName="Lennard Claproth"
 		/>
 	{/snippet}
 

@@ -236,13 +236,16 @@ func (c *Commands) UpdateAssetWorth(
 }
 
 // UpdateClass mutates a manual class name/archive status.
-func (c *Commands) UpdateClass(ctx context.Context, classID uuid.UUID, name *string, archived *bool) error {
+func (c *Commands) UpdateClass(ctx context.Context, accountID, classID uuid.UUID, name *string, archived *bool) error {
 	class, err := c.cg.Class(ctx, classID)
 	if err != nil {
 		return fmt.Errorf("update class: fetch class: %w", err)
 	}
 	if class == nil {
 		return fmt.Errorf("update class: %w", ErrClassNotFound)
+	}
+	if class.AccountID != accountID {
+		return fmt.Errorf("update class: %w", ErrClassAccountMismatch)
 	}
 	if class.Source != ClassSourceManual {
 		return fmt.Errorf("update class: %w", ErrClassNotManual)

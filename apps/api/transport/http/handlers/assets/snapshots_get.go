@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lennardclaproth/my-finances-tracker/internal/assets"
 	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
 	httpx "github.com/lennardclaproth/my-finances-tracker/transport/http"
@@ -13,9 +12,8 @@ import (
 
 // GetAssetSnapshotsRequest contains query filters for account-level asset snapshots.
 type GetSnapshotsRequest struct {
-	AccountID uuid.UUID `json:"account_id" query:"account_id"`
-	From      *string   `json:"from,omitempty" query:"from"`
-	To        *string   `json:"to,omitempty" query:"to"`
+	From *string `json:"from,omitempty" query:"from"`
+	To   *string `json:"to,omitempty" query:"to"`
 }
 
 type SnapshotResponse struct {
@@ -30,7 +28,6 @@ type SnapshotResponse struct {
 // @Tags assets
 // @Accept json
 // @Produce json
-// @Param account_id query string true "Account ID"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
 // @Success 200 {array} SnapshotResponse
@@ -40,6 +37,10 @@ type SnapshotResponse struct {
 // @Router /assets/snapshots [get]
 func GetSnapshots(log logging.Logger, queries assets.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetSnapshotsRequest](r)
 		if err != nil {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid query parameters"})
@@ -67,7 +68,7 @@ func GetSnapshots(log logging.Logger, queries assets.Queries) http.Handler {
 			}
 			to = &parsed
 		}
-		snapshots, err := queries.ListSnapshots(r.Context(), req.AccountID, from, to)
+		snapshots, err := queries.ListSnapshots(r.Context(), accountID, from, to)
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while trying to get snapshots", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get snapshots"})

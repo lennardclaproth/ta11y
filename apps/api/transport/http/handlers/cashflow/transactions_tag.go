@@ -45,9 +45,8 @@ type TagTransactionsBySelectionRequest struct {
 
 // TagTransactionsByFilterRequest applies a tag to transactions matching filters.
 type TagTransactionsByFilterRequest struct {
-	Tag       string             `json:"tag"`
-	AccountID *uuid.UUID         `json:"account_id,omitempty"`
-	Filters   TransactionFilters `json:"filters"`
+	Tag     string             `json:"tag"`
+	Filters TransactionFilters `json:"filters"`
 }
 
 // TagTransactionsResponse returns the result of a tag mutation operation.
@@ -86,6 +85,11 @@ func (r TagTransactionsBySelectionRequest) isValid() map[string]string {
 // @Router      /cashflow/analytics/tags [get]
 func GetCashflowTagDistribution(log logging.Logger, queries *cashflow.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.DecodeQuery[GetTagDistributionRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -102,6 +106,7 @@ func GetCashflowTagDistribution(log logging.Logger, queries *cashflow.Queries) h
 		}
 
 		dist, err := queries.TagDistribution(r.Context(), cashflow.AnalyticsFilter{
+			AccountID:      accountID,
 			From:           from,
 			To:             to,
 			IncludeIgnored: req.IncludeIgnored,
@@ -134,6 +139,11 @@ func GetCashflowTagDistribution(log logging.Logger, queries *cashflow.Queries) h
 // @Tags        Transactions
 func TagTransaction(log logging.Logger, commands *cashflow.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.JSONDecode[TagTransactionRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -143,7 +153,7 @@ func TagTransaction(log logging.Logger, commands *cashflow.Commands) http.Handle
 			return
 		}
 
-		if err := commands.TagByID(r.Context(), req.ID, req.Tag); err != nil {
+		if err := commands.TagByID(r.Context(), accountID, req.ID, req.Tag); err != nil {
 			log.Error(r.Context(), "cashflow tag transaction: failed to update transaction", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to tag cashflow transaction"})
 			return
@@ -167,6 +177,11 @@ func TagTransaction(log logging.Logger, commands *cashflow.Commands) http.Handle
 // @Tags        Transactions
 func TagTransactionsBySelection(log logging.Logger, commands *cashflow.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.JSONDecode[TagTransactionsBySelectionRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -181,7 +196,7 @@ func TagTransactionsBySelection(log logging.Logger, commands *cashflow.Commands)
 			return
 		}
 
-		updated, err := commands.TagByIDs(r.Context(), req.IDs, req.Tag)
+		updated, err := commands.TagByIDs(r.Context(), accountID, req.IDs, req.Tag)
 		if err != nil {
 			log.Error(r.Context(), "cashflow tag selection: failed to update transactions", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to tag selected cashflow transactions"})
@@ -210,6 +225,11 @@ func TagTransactionsBySelection(log logging.Logger, commands *cashflow.Commands)
 // @Tags        Transactions
 func TagTransactionsByFilter(log logging.Logger, commands *cashflow.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+
 		req, err := httpx.JSONDecode[TagTransactionsByFilterRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -223,11 +243,6 @@ func TagTransactionsByFilter(log logging.Logger, commands *cashflow.Commands) ht
 		if len(problems) > 0 {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
-		}
-
-		accountID := uuid.Nil
-		if req.AccountID != nil {
-			accountID = *req.AccountID
 		}
 
 		result, err := commands.TagByFilter(r.Context(), req.Tag, accountID, filters)

@@ -25,7 +25,8 @@
 		dateTo?: string | null;
 		onDateChange?: (range: DateRange) => void;
 		actions?: MenuItem[];
-		accountName: string;
+		/** Defaults to the signed-in account's email. */
+		accountName?: string;
 		accountEmail?: string;
 
 		accountItems?: MenuItem[];
@@ -48,6 +49,26 @@
 		accountItems = [],
 		class: className = ''
 	}: Props = $props();
+
+	// The signed-in account labels the menu, so no screen has to be told who is using it.
+	const resolvedAccountName = $derived(accountName ?? accountStore.email ?? 'Account');
+	const resolvedAccountEmail = $derived(accountEmail ?? accountStore.email ?? undefined);
+
+	// Sign out is always available, and always last. A caller supplying its own item of
+	// the same label is dropped rather than duplicated: the menu keys its rows by label,
+	// and a duplicate key throws and renders nothing at all.
+	const resolvedAccountItems: MenuItem[] = $derived([
+		...accountItems.filter((item) => item.label !== 'Sign out'),
+		{
+			label: 'Sign out',
+			icon: 'heroicons:arrow-right-start-on-rectangle',
+			intent: 'danger' as const,
+			divider: accountItems.length > 0,
+			onSelect: () => {
+				void accountStore.signOut();
+			}
+		}
+	]);
 
 	// Shared destinations for the desktop masthead and the narrow-screen menu. Admin
 	// destinations are omitted entirely for non-admin accounts rather than shown and
@@ -129,7 +150,7 @@
 			{#if actions.length > 0}
 				<ActionMenu items={actions} />
 			{/if}
-			<AccountMenu name={accountName} email={accountEmail} items={accountItems} />
+			<AccountMenu name={resolvedAccountName} email={resolvedAccountEmail} items={resolvedAccountItems} />
 		</div>
 	</div>
 </header>

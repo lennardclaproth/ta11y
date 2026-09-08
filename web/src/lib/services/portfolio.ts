@@ -1,5 +1,5 @@
 import { apiGet, apiSend } from '$lib/api/client';
-import { useMocks } from '$lib/api/config';
+import { DEMO_ACCOUNT_ID, useMocks } from '$lib/api/config';
 import type {
 	CreateManualPortfolioTransactionRequest,
 	PortfolioPositionsQuery,
@@ -9,7 +9,6 @@ import type {
 	PortfolioTransaction,
 	PortfolioTransactionsQuery,
 	PortfolioTransactionsResponse,
-	RebuildPortfolioRequest
 } from '$lib/api/types';
 import {
 	portfolioPositions,
@@ -100,7 +99,7 @@ export async function createManualPortfolioTransaction(
 		const now = new Date().toISOString();
 		return {
 			id: crypto.randomUUID(),
-			account_id: body.account_id,
+			account_id: DEMO_ACCOUNT_ID,
 			origin: 'MANUAL',
 			source: 'manual',
 			occurred_at: body.occurred_at,
@@ -119,11 +118,11 @@ export async function createManualPortfolioTransaction(
 	return apiSend<PortfolioTransaction>('POST', '/portfolio/transactions/manual', body);
 }
 
-/** `POST /portfolio/rebuild` */
-export async function rebuildPortfolio(body: RebuildPortfolioRequest): Promise<void> {
+/** `POST /portfolio/rebuild` — the account is taken from the session. */
+export async function rebuildPortfolio(): Promise<void> {
 	if (useMocks) {
 		await delay();
 		return;
 	}
-	await apiSend<unknown>('POST', '/portfolio/rebuild', body);
+	await apiSend<unknown>('POST', '/portfolio/rebuild', {});
 }

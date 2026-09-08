@@ -117,13 +117,13 @@ func (s *SQLXCashflowStore) CountByFilter(ctx context.Context, filters cashflow.
 }
 
 // UpdateTagByIDs sets the tag for the given transaction IDs and returns the count updated.
-func (s *SQLXCashflowStore) UpdateTagByIDs(ctx context.Context, ids []uuid.UUID, tag string) (int, error) {
-	return s.updateByIDs(ctx, "tag", tag, ids)
+func (s *SQLXCashflowStore) UpdateTagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error) {
+	return s.updateByIDs(ctx, "tag", tag, accountID, ids)
 }
 
 // UpdateIgnoredByIDs sets the ignored flag for the given transaction IDs and returns the count updated.
-func (s *SQLXCashflowStore) UpdateIgnoredByIDs(ctx context.Context, ids []uuid.UUID, ignored bool) (int, error) {
-	return s.updateByIDs(ctx, "ignored", ignored, ids)
+func (s *SQLXCashflowStore) UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error) {
+	return s.updateByIDs(ctx, "ignored", ignored, accountID, ids)
 }
 
 // UpdateTagByFilter sets the tag for transactions matching filters and returns the count updated.
@@ -136,12 +136,15 @@ func (s *SQLXCashflowStore) UpdateIgnoredByFilter(ctx context.Context, filters c
 	return s.updateByFilter(ctx, "ignored", ignored, filters)
 }
 
-func (s *SQLXCashflowStore) updateByIDs(ctx context.Context, column string, value any, ids []uuid.UUID) (int, error) {
+// updateByIDs applies a column update to the given ids, confined to one account. The
+// account predicate is what stops a caller mutating another account's rows by guessing
+// or replaying transaction ids; rows outside the account simply do not match.
+func (s *SQLXCashflowStore) updateByIDs(ctx context.Context, column string, value any, accountID uuid.UUID, ids []uuid.UUID) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	query := fmt.Sprintf(`UPDATE %s SET %s = ?, updated_at = ? WHERE id IN (?)`, s.tableName, column)
-	expanded, args, err := sqlx.In(query, value, time.Now().UTC(), ids)
+	query := fmt.Sprintf(`UPDATE %s SET %s = ?, updated_at = ? WHERE account_id = ? AND id IN (?)`, s.tableName, column)
+	expanded, args, err := sqlx.In(query, value, time.Now().UTC(), accountID, ids)
 	if err != nil {
 		return 0, fmt.Errorf("cashflow store: expand ids: %w", err)
 	}
@@ -262,6 +265,7 @@ func (s *SQLXCashflowStore) GetTagDistribution(ctx context.Context, filter cashf
 // cashflowQuery is the storage-internal filter/sort/paginate shape shared by the
 // list and bulk-update paths.
 type cashflowQuery struct {
+	AccountID   uuid.UUID
 	Limit       int
 	Offset      int
 	SortBy      string
@@ -284,6 +288,7 @@ func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
 		direction = string(*query.Direction)
 	}
 	return cashflowQuery{
+		AccountID:   query.AccountID,
 		Limit:       query.Limit,
 		Offset:      query.Offset,
 		SortBy:      string(query.Sort.Field),
@@ -303,6 +308,7 @@ func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
 
 func cashflowQueryFromFilters(filters cashflow.TransactionFilters) cashflowQuery {
 	query := cashflowQuery{
+		AccountID:   filters.AccountID,
 		Q:           filters.Query,
 		Description: filters.Description,
 		Note:        filters.Note,
@@ -336,6 +342,13 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 		}
 		conditions = append(conditions, fmt.Sprintf("LOWER(%s) LIKE ?", column))
 		args = append(args, "%"+strings.ToLower(v)+"%")
+	}
+
+	// Account scope comes first and is never optional: every filtered read and bulk
+	// update must be confined to one account.
+	if query.AccountID != uuid.Nil {
+		conditions = append(conditions, "account_id = ?")
+		args = append(args, query.AccountID)
 	}
 
 	appendContains("description", query.Description)
@@ -398,6 +411,12 @@ func buildCashflowAnalyticsWhereClause(filter cashflow.AnalyticsFilter) (string,
 		conditions []string
 		args       []any
 	)
+	// Analytics are per-account aggregates; without this predicate every total would
+	// silently sum across accounts.
+	if filter.AccountID != uuid.Nil {
+		conditions = append(conditions, "account_id = ?")
+		args = append(args, filter.AccountID)
+	}
 	if !filter.IncludeIgnored {
 		conditions = append(conditions, "ignored = ?")
 		args = append(args, false)

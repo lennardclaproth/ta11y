@@ -9,4 +9,6 @@ var (
 	ErrAccountAlreadyExists = errors.New("account already exists")
 	// ErrAccountNameRequired indicates that account name validation failed.
 	ErrAccountNameRequired = errors.New("account name is required")
+	// ErrAccountEmailRequired indicates that an email was expected but not supplied.
+	ErrAccountEmailRequired = errors.New("account email is required")
 )

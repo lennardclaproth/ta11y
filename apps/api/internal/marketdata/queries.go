@@ -19,6 +19,7 @@ type QueryStore interface {
 	ShouldAccumulate(ctx context.Context, lsID uuid.UUID, val bool) error
 	CountEODByListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time) (int, error)
 	GetEODForListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time, limit, offset *int, sort string) ([]*EOD, error)
+	SplitsForListing(ctx context.Context, lsID uuid.UUID) ([]Split, error)
 	GetProviderByName(ctx context.Context, name ProviderName) (*Provider, error)
 	SearchCatalogue(ctx context.Context, q string, scope CatalogueScope, limit, offset int) ([]*CatalogueSearchResult, int, error)
 	CountProviderListings(ctx context.Context, source Source) (int, error)
@@ -249,4 +250,22 @@ func getEODResult(
 			TotalCount:  totalCount,
 		},
 	}, nil
+}
+
+// Split is a share multiplier applied to a holding on a given date: a factor of 4
+// means one share became four.
+type Split struct {
+	Date   time.Time `db:"date"`
+	Factor float64   `db:"split_factor"`
+}
+
+// SplitsForListing returns the listing's splits in chronological order. It reads the
+// factors recorded on the end-of-day series rather than a separate corporate-actions
+// feed, so the splits a rebuild sees always match the price history it is walking.
+func (q *Queries) SplitsForListing(ctx context.Context, listingID uuid.UUID) ([]Split, error) {
+	splits, err := q.qs.SplitsForListing(ctx, listingID)
+	if err != nil {
+		return nil, fmt.Errorf("splits for listing %s: %w", listingID, err)
+	}
+	return splits, nil
 }

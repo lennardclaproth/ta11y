@@ -77,6 +77,18 @@ func applyTxToCycle(
 			delete(activeByKey, key)
 		}
 		return pos, false, nil
+	case TxSplit:
+		// A split only rescales something already held. With no open cycle there is
+		// nothing to rescale, and starting one would invent a position out of a
+		// corporate action. PositionID is deliberately left unset: the event is
+		// synthetic and must never reach the transaction-to-position mapping.
+		if pos == nil {
+			return nil, false, nil
+		}
+		if err := pos.ApplyTx(*tx); err != nil {
+			return nil, false, fmt.Errorf("apply split to position: %w", err)
+		}
+		return pos, false, nil
 	case TxDividend, TxTax, TxFee:
 		// These affect cost basis; if we don't have a cycle yet, start one.
 		pos, created, err := ensure()

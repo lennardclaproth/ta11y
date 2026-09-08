@@ -11,14 +11,10 @@ import (
 )
 
 type DeleteClassRequest struct {
-	AccountID uuid.UUID `json:"account_id"`
 }
 
 func (r DeleteClassRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account id cannot be an empty UUID"
-	}
 	return len(problems) == 0, problems
 }
 
@@ -38,6 +34,10 @@ func (r DeleteClassRequest) isValid() (bool, map[string]string) {
 // @Router /assets/classes/{class_id} [delete]
 func DeleteClass(log logging.Logger, commands assets.Commands) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		classID, err := uuid.Parse(r.PathValue("class_id"))
 		if err != nil || classID == uuid.Nil {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{
@@ -58,7 +58,7 @@ func DeleteClass(log logging.Logger, commands assets.Commands) http.Handler {
 			httpx.JSONEncode(w, http.StatusBadRequest, problems)
 		}
 
-		err = commands.DeleteClass(r.Context(), req.AccountID, classID)
+		err = commands.DeleteClass(r.Context(), accountID, classID)
 
 		switch {
 		case errors.Is(assets.ErrClassAccountMismatch, err) || errors.Is(assets.ErrClassNotFound, err):

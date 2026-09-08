@@ -61,7 +61,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Listings" accountName="Admin User" />
+		<TopNavbar title="Listings" />
 	{/snippet}
 
 	<PageContentTemplate>

@@ -84,6 +84,10 @@ type GetTransactionsResponse struct {
 // @Router      /cashflow/transactions [get]
 func GetTransactions(log logging.Logger, queries *cashflow.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetTransactionsRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -96,7 +100,7 @@ func GetTransactions(log logging.Logger, queries *cashflow.Queries) http.Handler
 			return
 		}
 
-		query, problems := toTransactionListQuery(req)
+		query, problems := toTransactionListQuery(accountID, req)
 		if len(problems) > 0 {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
@@ -138,7 +142,7 @@ func GetTransactions(log logging.Logger, queries *cashflow.Queries) http.Handler
 	})
 }
 
-func toTransactionListQuery(req GetTransactionsRequest) (cashflow.TransactionListQuery, map[string]string) {
+func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (cashflow.TransactionListQuery, map[string]string) {
 	problems := make(map[string]string)
 
 	if req.Limit < 0 {
@@ -171,6 +175,7 @@ func toTransactionListQuery(req GetTransactionsRequest) (cashflow.TransactionLis
 	}
 
 	return cashflow.TransactionListQuery{
+		AccountID:   accountID,
 		Limit:       limit,
 		Offset:      req.Offset,
 		Sort:        sort,

@@ -13,14 +13,10 @@ import (
 
 // RebuildPortfolioRequest requests a portfolio rebuild for an account.
 type RebuildPortfolioRequest struct {
-	AccountID uuid.UUID `json:"account_id"`
 }
 
 func (r RebuildPortfolioRequest) isValid() (bool, map[string]string) {
 	problems := make(map[string]string)
-	if r.AccountID == uuid.Nil {
-		problems["account_id"] = "account_id is required"
-	}
 	return len(problems) == 0, problems
 }
 
@@ -48,6 +44,10 @@ func RebuildPortfolio(
 	rebuilder portfolioRebuilder,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.JSONDecode[RebuildPortfolioRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -69,7 +69,7 @@ func RebuildPortfolio(
 			return
 		}
 
-		if err := rebuilder.Build(r.Context(), req.AccountID); err != nil {
+		if err := rebuilder.Build(r.Context(), accountID); err != nil {
 			switch {
 			case errors.Is(err, portfoliodomain.ErrAccountNotFound):
 				_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"account_id": portfoliodomain.ErrAccountNotFound.Error()})
@@ -78,7 +78,7 @@ func RebuildPortfolio(
 			case errors.Is(err, portfoliodomain.ErrPortfolioNoSnapshots):
 				_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"rebuild": portfoliodomain.ErrPortfolioNoSnapshots.Error()})
 			default:
-				log.Error(r.Context(), "portfolio rebuild: failed to rebuild portfolio", err, "account_id", req.AccountID.String())
+				log.Error(r.Context(), "portfolio rebuild: failed to rebuild portfolio", err, "account_id", accountID.String())
 				_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to rebuild portfolio"})
 			}
 			return

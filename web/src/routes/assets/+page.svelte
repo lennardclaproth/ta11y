@@ -63,11 +63,9 @@
 				snapshots = [];
 				return;
 			}
-			const accountId = accountStore.activeId;
 			const [cls, snaps] = await Promise.all([
-				listAssetClasses({ account_id: accountId }),
+				listAssetClasses({}),
 				getAssetSnapshots({
-					account_id: accountId,
 					from: from || undefined,
 					to: to || undefined
 				})
@@ -93,7 +91,7 @@
 		creatingClass = true;
 		try {
 			await accountStore.ensureLoaded();
-			await createAssetClass({ account_id: accountStore.activeId, name: className.trim() });
+			await createAssetClass({ name: className.trim() });
 			createOpen = false;
 			className = '';
 			toast.success('Asset class created');
@@ -111,7 +109,7 @@
 		details = null;
 		try {
 			await accountStore.ensureLoaded();
-			details = await getAssetClassDetails(row.id, accountStore.activeId);
+			details = await getAssetClassDetails(row.id);
 		} finally {
 			detailsLoading = false;
 		}
@@ -143,7 +141,6 @@
 				from = r.from ?? '';
 				to = r.to ?? '';
 			}}
-			accountName="Lennard Claproth"
 		/>
 	{/snippet}
 

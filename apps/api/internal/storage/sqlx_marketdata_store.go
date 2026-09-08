@@ -228,13 +228,13 @@ func (s *SQLXMarketDataStore) ReleaseSyncLock(ctx context.Context, id uuid.UUID)
 const eodInsertColumns = `
 	id, listing_id, symbol, date,
 	open_cents, high_cents, low_cents, close_cents,
-	volume, created_at, updated_at
+	volume, split_factor, created_at, updated_at
 `
 
 const eodInsertValues = `
 	:id, :listing_id, :symbol, :date,
 	:open, :high, :low, :close,
-	:volume, :created_at, :updated_at
+	:volume, :split_factor, :created_at, :updated_at
 `
 
 // CreateEODs persists a batch of EOD datapoints in a single insert, skipping rows
@@ -276,6 +276,23 @@ func (s *SQLXMarketDataStore) InsertEOD(ctx context.Context, eod *marketdata.EOD
 	return err
 }
 
+// SplitsForListing returns the dates on which a listing's shares were split, oldest
+// first. Ordinary days carry a factor of 1 and are excluded, so the result is the
+// short list of corporate actions a rebuild has to replay.
+func (s *SQLXMarketDataStore) SplitsForListing(ctx context.Context, lsID uuid.UUID) ([]marketdata.Split, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT date, split_factor
+		FROM %s
+		WHERE listing_id = ? AND split_factor <> 1 AND split_factor > 0
+		ORDER BY date ASC
+	`, s.eodsTable))
+	var splits []marketdata.Split
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &splits, query, lsID); err != nil {
+		return nil, fmt.Errorf("marketdata store: splits for listing: %w", err)
+	}
+	return splits, nil
+}
+
 // CountEODByListing counts EOD datapoints for a listing within an optional date range.
 func (s *SQLXMarketDataStore) CountEODByListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time) (int, error) {
 	query := fmt.Sprintf(`SELECT COUNT(1) FROM %s WHERE listing_id = ?`, s.eodsTable)
@@ -302,7 +319,7 @@ func (s *SQLXMarketDataStore) GetEODForListing(ctx context.Context, lsID uuid.UU
 		SELECT
 			id, listing_id, symbol, date,
 			open_cents AS open, high_cents AS high, low_cents AS low, close_cents AS close,
-			volume, created_at, updated_at
+			volume, split_factor, created_at, updated_at
 		FROM %s
 		WHERE listing_id = ?
 	`, s.eodsTable)

@@ -26,8 +26,6 @@ definitions:
     type: object
   assets.AdjustAssetWorthRequest:
     properties:
-      account_id:
-        type: string
       amount:
         type: string
       direction:
@@ -95,8 +93,6 @@ definitions:
     type: object
   assets.CreateAssetClassRequest:
     properties:
-      account_id:
-        type: string
       name:
         type: string
     type: object
@@ -107,8 +103,6 @@ definitions:
     type: object
   assets.CreateAssetRequest:
     properties:
-      account_id:
-        type: string
       class_id:
         type: string
       effective_date:
@@ -128,9 +122,6 @@ definitions:
         type: string
     type: object
   assets.DeleteClassRequest:
-    properties:
-      account_id:
-        type: string
     type: object
   assets.MutationResponse:
     properties:
@@ -159,8 +150,6 @@ definitions:
     type: object
   assets.SetAssetWorthRequest:
     properties:
-      account_id:
-        type: string
       effective_date:
         type: string
       note:
@@ -177,14 +166,29 @@ definitions:
     type: object
   assets.UpdateClassRequest:
     properties:
-      account_id:
-        type: string
       archived:
         type: boolean
       id:
         type: string
       name:
         type: string
+    type: object
+  auth.MeResponse:
+    properties:
+      admin:
+        description: Admin gates the admin-only screens.
+        type: boolean
+      email:
+        type: string
+      id:
+        type: string
+    type: object
+  auth.ProvidersResponse:
+    properties:
+      providers:
+        items:
+          type: string
+        type: array
     type: object
   cashflow.CashflowMonthlyAnalyticsResponse:
     properties:
@@ -233,8 +237,6 @@ definitions:
     type: object
   cashflow.CreateTransactionsRequest:
     properties:
-      account_id:
-        type: string
       transactions:
         items:
           $ref: '#/definitions/cashflow.CreateManualCashflowTransactionRequest'
@@ -305,8 +307,6 @@ definitions:
     type: object
   cashflow.TagTransactionsByFilterRequest:
     properties:
-      account_id:
-        type: string
       filters:
         $ref: '#/definitions/transport_http_handlers_cashflow.TransactionFilters'
       tag:
@@ -635,6 +635,12 @@ definitions:
         type: integer
       open:
         type: integer
+      splitFactor:
+        description: |-
+          SplitFactor is the share multiplier the instrument underwent on this date: 4
+          means one share became four. Ordinary days report 1, as do manually imported
+          rows that carry no corporate-action data.
+        type: number
       symbol:
         description: Kept for response readability
         type: string
@@ -645,8 +651,6 @@ definitions:
     type: object
   portfolio.CreateManualPortfolioTransactionRequest:
     properties:
-      account_id:
-        type: string
       amount:
         type: string
       description:
@@ -785,9 +789,6 @@ definitions:
         type: boolean
     type: object
   portfolio.RebuildPortfolioRequest:
-    properties:
-      account_id:
-        type: string
     type: object
   portfolio.SnapshotPointResponse:
     properties:
@@ -1046,11 +1047,6 @@ paths:
       - application/json
       description: Returns asset classes with totals and growth metadata.
       parameters:
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       - description: Include archived classes
         in: query
         name: include_archived
@@ -1226,11 +1222,6 @@ paths:
         name: class_id
         required: true
         type: string
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -1265,11 +1256,6 @@ paths:
       - application/json
       description: Returns account-level daily total worth snapshot points.
       parameters:
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       - description: Start date (YYYY-MM-DD)
         in: query
         name: from
@@ -1308,6 +1294,113 @@ paths:
       summary: List asset snapshots
       tags:
       - assets
+  /auth/{provider}/callback:
+    get:
+      description: Handles the identity provider's redirect and issues a session cookie.
+        Browser-facing.
+      parameters:
+      - description: Identity provider slug (e.g. google)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: Opaque state issued at login
+        in: query
+        name: state
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to the frontend
+          schema:
+            type: string
+      summary: Complete sign-in
+      tags:
+      - auth
+  /auth/{provider}/login:
+    get:
+      description: Redirects to the identity provider's authorization endpoint. Browser-facing;
+        not callable from XHR.
+      parameters:
+      - description: Identity provider slug (e.g. google)
+        in: path
+        name: provider
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to the identity provider
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Start sign-in
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Revokes the current session and clears the session cookie.
+      responses:
+        "204":
+          description: Signed out
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign out
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Returns the signed-in account, or 401 when not signed in.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Current session
+      tags:
+      - auth
+  /auth/providers:
+    get:
+      description: Returns the configured OpenID Connect provider slugs.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.ProvidersResponse'
+      summary: List identity providers
+      tags:
+      - auth
   /cashflow/analytics/monthly:
     get:
       consumes:
@@ -1733,11 +1826,6 @@ paths:
         name: vendor_id
         required: true
         type: string
-      - description: Account UUID
-        in: formData
-        name: account_id
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -1838,11 +1926,6 @@ paths:
       - description: Brokerage vendor UUID
         in: formData
         name: vendor_id
-        required: true
-        type: string
-      - description: Account UUID
-        in: formData
-        name: account_id
         required: true
         type: string
       produces:
@@ -2322,11 +2405,6 @@ paths:
       description: Returns portfolio positions for the given account and include_closed
         filter.
       parameters:
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       - description: Include closed positions
         in: query
         name: include_closed
@@ -2416,11 +2494,6 @@ paths:
       description: Returns snapshot points for the given account and optional date
         range.
       parameters:
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       - description: Start date (YYYY-MM-DD)
         in: query
         name: from
@@ -2466,11 +2539,6 @@ paths:
       description: Returns portfolio transactions for the given account and optional
         date range.
       parameters:
-      - description: Account ID
-        in: query
-        name: account_id
-        required: true
-        type: string
       - description: Start date (YYYY-MM-DD)
         in: query
         name: from

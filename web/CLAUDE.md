@@ -68,10 +68,14 @@ vocabulary: `intent` (semantic color), `variant` (`solid/outline/ghost`), `size`
 - `src/lib/api/config.ts`: `useMocks` is true whenever `VITE_API_URL` is empty (so the app runs
   standalone on fixtures). Set `web/.env` (`make web-env`) with `VITE_USE_MOCKS=false` and
   `VITE_API_URL=http://localhost:6060` to hit the live Go API.
-- The active account id comes from `accountStore` (`src/lib/stores/account.svelte.ts`), which resolves
-  it from `GET /accounts` (falling back to `DEMO_ACCOUNT_ID` / the mock account). Read
-  `accountStore.activeId` in pages instead of hard-coding an id, and `await accountStore.ensureLoaded()`
-  before the first account-scoped request.
+- The API derives the account from the session cookie, so **no request sends an `account_id`** — do not
+  reintroduce one, the backend rejects unknown fields. `accountStore`
+  (`src/lib/stores/account.svelte.ts`) resolves the signed-in account from `GET /auth/me`; use it for
+  `isAdmin`, the displayed email and `signOut()`. `GET /accounts` is administrator-only and is no longer
+  part of the bootstrap path.
+- The root layout guards every route: it awaits the session and sends signed-out visitors to `/login`.
+  A 401 from any request does the same via `setUnauthorizedHandler`. `/login` is the one route that
+  renders without a session.
 
 ## Gotchas to know before you trust the build
 

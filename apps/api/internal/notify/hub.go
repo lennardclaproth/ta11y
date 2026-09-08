@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/lennardclaproth/my-finances-tracker/internal/auth"
 	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
 )
 
@@ -163,6 +164,21 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Warn(r.Context(), "websocket rejected: invalid account id", "path", r.URL.Path, "error", err.Error())
 		http.Error(w, "invalid account_id", http.StatusBadRequest)
+		return
+	}
+
+	// The path names an account, but only the session decides which one may be
+	// subscribed to. Without this check any signed-in caller could stream another
+	// account's events by editing the URL.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		http.Error(w, "not signed in", http.StatusUnauthorized)
+		return
+	}
+	if principal.AccountID != accountID {
+		h.log.Warn(r.Context(), "websocket rejected: account does not match the session",
+			"requested_account_id", accountID.String(), "session_account_id", principal.AccountID.String())
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 

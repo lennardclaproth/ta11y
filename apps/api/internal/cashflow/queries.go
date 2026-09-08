@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/lennardclaproth/my-finances-tracker/internal/sorting"
 )
 
@@ -29,6 +31,9 @@ func NewQueries(qs QueryStore) *Queries {
 
 // AnalyticsFilter describes the filters used for cashflow analytics queries.
 type AnalyticsFilter struct {
+	// AccountID scopes the aggregate to one account. It is always the authenticated
+	// caller's account -- analytics must never span accounts.
+	AccountID      uuid.UUID
 	From           *time.Time
 	To             *time.Time
 	IncludeIgnored bool
@@ -93,6 +98,8 @@ const (
 
 // TransactionListQuery describes filters, sorting, and pagination for cashflow transactions.
 type TransactionListQuery struct {
+	// AccountID scopes the page to one account and is never taken from client input.
+	AccountID   uuid.UUID
 	Limit       int
 	Offset      int
 	Sort        sorting.Sort

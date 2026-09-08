@@ -51,6 +51,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return apm.DefaultTracer().IgnoredTransactionURL(r.URL)
 	}))
 	handler = WithRequestIdentifiers()(handler)
+	// Origin is checked inside CORS so preflight is still answered, but before routing
+	// so a rejected cross-site mutation never reaches a handler.
+	handler = WithOriginCheck(s.corsOrigins)(handler)
 	handler = WithCORS(s.corsOrigins)(handler)
 
 	server := s.newHTTPServer(handler)

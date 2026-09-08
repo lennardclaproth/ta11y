@@ -41,6 +41,8 @@ const (
 	TableProviderListing = "provider_listings"
 	TableCatalogueSyncs  = "catalogue_syncs"
 	TableAccounts        = "accounts"
+	TableIdentities      = "identities"
+	TableSessions        = "sessions"
 	TablePositions       = "positions"
 	TablePosSnapshots    = "position_snapshots"
 	TablePortSnapshots   = "portfolio_snapshots"

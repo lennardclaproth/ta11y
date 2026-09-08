@@ -12,6 +12,25 @@ database:
   type: postgres
   connection_string: "postgres://admin:Postgres2026%21@127.0.0.1:5432/my_finances_tracker?sslmode=disable"
 
+auth:
+  # OpenID Connect sign-in. Off by default so a fresh checkout boots without provider
+  # credentials; the API is unauthenticated while it is off.
+  enabled: true
+  session_ttl: 720h            # 30 days
+  frontend_url: http://localhost:5199
+  # cookie_domain: ""          # empty = host-only, correct when API and frontend share a host
+  # cookie_secure: true        # defaults to true outside `server.environment: development`
+  # bootstrap_admin_email: ""  # or AUTH_BOOTSTRAP_ADMIN_EMAIL; claims the seeded account
+  # Who may sign in. Authenticating with a provider proves identity; this decides admission.
+  # Empty admits anyone the provider authenticates -- which for Google is anyone at all -- so it
+  # is required outside development. Checked on every sign-in, not just the first.
+  allowed_emails: []
+  providers:
+    google:
+      issuer: https://accounts.google.com
+      redirect_url: http://localhost:6060/auth/google/callback
+      # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET come from the environment.
+
 logging:
   level: info  # debug, info, warn, error
 

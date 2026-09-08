@@ -13,14 +13,12 @@ export interface ImportAcceptedResponse {
 export interface CashflowImportInput {
 	file: File;
 	vendor_id: string;
-	account_id: string;
 }
 
 /** Form fields for `POST /imports/portfolio`. */
 export interface PortfolioImportInput {
 	file: File;
 	vendor_id: string;
-	account_id: string;
 }
 
 /** Form fields for `POST /imports/eod`. */

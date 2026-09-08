@@ -28,10 +28,7 @@ export async function listAssetClasses(query: AssetClassesQuery): Promise<AssetC
 }
 
 /** `GET /assets/classes/{class_id}` */
-export async function getAssetClassDetails(
-	classId: string,
-	accountId: string
-): Promise<AssetClassDetails> {
+export async function getAssetClassDetails(classId: string): Promise<AssetClassDetails> {
 	if (useMocks) {
 		await delay();
 		const details = assetClassDetails[classId];
@@ -40,7 +37,7 @@ export async function getAssetClassDetails(
 		const summary = assetClasses.find((c) => c.id === classId) ?? assetClasses[0];
 		return clone({ class: summary, assets: [], growth: [], mutations: [] });
 	}
-	return apiGet<AssetClassDetails>(`/assets/classes/${classId}`, { account_id: accountId });
+	return apiGet<AssetClassDetails>(`/assets/classes/${classId}`);
 }
 
 /** `GET /assets/snapshots` */

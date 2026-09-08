@@ -24,6 +24,13 @@ const (
 	TxTax      TransactionType = "TAX"
 	TxFee      TransactionType = "FEE"
 	TxCash     TransactionType = "CASH"
+	// TxSplit is a synthetic event, never a stored row: the rebuild injects one per
+	// share split so the split lands in the same chronological stream as the trades
+	// it affects. Quantity carries the multiplier (4 means one share became four).
+	// It is deliberately absent from the transactions table's type constraint --
+	// nothing persists it, and it carries no PositionID so the transaction-to-position
+	// mapping never sees it.
+	TxSplit TransactionType = "SPLIT"
 
 	TransactionOriginImport TransactionOrigin = "IMPORT"
 	TransactionOriginManual TransactionOrigin = "MANUAL"

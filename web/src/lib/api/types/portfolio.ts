@@ -85,7 +85,6 @@ export type PortfolioTransactionsResponse = PaginatedResponse<PortfolioTransacti
  * `quantity` is required and positive for BUY/SELL and forbidden otherwise.
  */
 export interface CreateManualPortfolioTransactionRequest {
-	account_id: string;
 	vendor_id: string;
 	/** "YYYY-MM-DD". */
 	occurred_at: string;
@@ -96,20 +95,13 @@ export interface CreateManualPortfolioTransactionRequest {
 	description?: string;
 }
 
-/** `POST /portfolio/rebuild` request. */
-export interface RebuildPortfolioRequest {
-	account_id: string;
-}
-
 /** Query filters for `GET /portfolio/positions`. */
 export interface PortfolioPositionsQuery {
-	account_id: string;
 	include_closed?: boolean;
 }
 
 /** Query filters for `GET /portfolio/transactions`. */
 export interface PortfolioTransactionsQuery {
-	account_id: string;
 	from?: string;
 	to?: string;
 	limit?: 10 | 25 | 50 | 100;
@@ -125,7 +117,6 @@ export interface PortfolioTransactionsQuery {
 
 /** Query filters for `GET /portfolio/snapshots`. */
 export interface PortfolioSnapshotsQuery {
-	account_id: string;
 	from?: string;
 	to?: string;
 }

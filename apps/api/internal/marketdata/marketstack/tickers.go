@@ -14,7 +14,11 @@ import (
 
 var _ marketdata.TickerSearcher = (*MarketStackClient)(nil)
 
-// marketstackTickersResponse mirrors the /v2/tickers envelope. Pagination.Total is
+// tickersPath is the v2 catalogue endpoint. v1 called it "tickers"; on v2 that name
+// 404s, so the two are not interchangeable.
+const tickersPath = "tickerslist"
+
+// marketstackTickersResponse mirrors the /v2/tickerslist envelope. Pagination.Total is
 // the provider's full match count, which is routinely far larger than one page.
 // Name is a plain string because the provider returns null for some symbols and
 // JSON null decodes to the empty string, which the catalogue already treats as
@@ -41,7 +45,10 @@ type marketstackTickersResponse struct {
 
 // SearchTickers queries the MarketStack ticker catalogue, following the format:
 //
-// 'https://api.marketstack.com/v2/tickers?search=asml&limit=100&offset=0&access_key=XXXX'
+// 'https://api.marketstack.com/v2/tickerslist?search=asml&limit=100&offset=0&access_key=XXXX'
+//
+// The v2 catalogue endpoint is 'tickerslist'; 'tickers' is the v1 name and answers
+// 404 "Route not found" on v2, which surfaced as a 500 from catalogue search.
 //
 // An empty query returns the provider's catalogue in popularity order, which is
 // what the bounded seed sync pages through. No exchange filter is sent, so results
@@ -133,7 +140,7 @@ func (c *MarketStackClient) constructTickersRequest(
 		return nil, fmt.Errorf("provider %s api key is empty", c.providerName)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *provider.BaseURI+"/tickers", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *provider.BaseURI+"/"+tickersPath, nil)
 	if err != nil {
 		return nil, err
 	}

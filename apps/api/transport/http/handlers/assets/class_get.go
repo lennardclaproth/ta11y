@@ -12,8 +12,7 @@ import (
 
 // GetClassesRequest contains query filters for asset classes.
 type GetClassesRequest struct {
-	AccountID       uuid.UUID `query:"account_id"`
-	IncludeArchived bool      `query:"include_archived"`
+	IncludeArchived bool `query:"include_archived"`
 }
 
 type ClassResponse struct {
@@ -34,7 +33,6 @@ type ClassResponse struct {
 // @Tags assets
 // @Accept json
 // @Produce json
-// @Param account_id query string true "Account ID"
 // @Param include_archived query bool false "Include archived classes"
 // @Success 200 {array} ClassResponse
 // @Failure 400 {object} map[string]string
@@ -43,6 +41,10 @@ type ClassResponse struct {
 // @Router /assets/classes [get]
 func GetClasses(log logging.Logger, queries assets.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		req, err := httpx.DecodeQuery[GetClassesRequest](r)
 		if err != nil {
 			if httpx.WriteDecodeError(w, err) {
@@ -55,7 +57,7 @@ func GetClasses(log logging.Logger, queries assets.Queries) http.Handler {
 			return
 		}
 
-		classes, err := queries.ListClasses(r.Context(), req.AccountID, req.IncludeArchived)
+		classes, err := queries.ListClasses(r.Context(), accountID, req.IncludeArchived)
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while executing list classes", err)
 			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not list available classes"})
@@ -122,7 +124,6 @@ type ClassGrowthPointResponse struct {
 // @Accept json
 // @Produce json
 // @Param class_id path string true "Class ID"
-// @Param account_id query string true "Account ID"
 // @Success 200 {object} ClassDetailsResponse
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -130,14 +131,13 @@ type ClassGrowthPointResponse struct {
 // @Router /assets/classes/{class_id} [get]
 func GetClassDetails(log logging.Logger, queries assets.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
 		classID, err := uuid.Parse(r.PathValue("class_id"))
 		if err != nil {
 			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"class_id": "class_id must be a valid UUID"})
-			return
-		}
-		accID, err := uuid.Parse(r.URL.Query().Get("account_id"))
-		if err != nil {
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"account_id": "account_id must be a valid UUID"})
 			return
 		}
 		cd, err := queries.ClassDetails(r.Context(), classID, accID)
