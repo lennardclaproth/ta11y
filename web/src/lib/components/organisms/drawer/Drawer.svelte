@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
+	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import { zClasses } from '$lib/styles/z-index';
 
 	type Props = {
@@ -80,7 +81,8 @@
 				<header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
 					<div class="min-w-0 flex-1">
 						{#if title}
-							<h2 class="text-xl">{title}</h2>
+							<!-- Matches Dialog: the shared serif scale and weight, keeping the base-layer colour. -->
+							<Heading level="h2" size="lg" class="text-slate-900">{title}</Heading>
 						{/if}
 						{#if header}
 							{@render header()}

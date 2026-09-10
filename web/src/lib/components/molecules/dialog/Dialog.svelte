@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
+	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import type { DialogSize } from './dialog.types';
 	import { dialogSizeClasses } from './dialog.types';
 
@@ -96,7 +97,9 @@
 			<header class="flex items-start justify-between gap-4 px-5 pt-5">
 				<div class="min-w-0 flex-1">
 					{#if title}
-						<h2 class="text-xl">{title}</h2>
+						<!-- Through the Heading atom so the title picks up the shared serif scale and weight;
+						     `text-slate-900` holds the colour the base-layer heading rule was giving it. -->
+						<Heading level="h2" size="lg" class="text-slate-900">{title}</Heading>
 					{/if}
 					{#if header}
 						{@render header()}

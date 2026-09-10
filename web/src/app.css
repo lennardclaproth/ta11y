@@ -16,10 +16,17 @@
   font-display: swap;
 }
 
+/*
+  One static regular is all that ships, so the descriptor says 400 and nothing wider. Claiming a
+  range this file does not cover (it was `400 700`) told the browser the face already answered
+  every weight in it, which suppressed synthetic bolding -- `font-semibold` on a heading then
+  resolved to this same regular and rendered identically to 400. Widen this only alongside a real
+  bold file.
+*/
 @font-face {
   font-family: 'EB Garamond';
   src: url('/fonts/eb-garamond-v32-latin-regular.woff2') format('woff2');
-  font-weight: 400 700;
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }

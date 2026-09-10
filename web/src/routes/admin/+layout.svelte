@@ -6,8 +6,8 @@
 	let { children } = $props();
 
 	// Admin screens are simply absent for non-admin accounts: the navigation omits them
-	// and a direct link lands here. This hides pages, it does not protect them -- the API
-	// is unauthenticated, so the admin flag records intent and nothing enforces it.
+	// and a direct link lands here. This is a convenience, not the control -- the API
+	// registers these routes admin-only and answers 403 regardless of what the client shows.
 	$effect(() => {
 		void accountStore.ensureLoaded();
 	});

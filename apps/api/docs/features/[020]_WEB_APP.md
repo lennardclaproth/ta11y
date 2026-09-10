@@ -1,103 +1,77 @@
 # [020] Web App
 
-> **Feature ID:** 020 · **Area:** Platform (frontend) · **Status:** early-stage — component library only (no application wiring yet)
->
-> **Location:** `web/` (NOT `apps/web`) · SvelteKit 2 + Svelte 5
->
-> **Related features:** consumes (eventually) the [003]/[009]/[013]/[024] APIs and the [001] WebSocket
+> Detail for the **Web app** entry in [FEATURES.md](FEATURES.md). Read that first for what the
+> app does; this covers how it is put together and what is still missing.
 
 ## Overview
 
-The web app today is an **Atomic-Design UI primitive catalog** built and tested through
-Storybook — roughly 30 reusable Svelte 5 components (atoms / molecules / organisms) with
-co-located stories that double as the test corpus (Vitest browser mode).
-
-It is **not yet a functioning application**: there are no feature pages, no data fetching, no
-WebSocket client, no global state, and no auth/admin gating. Running `npm run dev` renders the
-stock SvelteKit welcome page. `FEATURES.md`'s description of pages "consuming the API" is
-**intent, not current behavior** (see [Gaps](#gaps--not-implemented)).
+`web/` (not `apps/web`) is a SvelteKit 2 / Svelte 5 app in forced runes mode, built with Vite
+and Tailwind 4, catalogued in Storybook. It talks to the Go API over REST plus a per-account
+WebSocket, and runs standalone against fixtures when no API URL is configured.
 
 ## Component architecture
 
-The implemented surface is the lower three Atomic-Design tiers; `templates/` and `pages/`
-don't exist yet.
+Strict Atomic Design under `web/src/lib/components/<tier>/`, importing only from the same or a
+lower tier. Populated today: **atoms** (23), **molecules** (24), **organisms** (15),
+**templates** (2 — `app-shell`, `page-content`). The `pages/` tier is not created yet; route
+components live in `src/routes/` instead.
 
-```mermaid
-classDiagram
-    class Atoms
-    class Molecules
-    class Organisms
-
-    Molecules ..> Atoms : compose
-    Organisms ..> Molecules : compose
-    Organisms ..> Atoms : compose
-
-    note for Atoms "~23 primitives: Button, Input, Money, Sparkline, Icon, Badge, Select, Switch...\n(only Icon may wrap @iconify/svelte)"
-    note for Molecules "7 composites: FormField, IconButton, TrendIndicator, Alert, Chip, Dropzone, IconInput"
-    note for Organisms "StatCard = Panel + Text + Money + Sparkline + TrendIndicator"
-```
-
-**Co-location convention** (one folder per component): `Component.svelte` (markup + runes),
-`component.types.ts` (`as const` option arrays → derived union types), `component.variants.ts`
-(Tailwind class maps), and `Component.stories.svelte` (Storybook CSF). Simple atoms may inline
-types/variants.
-
-## Tech stack & scripts
-
-| Concern | Package(s) |
-| --- | --- |
-| Framework | `@sveltejs/kit` ^2.57, `svelte` ^5.55 (runes mode forced) |
-| Build | `vite` ^8, `@sveltejs/adapter-auto` |
-| Styling | `tailwindcss` ^4.2 (+ `@tailwindcss/vite`, `@tailwindcss/typography`) |
-| Icons | `@iconify/svelte` |
-| Storybook | `storybook` / `@storybook/sveltekit` ^10.3 (+ a11y, docs, vitest, svelte-csf addons) |
-| Tests | `vitest` ^4 (browser mode via `@vitest/browser-playwright`), `playwright` |
-| Quality | `svelte-check`, `eslint` ^10 + `typescript-eslint`, `prettier` |
-
-Scripts (in `web/`): `dev`, `build`, `preview`, `check` (svelte-check), `lint`
-(prettier + eslint), `format`, `storybook`, `build-storybook`. **There is no `test` script** —
-coverage comes from Storybook stories run under Vitest browser mode.
+The rules are enforced by convention, not tooling — see
+[.claude/rules/atomic-design.md](../../../../.claude/rules/atomic-design.md) for the tier
+boundaries, the four-file component anatomy, and the shared prop vocabulary.
 
 ## Route map
 
-| Route | File | Purpose |
-| --- | --- | --- |
-| `/` | `web/src/routes/+page.svelte` | Default SvelteKit welcome page (placeholder) |
-| layout | `web/src/routes/+layout.svelte` | Root layout (favicon, `{@render children()}`, imports `layout.css`) |
+| Route | Purpose |
+| --- | --- |
+| `/` | Redirects to `/cashflow` (`+page.ts`) |
+| `/login` | The one route that renders without a session |
+| `/cashflow` | Analytics, transactions table, tagging, manual entry |
+| `/portfolio` | Positions, snapshots, manual transactions, rebuild |
+| `/assets` | Asset classes and worth tracking |
+| `/admin/listings` | Listing CRUD + provider catalogue drawer |
+| `/admin/dailies` | End-of-day prices per listing + manual price upload |
+| `/admin/credentials` | Provider API keys |
 
-No cashflow / portfolio / assets / admin routes exist yet, and there is no admin-mode guard,
-no `hooks.*`, and no `+server.ts`/`+page.server.ts`.
+`/admin/*` sits behind a layout that renders nothing until the session resolves, then shows an
+unavailable notice to non-admins. That hides screens; the API enforces the `admin` flag itself
+and answers 403 regardless.
 
-## Planned (not yet implemented) integration
+## Data access
 
-The backend exposes the REST API and the `/ws/accounts/{account_id}` WebSocket, but the
-frontend has **no code** that calls either. A future page → API → WebSocket-refresh flow would
-be the natural integration, but no service layer, fetch wrapper, shared DTOs, or WS client
-exist today, so no request/realtime sequence is documented here (it would be fabricated).
+One service module per feature in `src/lib/services/*` over the `src/lib/api` fetch client
+(`apiGet` / `apiSend` / `apiUpload`). **Every service has a mock branch** backed by fixtures in
+`src/lib/data/fixtures`, selected by `useMocks` when `VITE_API_URL` is empty — so the app runs
+with no backend. A service added without its mock branch breaks fixture mode.
+
+`connectRealtime` subscribes to `/ws/accounts/{id}` and debounces a refresh callback. It no-ops
+on the server and in mock mode. Note that EOD imports raise no event: they carry no account
+scope, so the hub skips them.
+
+State lives in two runes stores: `account.svelte.ts` (session, `isAdmin`, sign-out) and
+`toast.svelte.ts`.
 
 ## Code map
 
 | Path | Responsibility |
 | --- | --- |
-| `web/package.json` | Deps + scripts (no `test`) |
-| `web/svelte.config.js` | Forces runes mode; `adapter-auto` |
-| `web/vite.config.ts` | Tailwind + SvelteKit plugins; Vitest Storybook browser project |
-| `web/.storybook/*` | Storybook config (stories glob, addons, preview) |
-| `web/src/routes/*` | Root layout + welcome page (only) |
-| `web/src/lib/components/atoms/*` | 23 primitive components |
-| `web/src/lib/components/molecules/*` | 7 composite components |
-| `web/src/lib/components/organisms/stat-card/*` | `StatCard` organism |
-| `web/src/app.css` | Theme tokens — imported only by Storybook |
+| `src/routes/*` | Pages, root layout, admin guard layout |
+| `src/lib/components/*` | Atomic Design tiers |
+| `src/lib/services/*` | One module per feature, each with a mock branch |
+| `src/lib/api/*` | Fetch client, config, money helpers, shared DTOs |
+| `src/lib/data/fixtures/*` | Fixture data backing mock mode |
+| `src/lib/stores/*` | `accountStore`, `toast` |
+| `src/app.css` | Canonical theme, loaded by both the app and Storybook |
+| `.storybook/*` | Storybook config; stories double as the Vitest browser test corpus |
 
 ## Gaps / not implemented
 
-- **No application wiring:** no feature pages, no routing/navigation shell, no API integration
-  (no fetch/service layer, no shared DTOs), no WebSocket client, no global stores, no
-  date-range/calendar selector, no app-level error boundary, no client APM/error reporting.
-- **No admin-mode gating** (no admin routes, no guard).
-- **`templates/` and `pages/` Atomic tiers** are not created yet.
-- **Tooling discrepancies:** the root `Makefile` points `WEB_DIR` at `apps/web` (the real dir
-  is `web/`), so `make web-lint` fails — run scripts inside `web/`. The running app loads
-  `routes/layout.css` while the real theme lives in `src/app.css` (imported only by Storybook),
-  so app and Storybook render differently; a referenced `taupe` color is undefined; and Prettier
-  is configured for tabs while many files use 2-space indent (so `lint` isn't green out of the box).
+- **No `pages/` Atomic tier** — route components carry page composition directly.
+- **No admin accounts screen.** `GET`/`POST /accounts` are admin-only and have no UI, so the
+  `admin` flag can only be set on the bootstrapped account.
+- **No cashflow or portfolio CSV import UI.** `importCashflow` and `importPortfolio` exist in
+  the service layer with no caller; only the EOD upload is wired.
+- **No standalone test runner.** Stories are the test corpus under Vitest browser mode; there
+  is no `test` script and no non-story frontend tests.
+- **`npm run lint` is not green out of the box** — files under `components/atoms/` use 2-space
+  indent while Prettier is configured for tabs. `npm run check` is the gate that is green.

@@ -26,5 +26,5 @@ var (
 // Syncer errors
 var (
 	ErrSyncInProgress  = errors.New("sync already in progress")
-	ErrReleaseSyncLock = errors.New("Failed to release lock for the listing")
+	ErrReleaseSyncLock = errors.New("failed to release lock for the listing")
 )

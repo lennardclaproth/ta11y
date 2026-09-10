@@ -13,7 +13,7 @@ type ping struct{ N int }
 
 func TestMemoryBusPublishDeliversToSubscriber(t *testing.T) {
 	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(2), memorybus.WithQueueSize(8))
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	got := make(chan eventbus.Envelope, 1)
 	sub, err := bus.Subscribe("topic.ping", func(_ context.Context, env eventbus.Envelope) error {
@@ -23,7 +23,7 @@ func TestMemoryBusPublishDeliversToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	if err := bus.Publish(context.Background(), "topic.ping", ping{N: 7}); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -51,7 +51,7 @@ func TestMemoryBusPublishDeliversToSubscriber(t *testing.T) {
 // by the parent message.
 func TestMemoryBusPropagatesCausationChain(t *testing.T) {
 	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(2), memorybus.WithQueueSize(8))
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	child := make(chan eventbus.Envelope, 1)
 	childSub, err := bus.Subscribe("topic.child", func(_ context.Context, env eventbus.Envelope) error {
@@ -61,7 +61,7 @@ func TestMemoryBusPropagatesCausationChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe child: %v", err)
 	}
-	defer childSub.Close()
+	defer func() { _ = childSub.Close() }()
 
 	parentSub, err := bus.Subscribe("topic.parent", func(ctx context.Context, _ eventbus.Envelope) error {
 		return bus.Publish(ctx, "topic.child", ping{N: 1})
@@ -69,7 +69,7 @@ func TestMemoryBusPropagatesCausationChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe parent: %v", err)
 	}
-	defer parentSub.Close()
+	defer func() { _ = parentSub.Close() }()
 
 	if err := bus.Publish(context.Background(), "topic.parent", ping{N: 0}); err != nil {
 		t.Fatalf("publish parent: %v", err)

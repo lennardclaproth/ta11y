@@ -18,6 +18,6 @@ import (
 // @Tags        Health
 func HealthHandler(log logging.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apphttp.JSONEncode(w, http.StatusOK, map[string]string{"status": "ok"})
+		_ = apphttp.JSONEncode(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 }

@@ -28,6 +28,7 @@ import {
 } from '$lib/data/fixtures/catalogue';
 import { maskKey, mockKeys, providerCredentials } from '$lib/data/fixtures/credentials';
 import { eodByListing, listings } from '$lib/data/fixtures/marketdata';
+import { portfolioPositions } from '$lib/data/fixtures/portfolio';
 import { clone, delay, mockId } from './_mock';
 
 /** Mirrors the backend's adoptability rules so mock rows behave like live ones. */
@@ -172,10 +173,44 @@ export async function createListing(body: CreateListingRequest): Promise<Listing
 export async function updateListing(body: UpdateListingFieldsRequest): Promise<Listing> {
 	if (useMocks) {
 		await delay();
-		const existing = listings.find((l) => l.id === body.id) ?? listings[0];
-		return clone({ ...existing, ...body, updated_at: new Date().toISOString() });
+		const index = listings.findIndex((l) => l.id === body.id);
+		if (index === -1)
+			throw new ApiError(404, 'Listing not found', { listing: 'listing not found' });
+		// Written back into the fixture, like createListing does, so an edit survives in the
+		// list and in listing search for the rest of the session.
+		listings[index] = { ...listings[index], ...body, updated_at: new Date().toISOString() };
+		return clone(listings[index]);
 	}
 	return apiSend<Listing>('PATCH', '/marketdata/listing', body);
+}
+
+/**
+ * `DELETE /marketdata/listing/{listing_id}`
+ *
+ * Refused with 409 when a portfolio still references the listing. That is not a
+ * formality: the schema cascades a listing delete into position snapshots and nulls
+ * open positions, so the API declines rather than destroy an account's history.
+ */
+export async function deleteListing(id: string): Promise<void> {
+	if (useMocks) {
+		await delay();
+		const index = listings.findIndex((listing) => listing.id === id);
+		if (index === -1)
+			throw new ApiError(404, 'Listing not found', { listing: 'listing not found' });
+		// The API counts portfolio rows; the fixture layer's nearest equivalent is the
+		// positions fixture, so the mock refuses exactly the listings a portfolio holds.
+		const held = portfolioPositions.some(
+			(position) => position.symbol && position.symbol === listings[index].symbol
+		);
+		if (held) {
+			throw new ApiError(409, 'Listing is used by a portfolio', {
+				listing: 'this listing is used by a portfolio and cannot be deleted'
+			});
+		}
+		listings.splice(index, 1);
+		return;
+	}
+	await apiSend<void>('DELETE', `/marketdata/listing/${id}`);
 }
 
 /**
@@ -218,22 +253,40 @@ export async function searchProviderCatalogue(
 }
 
 /**
+ * The seed run the mock is currently pretending to execute. The real run is a detached
+ * goroutine whose progress clients read back through the status endpoint, so the mock has
+ * to advance across polls rather than answer instantly — otherwise the progress UI has
+ * nothing to show and the terminal states are untestable on fixtures.
+ */
+let mockActiveSync: CatalogueSync | null = null;
+/** Pages the mock credits per status poll, so a default run settles in a few polls. */
+const MOCK_SEED_PAGES_PER_POLL = 5;
+
+/**
  * `POST /marketdata/catalogue/sync` — starts a bounded background seed run that
  * caches the provider's most-traded entries. One provider request per page.
  */
 export async function startCatalogueSync(body: CatalogueSyncRequest): Promise<CatalogueSync> {
 	if (useMocks) {
 		await delay();
-		return clone({
-			...catalogueSync,
+		// Mirrors the API, which refuses a second run while one is in flight.
+		if (mockActiveSync?.status === 'running') {
+			throw new ApiError(409, 'A catalogue sync is already running', {
+				catalogue: 'a catalogue sync is already running'
+			});
+		}
+		mockActiveSync = {
 			id: mockId(),
 			source: body.source,
 			status: 'running',
 			pages_fetched: 0,
 			rows_upserted: 0,
+			upstream_total: catalogueSync.upstream_total,
+			last_error: null,
 			started_at: new Date().toISOString(),
 			finished_at: null
-		});
+		};
+		return clone(mockActiveSync);
 	}
 	return apiSend<CatalogueSync>('POST', '/marketdata/catalogue/sync', body);
 }
@@ -242,9 +295,26 @@ export async function startCatalogueSync(body: CatalogueSyncRequest): Promise<Ca
 export async function getCatalogueStatus(source: string): Promise<CatalogueStatus> {
 	if (useMocks) {
 		await delay();
-		return clone({ source, entries: catalogueEntries.length, latest_sync: catalogueSync });
+		advanceMockSync();
+		return clone({
+			source,
+			entries: catalogueEntries.length,
+			latest_sync: mockActiveSync ?? catalogueSync
+		});
 	}
 	return apiGet<CatalogueStatus>('/marketdata/catalogue/status', { source });
+}
+
+/** Moves a mock run forward one poll's worth of pages, completing it at the budget. */
+function advanceMockSync(budget = 20) {
+	const run = mockActiveSync;
+	if (!run || run.status !== 'running') return;
+	run.pages_fetched = Math.min(budget, run.pages_fetched + MOCK_SEED_PAGES_PER_POLL);
+	run.rows_upserted = run.pages_fetched * 100;
+	if (run.pages_fetched >= budget) {
+		run.status = 'completed';
+		run.finished_at = new Date().toISOString();
+	}
 }
 
 /**

@@ -30,6 +30,18 @@ ifeq ($(IS_WINDOWS),1)
 else
   RUN_COMMAND := $(RUN_BINARY)
 endif
+# golangci-lint has to be built with the same Go toolchain as the code it parses: its
+# type-checker is vendored, so a binary built by an older Go panics on newer sources
+# ("file requires newer Go version"). `go install` builds against the local toolchain, so
+# the copy install-tools produces is preferred over whatever else is on PATH, where a
+# package-manager build is easily stale. Falls back to PATH when that copy is absent.
+GOLANGCI_VERSION := v2.8.0
+GOPATH_BIN := $(subst \,/,$(shell go env GOPATH))/bin
+GOLANGCI := $(wildcard $(GOPATH_BIN)/golangci-lint$(EXE))
+ifeq ($(GOLANGCI),)
+  GOLANGCI := golangci-lint
+endif
+
 COVERAGE_FILE := coverage.out
 MIGRATION_DIR := $(API_DIR)/migrations/postgres
 COMPOSE_FILE := ./deploy/docker/compose.dev.yaml
@@ -139,7 +151,7 @@ vet:
 ## lint: Run golangci-lint
 lint: fmt vet
 	@echo "Running golangci-lint..."
-	@cd $(API_DIR) && golangci-lint run ./...
+	@cd $(API_DIR) && $(GOLANGCI) run ./...
 
 ## web-lint: Run web linting with ESLint
 web-lint:
@@ -212,7 +224,9 @@ install-tools:
 	@echo "Installing air (hot reload)..."
 	@go install github.com/air-verse/air@latest
 	@echo "Installing golangci-lint..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "  (pinned: the linter's findings are part of the build contract, and the v2 module"
+	@echo "   path differs from v1 -- @latest on the old path silently installs v1.64.8)"
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	@echo "All tools installed!"
 
 ## migrate-up: Run migrations up

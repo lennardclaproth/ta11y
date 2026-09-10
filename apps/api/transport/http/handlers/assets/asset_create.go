@@ -76,12 +76,12 @@ func CreateAsset(log logging.Logger, commands assets.Commands) http.Handler {
 				return
 			}
 
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
 		isValid, problems := req.isValid()
 		if !isValid {
-			httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
 		}
 		initWorth, _ := money.ParsePrice(req.InitialWorth)
@@ -99,10 +99,10 @@ func CreateAsset(log logging.Logger, commands assets.Commands) http.Handler {
 		asset, err := commands.CreateAsset(r.Context(), accountID, req.ClassID, req.Name, initWorth, effectiveDate, req.Note)
 		if err != nil {
 			log.Error(r.Context(), "failed to create asset", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset"})
 			return
 		}
-		httpx.JSONEncode(w, http.StatusCreated, CreateAssetResponse{
+		_ = httpx.JSONEncode(w, http.StatusCreated, CreateAssetResponse{
 			ID:   asset.ID,
 			Name: asset.Name,
 		})

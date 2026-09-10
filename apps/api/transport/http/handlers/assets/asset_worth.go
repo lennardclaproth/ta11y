@@ -26,7 +26,7 @@ func (r SetAssetWorthRequest) isValid() (bool, map[string]string) {
 		problems["worth"] = "invalid worth format"
 	}
 
-	_, err = time.Parse("2006-01-02", r.EffectiveDate)
+	_, err = time.Parse(time.DateOnly, r.EffectiveDate)
 	if err != nil {
 		problems["effective_date"] = "effective_date must be in YYYY-MM-DD format"
 	}
@@ -66,18 +66,18 @@ func SetAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
 		isValid, problems := req.isValid()
 		if !isValid {
-			httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
 		}
 		//nolint:errcheck
 		worth, _ := money.ParsePrice(req.Worth)
 		//nolint:errcheck
-		effectiveDate, _ := time.Parse("2006-01-02", req.EffectiveDate)
+		effectiveDate, _ := time.Parse(time.DateOnly, req.EffectiveDate)
 
 		err = commands.UpdateAssetWorth(
 			r.Context(),
@@ -94,14 +94,14 @@ func SetAssetWorth(log logging.Logger, commands assets.Commands) http.Handler {
 		// We use the same not found response for both asset and class not
 		// found to avoid leaking existence of asset IDs.
 		case errors.Is(err, assets.ErrAssetNotFound) || errors.Is(err, assets.ErrClassAccountMismatch):
-			httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "asset not found"})
+			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "asset not found"})
 			return
 		case errors.Is(err, assets.ErrClassReserved):
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "asset class is reserved and cannot be modified"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "asset class is reserved and cannot be modified"})
 			return
 		case err != nil:
 			log.Error(r.Context(), "set asset worth: failed to update asset worth", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update asset worth"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update asset worth"})
 			return
 		}
 
@@ -128,7 +128,7 @@ func (r AdjustAssetWorthRequest) isValid() (bool, map[string]string) {
 		problems["worth"] = "invalid worth format"
 	}
 
-	_, err = time.Parse("2006-01-02", r.EffectiveDate)
+	_, err = time.Parse(time.DateOnly, r.EffectiveDate)
 	if err != nil {
 		problems["effective_date"] = "effective_date must be in YYYY-MM-DD format"
 	}
@@ -168,17 +168,21 @@ func AdjustAssetWorth(log logging.Logger, commands assets.Commands) http.Handler
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
 		isValid, problems := req.isValid()
 		if !isValid {
-			httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
 		}
 
+		// isValid has already parsed both, so neither error can fire here. The layout was
+		// written as "2026-01-02" -- a date rather than Go's reference layout -- so it never
+		// matched and every adjustment was stored with the zero time; time.DateOnly is the
+		// stdlib constant for this format and cannot be mistyped into an invalid layout.
 		amount, _ := money.ParsePrice(req.Amount)
-		effectiveDate, _ := time.Parse("2026-01-02", req.EffectiveDate)
+		effectiveDate, _ := time.Parse(time.DateOnly, req.EffectiveDate)
 		changeDir := assets.ChangeDirectionIncrease
 		if req.Direction == string(assets.ChangeDirectionDecrease) {
 			changeDir = assets.ChangeDirectionDecrease
@@ -198,14 +202,14 @@ func AdjustAssetWorth(log logging.Logger, commands assets.Commands) http.Handler
 		// We use the same not found response for both asset and class not
 		// found to avoid leaking existence of asset IDs.
 		case errors.Is(err, assets.ErrAssetNotFound) || errors.Is(err, assets.ErrClassAccountMismatch):
-			httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "asset not found"})
+			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "asset not found"})
 			return
 		case errors.Is(err, assets.ErrClassReserved):
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "asset class is reserved and cannot be modified"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "asset class is reserved and cannot be modified"})
 			return
 		case err != nil:
 			log.Error(r.Context(), "adjust asset worth: failed to update asset worth", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update asset worth"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update asset worth"})
 			return
 		}
 

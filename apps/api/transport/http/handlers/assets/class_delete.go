@@ -50,24 +50,26 @@ func DeleteClass(log logging.Logger, commands assets.Commands) http.Handler {
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
 		}
 
 		isValid, problems := req.isValid()
 		if !isValid {
-			httpx.JSONEncode(w, http.StatusBadRequest, problems)
-		}
-
-		err = commands.DeleteClass(r.Context(), accountID, classID)
-
-		switch {
-		case errors.Is(assets.ErrClassAccountMismatch, err) || errors.Is(assets.ErrClassNotFound, err):
-			httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "class not found"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
-		case err != nil:
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete class"})
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		// errors.Is takes (err, target); the arguments were reversed, so a missing class fell
+		// through to the 500 branch instead of answering 404.
+		switch err = commands.DeleteClass(r.Context(), accountID, classID); {
+		case errors.Is(err, assets.ErrClassAccountMismatch), errors.Is(err, assets.ErrClassNotFound):
+			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "class not found"})
+		case err != nil:
+			log.Error(r.Context(), "delete class: failed to delete class", err)
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete class"})
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 }

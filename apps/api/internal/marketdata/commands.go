@@ -15,6 +15,11 @@ type CommandStore interface {
 	Get(ctx context.Context, lsID uuid.UUID) (*Listing, error)
 	Create(ctx context.Context, listing *Listing) error
 	Update(ctx context.Context, listing *Listing) error
+	Delete(ctx context.Context, lsID uuid.UUID) error
+	// CountPortfolioUsage reports how many portfolio rows point at a listing. It lives on
+	// this interface rather than being read from the portfolio feature because the only
+	// caller is DeleteListing, which needs the answer to decide whether the delete is safe.
+	CountPortfolioUsage(ctx context.Context, lsID uuid.UUID) (int, error)
 	CreateEODs(ctx context.Context, eods []*EOD) (int, error)
 	CreateProvider(ctx context.Context, provider *Provider) error
 }
@@ -78,7 +83,10 @@ func (c *Commands) CreateListing(
 	if listing.Source.IsManualIngestion() || priceSync == DeferPriceSync {
 		return listing, nil
 	}
-	c.s.SyncEOD(ctx, listing.ID, nil, nil)
+	// Best effort: a failed backfill leaves the listing with no accumulated range, so the
+	// first end-of-day read retries it. Creating the listing is the operation the caller
+	// asked for and it has already succeeded, so a provider hiccup must not fail it.
+	_, _ = c.s.SyncEOD(ctx, listing.ID, nil, nil)
 	return listing, nil
 }
 
@@ -151,6 +159,37 @@ type CreateEODsResult struct {
 
 // CreateEODs builds EOD datapoints for a listing and persists them with a single bulk
 // insert, skipping and counting datapoints that already exist.
+// DeleteListing removes a listing that nothing in a portfolio depends on.
+//
+// The delete is refused rather than cascaded. Every listing FK is either ON DELETE
+// CASCADE (position snapshots, end-of-day prices, upload records) or SET NULL (open
+// positions), so deleting one that is in use silently destroys an account's valuation
+// history and orphans its holdings -- damage the UI cannot undo and the user did not
+// ask for. Price history is not counted: it is the listing's own derived data and is
+// re-fetchable from the provider, so it goes with the listing.
+func (c *Commands) DeleteListing(ctx context.Context, id uuid.UUID) error {
+	listing, err := c.cs.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("delete listing: failed to fetch listing: %w", err)
+	}
+	if listing == nil {
+		return ErrListingNotFound
+	}
+
+	used, err := c.cs.CountPortfolioUsage(ctx, id)
+	if err != nil {
+		return fmt.Errorf("delete listing: failed to check portfolio usage: %w", err)
+	}
+	if used > 0 {
+		return fmt.Errorf("%w: %d portfolio rows reference %s", ErrListingInUse, used, listing.Symbol)
+	}
+
+	if err := c.cs.Delete(ctx, id); err != nil {
+		return fmt.Errorf("delete listing: failed to delete listing: %w", err)
+	}
+	return nil
+}
+
 func (c *Commands) CreateEODs(ctx context.Context, listingID uuid.UUID, symbol string, inputs []EODInput) (CreateEODsResult, error) {
 	if len(inputs) == 0 {
 		return CreateEODsResult{}, nil

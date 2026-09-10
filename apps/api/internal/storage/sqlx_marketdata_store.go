@@ -25,6 +25,10 @@ type SQLXMarketDataStore struct {
 	eodsTable             string
 	providerListingsTable string
 	catalogueSyncsTable   string
+	// Portfolio tables are read (never written) to answer whether a listing is safe to
+	// delete; the FKs would otherwise cascade a portfolio's history away with it.
+	positionsTable    string
+	posSnapshotsTable string
 }
 
 var (
@@ -46,6 +50,9 @@ func NewSQLXMarketDataStore(db *DB) *SQLXMarketDataStore {
 
 		providerListingsTable: qualifyTable(db, SchemaMarketData, TableProviderListing),
 		catalogueSyncsTable:   qualifyTable(db, SchemaMarketData, TableCatalogueSyncs),
+
+		positionsTable:    qualifyTable(db, SchemaPortfolio, TablePositions),
+		posSnapshotsTable: qualifyTable(db, SchemaPortfolio, TablePosSnapshots),
 	}
 }
 
@@ -87,6 +94,33 @@ func (s *SQLXMarketDataStore) Update(ctx context.Context, listing *marketdata.Li
 }
 
 // Get returns one listing by ID, or (nil, nil) when it does not exist.
+// Delete removes one listing. Callers are responsible for checking that nothing depends
+// on it first: the schema's cascades would otherwise take a portfolio's history with it.
+func (s *SQLXMarketDataStore) Delete(ctx context.Context, id uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.listingsTable))
+	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, id); err != nil {
+		return fmt.Errorf("delete listing: %w", err)
+	}
+	return nil
+}
+
+// CountPortfolioUsage counts the portfolio rows pointing at a listing -- open positions
+// and the position snapshots that make up an account's valuation history. Both are summed
+// in one round trip because the caller only needs to know whether the total is zero.
+func (s *SQLXMarketDataStore) CountPortfolioUsage(ctx context.Context, id uuid.UUID) (int, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT
+			(SELECT COUNT(1) FROM %s WHERE listing_id = ?) +
+			(SELECT COUNT(1) FROM %s WHERE listing_id = ?)
+	`, s.positionsTable, s.posSnapshotsTable))
+
+	var count int
+	if err := sqlx.GetContext(ctx, s.db.GetExecutor(ctx), &count, query, id, id); err != nil {
+		return 0, fmt.Errorf("count portfolio usage: %w", err)
+	}
+	return count, nil
+}
+
 func (s *SQLXMarketDataStore) Get(ctx context.Context, id uuid.UUID) (*marketdata.Listing, error) {
 	return s.selectListing(ctx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ?`, s.listingsTable), id)
 }

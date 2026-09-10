@@ -57,7 +57,9 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 	if err != nil {
 		return importer.ProcessResult{}, fmt.Errorf("open csv: %w", err)
 	}
-	defer rc.Close()
+	// The file is only read; a close error tells us nothing actionable and must not
+	// mask the processing result.
+	defer func() { _ = rc.Close() }()
 
 	rows, err := parser.ParseAll(rc)
 	if err != nil {

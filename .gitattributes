@@ -1,0 +1,30 @@
+# Line endings.
+#
+# Every text blob in this repository is already stored with LF, but nothing declared it, so
+# the working tree was left to `core.autocrlf`. On Windows that checks files out as CRLF
+# while the toolchain writes LF -- gofmt and Prettier both emit LF unconditionally -- so
+# `make lint` rewrote every Go file's line endings and left ~130 files looking modified.
+#
+# Declaring it here makes the checkout match what the tools produce, on every platform and
+# regardless of each developer's `core.autocrlf`. No renormalisation is needed: the stored
+# blobs are LF already.
+* text=auto eol=lf
+
+# Windows-only scripts have to keep CRLF to run.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never convert, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.db binary
+*.sqlite binary

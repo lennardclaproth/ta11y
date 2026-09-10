@@ -251,11 +251,10 @@ the importer's event flow (`import.accepted` → process → `import.completed`/
   table and its indexes are orphaned schema. Manual EOD goes through the generic import
   lifecycle ([002]); per-row errors are counted but not persisted, and any row error fails the
   whole import.
-- **API-provider auto-sync is currently non-functional.** `Syncer.SyncEOD` has a nil-result
-  bug (panics when the fetch loop runs) and is single-threaded (`TODO: worker pool`). Only the
-  MarketStack fetcher exists (no Alpha Vantage `EODFetcher`).
-- **No provider CRUD API** (providers are bootstrap-only) and **no admin/role middleware** —
-  the "admin" framing in `FEATURES.md` is not enforced in code.
+- **API-provider auto-sync only covers MarketStack.** `NewSyncer` is wired with a single
+  fetcher, so a listing whose source is `alpha_vantage` fails with "failed to find fetcher for
+  listing source". Syncing is also serial, one day at a time (`TODO: worker pool`, and
+  `TODO: implement batch insert` on the write side). The nil-result panic previously noted
+  here is fixed: `result` is built before the fetch loop runs.
 - `marketdata.Commands` has a startup constructor for provider bootstrap, but `Queries` and
-  `Syncer` do not yet have complete startup constructors, and routes are only wired in the
-  stale `cmd/server/main.go`.
+  `Syncer` do not yet have complete startup constructors.

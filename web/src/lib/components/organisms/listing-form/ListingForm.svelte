@@ -6,6 +6,11 @@
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import {
+		listingCurrencyOptions,
+		listingMetadataFields,
+		listingSources
+	} from './listing-form.types';
 
 	let {
 		onSave,
@@ -31,19 +36,9 @@
 	let errors = $state<Record<string, string>>({});
 	let failure = $state('');
 	let form: HTMLFormElement;
-	const sources = [
-		{ value: 'market_stack', label: 'Marketstack' },
-		{ value: 'alpha_vantage', label: 'Alpha Vantage' },
-		{ value: 'brandnewday', label: 'Brand New Day (manual uploads)' }
-	];
-	const metadata = [
-		{ key: 'exchange', label: 'Exchange', placeholder: 'e.g. XAMS' },
-		{ key: 'isin', label: 'ISIN', placeholder: 'e.g. IE00B3RBWM25' },
-		{ key: 'ticker', label: 'Ticker', placeholder: 'e.g. VWRL' },
-		{ key: 'region', label: 'Region', placeholder: 'e.g. Netherlands' },
-		{ key: 'type', label: 'Type', placeholder: 'e.g. ETF' },
-		{ key: 'description', label: 'Description', placeholder: 'Additional information' }
-	] as const;
+	// Shared with the edit form so the two never offer different metadata.
+	const sources = listingSources;
+	const metadata = listingMetadataFields;
 
 	async function focusError() {
 		await tick();
@@ -151,10 +146,7 @@
 						<Select
 							id={ctx.id}
 							bind:value={values.currency}
-							options={[
-								{ value: '', label: 'Not specified' },
-								...['EUR', 'USD', 'GBP', 'JPY'].map((value) => ({ value, label: value }))
-							]}
+							options={listingCurrencyOptions}
 							ariaDescribedby={ctx.describedby}
 							intent={ctx.invalid ? 'error' : 'default'}
 						/>

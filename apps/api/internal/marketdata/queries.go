@@ -187,8 +187,11 @@ func (q *Queries) GetEODByListing(
 		if err != nil {
 			return nil, fmt.Errorf("get eod by listing: %w: %w", ErrShouldAccumulateFailed, err)
 		}
-		if err == nil && q.s != nil {
-			q.s.SyncEOD(ctx, ls.ID, from, to)
+		if q.s != nil {
+			// Best effort, and deliberately not surfaced: the read below answers from whatever
+			// is already stored, so a failed refresh degrades to stale data rather than an error.
+			// (`err` is necessarily nil here -- the branch above returns otherwise.)
+			_, _ = q.s.SyncEOD(ctx, ls.ID, from, to)
 		}
 	}
 	// Fetch EOD data from the database, this will return the existing data if a sync is in progress, or the up to date data if not.

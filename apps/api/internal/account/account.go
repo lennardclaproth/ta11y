@@ -17,8 +17,8 @@ type Account struct {
 	// optional so accounts predating authentication remain valid, and is matched
 	// case-insensitively against a LOWER(email) unique index.
 	Email *string `db:"email"`
-	// Admin marks accounts allowed to reach admin-only screens. The API is
-	// unauthenticated today, so this records intent and does not enforce it.
+	// Admin marks accounts allowed to reach admin-only routes. RequireAdmin enforces
+	// it on every route registered through the adminOnly tier, answering 403.
 	Admin     bool      `db:"admin"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`

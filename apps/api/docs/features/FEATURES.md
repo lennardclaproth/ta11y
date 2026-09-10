@@ -105,17 +105,26 @@ and asset snapshots rebuilt — so the UI can refresh without polling.
 
 Admin screens (listings, dailies, provider credentials) are shown only to accounts flagged
 `admin`; the bootstrapped account is one. Non-admin accounts do not see them in the
-navigation and get an unavailable notice on a direct link. The API does not enforce the
-flag, so this hides screens rather than protecting them -- it needs real authentication
-before the API is reachable beyond localhost.
+navigation and get an unavailable notice on a direct link. Hiding them is a convenience:
+the routes behind them are registered admin-only and the API answers 403 on its own, so a
+non-admin who reaches one directly is refused rather than merely un-navigated.
 
 ### Listing management
-Admins create, update, list, and search market-data listings. Listings are the canonical
+Admins create, edit, delete, list, and search market-data listings. Listings are the canonical
 instruments referenced by portfolio transactions and end-of-day pricing. In the web app,
-open **Listings** from the navigation, enable admin mode when prompted, then choose
-**Add listing**. The form accepts a name, symbol and supported data source, with optional
+open **Listings** from the navigation -- it is present only for admin accounts -- then
+choose **Add listing**. The form accepts a name, symbol and supported data source, with optional
 instrument metadata. It preserves input on errors and identifies duplicate symbol/source
 pairs. Demo-mode additions remain available to lists and searches until a page reload.
+
+Each row offers **Edit** and **Delete**. Editing patches instrument metadata only — symbol,
+name and source identify the instrument at the provider, so they are shown rather than
+offered, and only the fields actually changed are sent. Deleting is guarded: every listing
+foreign key either cascades (position snapshots, end-of-day prices, upload records) or nulls
+(open positions), so `DELETE /marketdata/listing/{listing_id}` refuses with 409 when a
+portfolio still references the listing rather than destroying the valuation history that
+depends on it. Price history is not counted as usage — it is the listing's own derived data
+and is re-fetchable — so a listing nothing holds deletes cleanly.
 
 Listing search covers both the instruments you track and a locally cached copy of the
 provider's ticker catalogue, selected with `scope` (`tracked` by default, plus `catalogue`
@@ -134,7 +143,12 @@ matches substrings across its whole universe, so a search for `ASM` has far more
 (125) than `ASML` (31), and cached results for one query say nothing about another. A
 bounded seed run therefore caches the provider's most-traded instruments — its catalogue
 comes back in popularity order, so a small page budget goes a long way — and each explicit
-provider search tops the cache up for the terms you actually use. A provider search fetches
+provider search tops the cache up for the terms you actually use. The drawer reports how many
+entries are cached and how long ago they were seeded, and **Resync catalogue** starts a seed
+run from there: it costs one provider request per page, so the button names the budget it
+spends. The run is detached from the request that starts it, so the drawer polls its progress
+(pages fetched, entries cached) and reports the outcome; reopening while one is in flight
+picks it back up, and the API refuses a second run while one is running. A provider search fetches
 a single page: results are relevance-ranked, so the intended instrument is on the first
 page, and the UI says so when the provider matched more than it returned.
 
@@ -146,8 +160,21 @@ prices are viewed, so adding a batch cannot stall the request or drain the reque
 → Details: [Market data](%5B005%5D_MARKET_DATA.md)
 
 ### EOD market data
-Admins retrieve end-of-day price history, upload manual EOD price files, and check the
-processing status of an upload.
+Admins retrieve end-of-day price history and upload manual EOD price files. **Dailies**
+searches a listing, shows its OHLCV rows, and **Upload prices** posts a CSV for it.
+
+Only listings on a manual provider accept uploads; the API answers 422 for the rest, and
+the form reports that in place rather than hiding the action behind a client-side guess at
+which providers are manual. The CSV is the Brand New Day shape — columns `date`, `nav`,
+`ask`, `bid`, `dividend`, dates as `dd/mm/yyyy` — and each row's NAV is stored as that day's
+open, high, low and close, since a fund publishes one price a day rather than a candle.
+
+Processing is asynchronous and there is **no status endpoint**: EOD imports are not
+account-scoped, so they raise no websocket event either, and the upload is accepted with an
+import id that nothing can be asked about afterwards. The page therefore re-reads the
+listing's prices for a short window and reports how many rows landed, falling back to
+"still processing" rather than claiming a result it cannot see. Per-row parse errors are
+counted server-side but never surfaced.
 
 → Details: [Market data](%5B005%5D_MARKET_DATA.md)
 

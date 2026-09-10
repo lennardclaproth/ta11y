@@ -19,6 +19,13 @@
 		/** Injectable search fn (defaults to the marketdata service, so it works on mocks or live API). */
 		search?: (query: string) => Promise<ListingSearchRow[]>;
 		onSelect?: (listing: ListingSearchRow) => void;
+		/**
+		 * Fired when the clear button empties the field. Callers holding the selection in their
+		 * own state (rather than through `bind:value`) need this to drop it -- clearing the box
+		 * otherwise leaves whatever the selection was driving still on screen. Typing does not
+		 * fire it: that invalidates the selection but deliberately leaves the last result visible.
+		 */
+		onClear?: () => void;
 		ariaLabel?: string;
 		class?: string;
 	};
@@ -33,6 +40,7 @@
 		disabled = false,
 		search,
 		onSelect,
+		onClear,
 		ariaLabel = 'Search listings',
 		class: className = ''
 	}: Props = $props();
@@ -104,6 +112,7 @@
 		results = [];
 		open = false;
 		inputEl?.focus();
+		onClear?.();
 	}
 
 	function onInput() {
@@ -156,7 +165,7 @@
 		aria-label={ariaLabel}
 		{placeholder}
 		{disabled}
-		class="h-10 w-full rounded-xl border border-slate-300 bg-white pr-9 pl-9 text-sm text-slate-800 transition-colors placeholder:text-slate-500 focus:border-slate-400 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:opacity-50"
+		class="h-10 w-full rounded-xl border border-slate-300 bg-white pr-9 pl-9 text-sm text-slate-800 transition-colors placeholder:text-slate-500 focus:border-slate-400 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:opacity-50 [&::-webkit-search-cancel-button]:appearance-none"
 		oninput={onInput}
 		onkeydown={onKeydown}
 		onfocus={onFocus}

@@ -12,7 +12,7 @@ import (
 type AccountResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Admin gates the admin-only screens in clients. The API does not enforce it.
+	// Admin marks accounts the API admits to admin-only routes; it answers 403 to the rest.
 	Admin      bool    `json:"admin"`
 	ExternalID *string `json:"external_id,omitempty"`
 }

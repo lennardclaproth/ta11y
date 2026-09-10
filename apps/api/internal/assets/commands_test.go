@@ -40,7 +40,7 @@ func (fakeAssetsStore) DeleteClass(_ context.Context, _ uuid.UUID) error        
 // wires the bus and that a mutation publishes the rebuild-requested event.
 func TestCreateClassPublishesSnapshotsRebuildRequested(t *testing.T) {
 	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(2), memorybus.WithQueueSize(8))
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	got := make(chan eventbus.Envelope, 1)
 	sub, err := bus.Subscribe(assets.TopicSnapshotsRebuildRequested, func(_ context.Context, env eventbus.Envelope) error {
@@ -50,7 +50,7 @@ func TestCreateClassPublishesSnapshotsRebuildRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	// account.Queries is held by value on Commands; deref the constructed pointer.
 	aq := account.NewQueries(fakeAccountStore{exists: true})

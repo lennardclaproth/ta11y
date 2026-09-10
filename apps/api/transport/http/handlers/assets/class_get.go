@@ -60,7 +60,7 @@ func GetClasses(log logging.Logger, queries assets.Queries) http.Handler {
 		classes, err := queries.ListClasses(r.Context(), accountID, req.IncludeArchived)
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while executing list classes", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not list available classes"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not list available classes"})
 			return
 		}
 		res := make([]ClassResponse, 0, len(classes))
@@ -78,7 +78,7 @@ func GetClasses(log logging.Logger, queries assets.Queries) http.Handler {
 			res = append(res, cRes)
 		}
 
-		httpx.JSONEncode(w, http.StatusOK, res)
+		_ = httpx.JSONEncode(w, http.StatusOK, res)
 	})
 }
 
@@ -137,16 +137,16 @@ func GetClassDetails(log logging.Logger, queries assets.Queries) http.Handler {
 		}
 		classID, err := uuid.Parse(r.PathValue("class_id"))
 		if err != nil {
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"class_id": "class_id must be a valid UUID"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"class_id": "class_id must be a valid UUID"})
 			return
 		}
 		cd, err := queries.ClassDetails(r.Context(), classID, accID)
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while trying to get the class details", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not get class details"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not get class details"})
 		}
 		res := toClassDetailsResponse(cd)
-		httpx.JSONEncode(w, http.StatusOK, res)
+		_ = httpx.JSONEncode(w, http.StatusOK, res)
 	})
 }
 

@@ -50,6 +50,9 @@ func TestDegiroParser_ParseAll_HappyPath(t *testing.T) {
 		t.Fatalf("expected row 2 direction in, got %s", got[1].Direction)
 	}
 	price, err = money.NewPrice(641.02)
+	if err != nil {
+		t.Fatalf("failed to build expected price: %v", err)
+	}
 	if got[1].Amount != price {
 		t.Fatalf("expected row 2 amount 641.02, got %s", got[1].Amount)
 	}
