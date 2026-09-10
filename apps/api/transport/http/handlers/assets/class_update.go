@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -53,15 +54,25 @@ func UpdateClass(log logging.Logger, commands assets.Commands) http.Handler {
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
-		err = commands.UpdateClass(r.Context(), accountID, req.ID, req.Name, req.Archived)
-		if err != nil {
+
+		// The name-length rule was written but never applied: isValid had no caller, so any
+		// name -- empty, or far past the column's limit -- reached the command untouched.
+		if isValid, problems := req.isValid(); !isValid {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+
+		switch err = commands.UpdateClass(r.Context(), accountID, req.ID, req.Name, req.Archived); {
+		case errors.Is(err, assets.ErrClassAccountMismatch), errors.Is(err, assets.ErrClassNotFound):
+			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "class not found"})
+		case err != nil:
 			log.Error(r.Context(), "An error occurred while updating a class", err)
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update class"})
-			return
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update class"})
+		default:
+			w.WriteHeader(http.StatusNoContent)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	})
 }

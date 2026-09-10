@@ -54,25 +54,25 @@ func Create(log logging.Logger, commands account.Commands) http.Handler {
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 			return
 		}
 		isValid, problems := req.isValid()
 		if !isValid {
-			httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
 			return
 		}
 
 		id, err := commands.Create(r.Context(), nil, req.ExternalID, req.Name)
 		if err != nil {
 			if errors.Is(err, account.ErrAccountAlreadyExists) {
-				httpx.JSONEncode(w, http.StatusConflict, map[string]string{"error": "account with the same external_id already exists"})
+				_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"error": "account with the same external_id already exists"})
 			}
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create account"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create account"})
 			log.Error(r.Context(), "create account: failed to create account", err)
 			return
 		}
 
-		httpx.JSONEncode(w, http.StatusCreated, CreateAccountResponse{ID: id.String()})
+		_ = httpx.JSONEncode(w, http.StatusCreated, CreateAccountResponse{ID: id.String()})
 	})
 }

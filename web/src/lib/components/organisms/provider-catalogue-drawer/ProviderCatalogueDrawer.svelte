@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ApiError } from '$lib/api/client';
-	import type { CatalogueStatus, Listing, ListingSearchRow } from '$lib/api/types';
+	import type { CatalogueStatus, CatalogueSync, Listing, ListingSearchRow } from '$lib/api/types';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
@@ -11,8 +11,10 @@
 		createListing,
 		getCatalogueStatus,
 		searchListings,
-		searchProviderCatalogue
+		searchProviderCatalogue,
+		startCatalogueSync
 	} from '$lib/services/marketdata';
+	import { toast } from '$lib/stores/toast.svelte';
 	import type { AdoptOutcome } from './provider-catalogue-drawer.types';
 
 	type Props = {
@@ -46,6 +48,20 @@
 
 	let status = $state<CatalogueStatus | null>(null);
 
+	/**
+	 * Page budget asked for on a resync. Sent explicitly rather than left to the backend
+	 * default so the button can name the cost it is about to spend -- one provider request
+	 * per page -- the same way the metered search does.
+	 */
+	const SEED_PAGES = 20;
+	/** How often a run in flight is re-read. The run is detached, so progress only arrives by asking. */
+	const SYNC_POLL_MS = 2000;
+
+	let startingSync = $state(false);
+	let syncError = $state<string | null>(null);
+	/** The run this drawer is following, so its outcome is announced exactly once. */
+	let watchedRunId = $state<string | null>(null);
+
 	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
 
 	/** Days since the catalogue was last seeded, used for the staleness warning. */
@@ -56,21 +72,85 @@
 		return Math.floor(elapsed / 86_400_000);
 	});
 
+	const latestRun = $derived(status?.latest_sync ?? null);
+	const syncRunning = $derived(latestRun?.status === 'running');
+
 	// Reset per-session state each time the drawer opens, and refresh the cache
 	// summary so the staleness line reflects reality rather than a stale snapshot.
 	$effect(() => {
 		if (!open) return;
 		outcomes = [];
 		selectedIds = [];
+		clearProviderNotice();
+		syncError = null;
 		void loadStatus();
 	});
 
+	// A seed run is detached from the request that started it, so progress only exists on the
+	// run row: poll while one is in flight. `syncRunning` is a boolean, so this re-runs on the
+	// transition rather than on every refreshed status, and tears the interval down when the
+	// run reaches a terminal state or the drawer closes.
+	$effect(() => {
+		if (!open || !syncRunning) return;
+		const timer = setInterval(() => void loadStatus(), SYNC_POLL_MS);
+		return () => clearInterval(timer);
+	});
+
+	/**
+	 * Drops the "the provider matched more than it returned" notice. It describes one provider
+	 * response and one query, so anything that replaces the rows -- a local search, a page, a
+	 * reopen -- makes it a claim about results no longer on screen.
+	 */
+	function clearProviderNotice() {
+		upstreamTotal = null;
+		truncated = false;
+	}
+
 	async function loadStatus() {
 		try {
-			status = await getCatalogueStatus(source);
+			const next = await getCatalogueStatus(source);
+			status = next;
+			announceIfFinished(next.latest_sync ?? null);
 		} catch {
-			// The summary is contextual; failing to load it must not block searching.
-			status = null;
+			// The summary is contextual; failing to load it must not block searching. The last
+			// known value is kept rather than cleared: a poll that blips would otherwise hide the
+			// line and, because the effect watches `syncRunning`, stop the polling with it.
+		}
+	}
+
+	/** Reports the followed run once it reaches a terminal state, then stops following it. */
+	function announceIfFinished(run: CatalogueSync | null) {
+		if (!run || run.id !== watchedRunId || run.status === 'running') return;
+		watchedRunId = null;
+		if (run.status === 'completed') {
+			toast.success(`Catalogue resynced — ${run.rows_upserted.toLocaleString()} entries cached`);
+		} else {
+			syncError = run.last_error ?? 'The catalogue sync failed. Try again.';
+		}
+	}
+
+	/**
+	 * Starts a bounded seed run. The API answers immediately and works in the background, so
+	 * the only thing to do here is start following it.
+	 */
+	async function startSync() {
+		startingSync = true;
+		syncError = null;
+		try {
+			const run = await startCatalogueSync({ source, pages: SEED_PAGES });
+			watchedRunId = run.id;
+			// Show the run straight away rather than waiting a poll for it to appear.
+			if (status) status = { ...status, latest_sync: run };
+		} catch (cause) {
+			if (cause instanceof ApiError && cause.status === 409) {
+				// One is already running -- follow that one instead of reporting a failure.
+				await loadStatus();
+				watchedRunId = status?.latest_sync?.id ?? null;
+			} else {
+				syncError = 'Could not start the catalogue sync. Check your connection and try again.';
+			}
+		} finally {
+			startingSync = false;
 		}
 	}
 
@@ -82,6 +162,7 @@
 		if (!query.trim()) return;
 		loading = true;
 		error = null;
+		clearProviderNotice();
 		try {
 			const response = await searchListings({
 				q: query.trim(),
@@ -196,16 +277,42 @@
 				Search instruments cached from {source.replace('_', ' ')} and add them to your listings. Cached
 				results are free; asking the provider directly costs one API request.
 			</p>
-			{#if status}
-				<p class="text-xs text-slate-500">
-					<span>{status.entries.toLocaleString()} entries cached</span>
-					{#if daysSinceSync !== null}
-						<span>· last synced {daysSinceSync === 0 ? 'today' : `${daysSinceSync} days ago`}</span>
-					{/if}
-					{#if daysSinceSync !== null && daysSinceSync > 90}
-						<span class="text-amber-700">— this may be out of date.</span>
-					{/if}
-				</p>
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				{#if status}
+					<p class="text-xs text-slate-500">
+						<span>{status.entries.toLocaleString()} entries cached</span>
+						{#if syncRunning && latestRun}
+							<!-- A run in flight replaces the staleness line: it has no finished_at yet, so
+							     "last synced" would have nothing to say. -->
+							<span>
+								· syncing… {latestRun.pages_fetched} of {SEED_PAGES} pages, {latestRun.rows_upserted.toLocaleString()}
+								entries
+							</span>
+						{:else}
+							{#if daysSinceSync !== null}
+								<span
+									>· last synced {daysSinceSync === 0 ? 'today' : `${daysSinceSync} days ago`}</span
+								>
+							{/if}
+							{#if daysSinceSync !== null && daysSinceSync > 90}
+								<span class="text-amber-700">— this may be out of date.</span>
+							{/if}
+						{/if}
+					</p>
+				{/if}
+				<Button
+					variant="outline"
+					intent="secondary"
+					size="sm"
+					disabled={startingSync || syncRunning}
+					loading={startingSync || syncRunning}
+					onclick={startSync}
+				>
+					{syncRunning ? 'Syncing…' : `Resync catalogue (${SEED_PAGES} requests)`}
+				</Button>
+			</div>
+			{#if syncError}
+				<p role="alert" class="text-sm text-red-700">{syncError}</p>
 			{/if}
 		</div>
 

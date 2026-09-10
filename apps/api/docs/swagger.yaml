@@ -2,8 +2,8 @@ definitions:
   account.AccountResponse:
     properties:
       admin:
-        description: Admin gates the admin-only screens in clients. The API does not
-          enforce it.
+        description: Admin marks accounts the API admits to admin-only routes; it
+          answers 403 to the rest.
         type: boolean
       external_id:
         type: string
@@ -2212,6 +2212,48 @@ paths:
               type: string
             type: object
       summary: Create listing
+      tags:
+      - listings
+  /marketdata/listing/{listing_id}:
+    delete:
+      description: Delete a listing. Refused with 409 when a portfolio still references
+        it, because deleting one cascades to position snapshots and orphans open positions.
+      parameters:
+      - description: Listing ID
+        in: path
+        name: listing_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Listing deleted
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a listing
       tags:
       - listings
   /marketdata/listings:

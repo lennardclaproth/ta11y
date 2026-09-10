@@ -108,12 +108,16 @@ func (c *Commands) CreateAsset(
 		if err != nil {
 			return fmt.Errorf("create asset: could not aggregate the class total : %w", err)
 		}
-		// Create mutation entry for initial worth with class total aggregated
-		c.CreateMutation(txCtx,
+		// Create mutation entry for initial worth with class total aggregated. The mutation is
+		// the asset's opening balance, so a failure here has to fail the transaction: letting it
+		// through would leave an asset whose worth no mutation accounts for.
+		if _, err := c.CreateMutation(txCtx,
 			accID, classID, asset.ID,
 			ChangeTypeSet, nil,
 			initialWorth, 0, classTotal,
-			date, note)
+			date, note); err != nil {
+			return fmt.Errorf("create asset: could not create the initial worth mutation: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
@@ -213,6 +217,10 @@ func (c *Commands) UpdateAssetWorth(
 		}
 		previousWorth := asset.CurrentWorth
 		classTotal, err := c.ca.AggregateValue(txCtx, accID, asset.ClassID)
+		if err != nil {
+			// Without this the mutation below was written against a zero class total.
+			return fmt.Errorf("update asset worth: could not aggregate the class total: %w", err)
+		}
 		// Create mutation for change
 		m, err := c.CreateMutation(txCtx, accID, asset.ClassID, asset.ID,
 			changeType, direction,

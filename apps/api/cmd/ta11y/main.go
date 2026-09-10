@@ -376,6 +376,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("GET /marketdata/eods", marketdatahttp.GetEOD(app.log, app.marketDataQueries))
 	adminOnly("POST /marketdata/listing", marketdatahttp.CreateListing(app.log, app.marketDataCommands))
 	adminOnly("PATCH /marketdata/listing", marketdatahttp.UpdateListingFields(app.log, app.marketDataCommands))
+	adminOnly("DELETE /marketdata/listing/{listing_id}", marketdatahttp.DeleteListing(app.log, app.marketDataCommands))
 	adminOnly("POST /marketdata/catalogue/search", marketdatahttp.SearchProviderCatalogue(app.log, app.marketDataCatalog, app.marketDataQueries))
 	adminOnly("POST /marketdata/catalogue/sync", marketdatahttp.StartCatalogueSync(app.log, app.marketDataCatalog))
 	adminOnly("GET /marketdata/catalogue/status", marketdatahttp.GetCatalogueStatus(app.log, app.marketDataQueries))

@@ -163,30 +163,6 @@ func normalizedID(v *string) string {
 	return strings.TrimSpace(*v)
 }
 
-// getPositionFromMap tries to find an existing position for the given transaction based on ISIN or symbol.
-// If no position exists, it creates a new one and adds it to the map.
-func getPositionFromMap(accID uuid.UUID, positions *map[string]*Position, tx Transaction) (*Position, error) {
-	txID, err := tx.GetID()
-	if err != nil {
-		return nil, err
-	}
-	// Fallback to symbol-based mapping if ISIN is not available
-	if pos, ok := (*positions)[txID]; ok {
-		return pos, nil
-	}
-	// No existing position found for this transaction, create a new one
-	pos, err := NewPosition(accID, tx.ISIN, tx.Symbol, nil, tx.OccurredAt)
-	if err != nil {
-		return nil, err
-	}
-	id, err := pos.Identity()
-	if err != nil {
-		return nil, err
-	}
-	(*positions)[id] = pos
-	return pos, nil
-}
-
 func parseManualType(raw string) (TransactionType, error) {
 	normalized := TransactionType(strings.ToUpper(strings.TrimSpace(raw)))
 	switch normalized {

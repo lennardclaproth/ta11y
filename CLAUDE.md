@@ -53,12 +53,20 @@ imply a command was run when it wasn't, and don't call work complete without the
 
 ## Documentation
 
-- Feature docs are consolidated in `apps/api/docs/features/FEATURES.md` — one short overview of
-  every feature. The legacy per-feature `NNN_NAME.md` files are gone; don't recreate them. Read it
-  before changing a documented feature and update its entry in the same task when behaviour changes.
+- Feature docs live in `apps/api/docs/features/` in two layers. `FEATURES.md` is the index: one
+  short overview per feature, and the only thing most changes need to touch. Alongside it sit the
+  per-feature `[NNN]_NAME.md` details, one per feature ID, linked from their `FEATURES.md` entry.
+  Read the entry — and the detail doc when you are changing how something works — before touching
+  a documented feature, and update both in the same task when behaviour changes.
+- **Keep the detail docs short.** They exist for what `FEATURES.md` has no room for: the domain
+  and data model, lifecycles, processing rules, events, a code map, and an honest
+  "gaps / not implemented" list. They are not a transcript of the code — never paste
+  implementations, and prefer naming a file over describing it. If a section only restates the
+  overview, delete it. Anything that says "planned" or "not implemented" rots fastest: verify it
+  against the code before trusting it, and correct it when you find it stale.
 - Update the root `CHANGELOG.md` under `Unreleased` with Keep a Changelog categories
   (`Added`/`Changed`/`Fixed`) and the `[NNN]` feature ID. New IDs come from the changelog sequence
-  (highest today: `030`). Skip the changelog for refactor-only or tooling-only changes.
+  (highest today: `031`). Skip the changelog for refactor-only or tooling-only changes.
 - If a change can't be mapped confidently to an existing feature ID, stop and ask.
 
 ## Gotchas

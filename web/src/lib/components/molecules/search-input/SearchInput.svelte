@@ -62,8 +62,18 @@
 	// Only the trailing clear button reserves space; the placeholder and the field's
 	// own affordances already say this is a search box, so a leading icon would be a
 	// second thing to look at for no extra meaning.
+	//
+	// `type="search"` makes Chromium paint its own clear button inside the field, which lands
+	// beside the one below and reads as two X's. The type is worth keeping for the semantics,
+	// so the native affordance is suppressed and this component owns clearing outright.
 	const inputClasses = $derived(
-		[clearable ? inputIconPaddingClasses[size].right : '', className].filter(Boolean).join(' ')
+		[
+			'[&::-webkit-search-cancel-button]:appearance-none',
+			clearable ? inputIconPaddingClasses[size].right : '',
+			className
+		]
+			.filter(Boolean)
+			.join(' ')
 	);
 </script>
 

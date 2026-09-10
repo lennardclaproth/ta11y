@@ -257,6 +257,54 @@ func CreateListing(
 	})
 }
 
+// DeleteListing removes a listing that no portfolio depends on.
+//
+// A listing in use is refused with 409 rather than deleted: the schema cascades from a
+// listing to its position snapshots and nulls open positions, so honouring the delete
+// would destroy an account's valuation history for that instrument. The message names
+// the count so the caller can explain why.
+//
+// @Summary Delete a listing
+// @Description Delete a listing. Refused with 409 when a portfolio still references it, because deleting one cascades to position snapshots and orphans open positions.
+// @Tags listings
+// @Produce json
+// @Param listing_id path string true "Listing ID"
+// @Success 204 "Listing deleted"
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /marketdata/listing/{listing_id} [delete]
+func DeleteListing(
+	log logging.Logger,
+	commands *marketdata.Commands,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(r.PathValue("listing_id"))
+		if err != nil {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"listing_id": "listing_id must be a uuid"})
+			return
+		}
+
+		if err := commands.DeleteListing(r.Context(), id); err != nil {
+			switch {
+			case errors.Is(err, marketdata.ErrListingNotFound):
+				_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"listing": "listing not found"})
+			case errors.Is(err, marketdata.ErrListingInUse):
+				_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{
+					"listing": "this listing is used by a portfolio and cannot be deleted",
+				})
+			default:
+				log.Error(r.Context(), "delete listing: failed to delete listing", err)
+				_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete listing"})
+			}
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 // UpdateListingFields updates specific fields for an existing listing.
 //
 // @Summary Update listing fields

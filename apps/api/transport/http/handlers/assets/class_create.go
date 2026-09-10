@@ -42,14 +42,14 @@ func CreateClass(log logging.Logger, commands assets.Commands) http.Handler {
 			if httpx.WriteDecodeError(w, err) {
 				return
 			}
-			httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
 		}
 		class, err := commands.CreateClass(r.Context(), accountID, req.Name)
 		if err != nil {
-			httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset class"})
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create asset class"})
 			log.Error(r.Context(), "create class: failed to create class.", err)
 			return
 		}
-		httpx.JSONEncode(w, http.StatusCreated, CreateAssetClassResponse{ID: class.ID})
+		_ = httpx.JSONEncode(w, http.StatusCreated, CreateAssetClassResponse{ID: class.ID})
 	})
 }

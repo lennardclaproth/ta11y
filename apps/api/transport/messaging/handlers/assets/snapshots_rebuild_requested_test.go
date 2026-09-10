@@ -31,7 +31,7 @@ func (immediateUOW) Do(ctx context.Context, fn func(txCtx context.Context) error
 
 func TestSnapshotsRebuildRequestedRebuildsAndAnnounces(t *testing.T) {
 	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(2), memorybus.WithQueueSize(8))
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	got := make(chan eventbus.Envelope, 1)
 	sub, err := bus.Subscribe(assets.TopicSnapshotsRebuilt, func(_ context.Context, env eventbus.Envelope) error {
@@ -41,7 +41,7 @@ func TestSnapshotsRebuildRequestedRebuildsAndAnnounces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	builder := assets.NewBuilder(fakeBuilderStore{}, immediateUOW{})
 	handler := NewSnapshotsRebuildRequestedHandler(builder, bus, nil)

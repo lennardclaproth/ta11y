@@ -172,7 +172,7 @@ No dark theme is currently defined. A future dark theme requires explicit role m
 | Controls | Noto Sans | 14px for small/medium controls; 16px for large controls |
 | Monetary values | Noto Sans | Reuse Money's tabular numeric styling and formatter |
 
-Heading weights are medium, semibold, and bold; Text also supports normal. The `font-display` token currently resolves to Noto Sans; use `font-heading` for serif headings. Fonts are locally served from `web/static/fonts/` with swap loading.
+Heading weights are medium, semibold, and bold; Text also supports normal. The `font-display` token currently resolves to Noto Sans; use `font-heading` for serif headings. Fonts are locally served from `web/static/fonts/` with swap loading. Only one EB Garamond weight ships (regular), so heading weights at or above semibold are **synthesized** by the browser -- its `@font-face` must therefore declare `font-weight: 400` and nothing wider, or the browser treats the regular as covering the range and renders every heading at 400. Shipping a real semibold file is the better fix when a heavier serif is wanted.
 
 **The Hierarchy Rule.** Choose heading level for document structure and size for visual hierarchy. Use one page h1 and meaningful subordinate levels. Reserve small text for secondary information, not the only explanation of an error or amount.
 
