@@ -1,12 +1,10 @@
 /**
  * One press treatment for every action in this design.
  *
- * Review of the final design: the press feedback of round 2 was its own invention (deeper amber,
- * inner shadow, a 1px shift) and read as foreign. This keeps the button exactly as the Button atom
- * already behaves — amber focus ring, 2% scale — and adds only a black bar under it, so the ring
- * also shows on a mouse press, where `focus-visible` stays off.
- *
- * `shadow-[…]` draws the bar, so pressing never reflows the row.
+ * Review of the revised design: the black bar under a pressed control had to go everywhere, so
+ * the press is now exactly the treatment the existing buttons already use — the amber ring.
+ * It is applied on `active:` as well as `focus-visible:`, because `focus-visible` stays off on a
+ * mouse press and the click would otherwise give no feedback at all. The Button atom adds its own
+ * 2% scale on top; nothing is drawn outside the control's own box, so a press never reflows a row.
  */
-export const pressClasses =
-	'active:ring-2 active:ring-amber-300 active:shadow-[0_4px_0_0_var(--color-slate-900)]';
+export const pressClasses = 'active:ring-2 active:ring-amber-300';

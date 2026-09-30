@@ -12,7 +12,7 @@
 		startOfMonthUTC
 	} from '$lib/components/molecules/calendar/calendar.utils';
 	import { icons } from '../shared/icons';
-	import { period } from '../shared/mock-data';
+	import { firstRecordDate, period } from '../shared/mock-data';
 	import { pressClasses } from '../shared/press';
 
 	/**
@@ -34,11 +34,19 @@
 
 	let { layout = 'inline', showCaption = false, open = $bindable(false) }: Props = $props();
 
+	/**
+	 * Short ranges, long ranges and Max, in that reading order. `Max` runs from the first record on
+	 * the account, so it is the only preset whose start is data and not arithmetic on today.
+	 */
 	const presets = [
 		{ value: '1m', label: '1M', from: '2026-06-01', to: '2026-06-30' },
 		{ value: '3m', label: '3M', from: '2026-04-01', to: '2026-06-30' },
 		{ value: '6m', label: '6M', from: '2026-01-01', to: '2026-06-30' },
-		{ value: 'ytd', label: 'YTD', from: period.from, to: period.to }
+		{ value: 'ytd', label: 'YTD', from: period.from, to: period.to },
+		{ value: '1y', label: '1Y', from: '2025-07-01', to: '2026-06-30' },
+		{ value: '3y', label: '3Y', from: '2023-07-01', to: '2026-06-30' },
+		{ value: '5y', label: '5Y', from: '2021-07-01', to: '2026-06-30' },
+		{ value: 'max', label: 'Max', from: firstRecordDate, to: '2026-06-30' }
 	];
 
 	let preset = $state('ytd');

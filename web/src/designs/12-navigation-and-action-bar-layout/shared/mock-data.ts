@@ -19,6 +19,9 @@ import type { NavItem } from '$lib/components/molecules/nav-menu/nav-menu.types'
 
 export const account = { name: 'Demo account', email: 'demo@ta11y.example' };
 
+/** Oldest record on the fake account; the `Max` preset starts here instead of counting back. */
+export const firstRecordDate = '2019-04-01';
+
 /** The one period that lives in the overview and follows you between pages. */
 export const period = {
 	from: '2026-01-01',
