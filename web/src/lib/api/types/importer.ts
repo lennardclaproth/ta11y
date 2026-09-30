@@ -26,3 +26,38 @@ export interface EODImportInput {
 	file: File;
 	listing_id: string;
 }
+
+/** Lifecycle of one import record; `pending` and `processing` are not final. */
+export type ImportStatus = 'pending' | 'processing' | 'in_progress' | 'completed' | 'failed';
+
+/** Which destination an import filled. */
+export type ImportType = 'cashflow' | 'portfolio' | 'eod';
+
+/**
+ * A product an import brought in that no listing matches. It is stored and visible in
+ * the ledger, but contributes no market value until its listing exists.
+ */
+export interface UnlinkedProduct {
+	name: string;
+	isin: string | null;
+	symbol: string | null;
+	transactions: number;
+}
+
+/** `GET /imports/{import_id}` — mirrors `importer.ImportResultResponse`. */
+export interface ImportResult {
+	import_id: string;
+	type: ImportType;
+	status: ImportStatus;
+	status_msg: string;
+	/** `file_not_recognised` when the parser refused the file, otherwise empty. */
+	reason: string;
+	total_rows: number;
+	imported: number;
+	duplicates: number;
+	failed: number;
+	created_at: string;
+	updated_at: string;
+	/** Empty until a portfolio import has completed. */
+	unlinked_products: UnlinkedProduct[];
+}
