@@ -262,6 +262,17 @@ family to 400/404/422 and duplicate → 409; else 500.
   day; aggregate per-day position snapshots into account `PortfolioSnapshot` rows (net /
   cumulative cashflow, time-weighted return). Zero position snapshots ⇒ `ErrPortfolioNoSnapshots`.
   The lock is always released (fresh background context) even on cancellation.
+- **Listing linking runs on every rebuild**, so a listing added after an import links the
+  transactions that were already there. The match is `marketdata.Queries.ListingByIdentity`:
+  the exact ISIN, or the exact symbol when the instrument has no ISIN. A present-but-unknown
+  ISIN does not fall back to the symbol, and no match leaves `listing_id` null rather than
+  attaching the position to a near neighbour — an unlinked position is still built, it simply
+  produces no snapshots and therefore no market value. The split replay resolves listings the
+  same way.
+- **Import deduplication is content-based.** The unique row `checksum` covers what the row is
+  plus the dedup sequence the importer stamps ([032]); the CSV line number is stored and orders
+  same-day rows but is no longer part of the checksum, so a partly overlapping export is
+  recognised instead of imported twice.
 - **Manual create** persists `origin = MANUAL`, `import_id = NULL`, `position_id = NULL`;
   CASH encodes direction in the `Quantity` sign and stores an absolute amount; BUY/SELL derive
   `unit_price = amount / quantity`. It emits no event and does not rebuild.
@@ -284,7 +295,7 @@ There is **no** rebuild-*request* event; the only async rebuild trigger is `impo
 | Path | Responsibility |
 | --- | --- |
 | `internal/portfolio/commands.go` | Manual create, projection create, bulk import insert + `CommandStore` |
-| `internal/portfolio/queries.go` | Snapshot/position reads + `QueryStore` |
+| `internal/portfolio/queries.go` | Snapshot/position reads, `UnlinkedProducts` for one import + `QueryStore` |
 | `internal/portfolio/builder.go` | Rebuild engine + `PositionStore`/`PortfolioStore`/`TransactionStore`/`Locker`; publishes `portfolio.rebuilt` |
 | `internal/portfolio/transaction.go` · `position.go` · `portfolio.go` · `account.go` | Domain types, position math, snapshots, projection + build errors |
 | `internal/portfolio/events.go` | `TopicRebuilt` + `Rebuilt` |
