@@ -87,6 +87,56 @@ export function sourceLabel(row: CashflowTransaction): string {
 	return isManual(row) ? 'Manual' : row.source.toUpperCase();
 }
 
+/** Fake portfolio rows, used only for the "portfolio is still rebuilding" page state. */
+export type DesignPortfolioRow = {
+	id: string;
+	occurredAt: string;
+	listing: string;
+	side: 'Buy' | 'Sell';
+	quantity: number;
+	amount: number;
+	origin: 'MANUAL' | 'IMPORT';
+};
+
+export const designPortfolioRows: DesignPortfolioRow[] = [
+	{
+		id: 'pf-1',
+		occurredAt: '2026-07-14',
+		listing: 'NORTHWIND INDEX FUND',
+		side: 'Buy',
+		quantity: 10,
+		amount: 900,
+		origin: 'MANUAL'
+	},
+	{
+		id: 'pf-2',
+		occurredAt: '2026-09-22',
+		listing: 'HARBOUR WORLD ETF',
+		side: 'Buy',
+		quantity: 4,
+		amount: 400,
+		origin: 'IMPORT'
+	},
+	{
+		id: 'pf-3',
+		occurredAt: '2026-09-08',
+		listing: 'MERIDIAN BOND FUND',
+		side: 'Sell',
+		quantity: 6,
+		amount: 300,
+		origin: 'IMPORT'
+	},
+	{
+		id: 'pf-4',
+		occurredAt: '2026-08-19',
+		listing: 'NORTHWIND INDEX FUND',
+		side: 'Buy',
+		quantity: 5,
+		amount: 450,
+		origin: 'MANUAL'
+	}
+];
+
 /** "78 days ago" style distance, used as a plain-language check on a backdated date. */
 export function daysAgoLabel(iso: string, today: string): string {
 	const from = Date.parse(`${iso}T00:00:00Z`);

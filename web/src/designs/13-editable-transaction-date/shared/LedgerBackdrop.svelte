@@ -14,14 +14,27 @@
 
 	type Props = {
 		rows?: CashflowTransaction[];
-		/** Replaces the plain date cell (variant C edits the date in place). */
-		dateCell?: Snippet<[CashflowTransaction]>;
+		loading?: boolean;
+		/** Distinguishes an empty account from a filter that matches nothing. */
+		emptyText?: string;
+		/** Persistent page-level message, rendered above the toolbar. */
+		banner?: Snippet;
+		/** Toolbar content, e.g. the active filters of the "No matches" state. */
+		filters?: Snippet;
 		/** Extra right-hand column, e.g. a per-row action. */
 		actionCell?: Snippet<[CashflowTransaction]>;
 		onRowClick?: (row: CashflowTransaction) => void;
 	};
 
-	let { rows = designTransactions, dateCell, actionCell, onRowClick }: Props = $props();
+	let {
+		rows = designTransactions,
+		loading = false,
+		emptyText = 'No transactions yet. Add one to start your ledger.',
+		banner,
+		filters,
+		actionCell,
+		onRowClick
+	}: Props = $props();
 </script>
 
 {#snippet sourceCell(row: CashflowTransaction)}
@@ -36,18 +49,27 @@
 
 <div class="flex h-screen flex-col bg-taupe-100 pt-5">
 	<PageContentTemplate>
-		<LedgerToolbar title="Transactions" actionLabel="Add transaction" onAdd={() => {}} />
+		{#if banner}
+			{@render banner()}
+		{/if}
+		<LedgerToolbar title="Transactions" actionLabel="Add transaction" onAdd={() => {}}>
+			{#if filters}
+				{@render filters()}
+			{/if}
+		</LedgerToolbar>
 		<DataTable
 			{rows}
+			{loading}
+			{emptyText}
 			{onRowClick}
-			emptyText="No transactions match your filters"
+			sortKey="date"
+			sortDirection="desc"
 			columns={[
 				{
 					key: 'date',
 					header: 'Date',
 					sortKey: 'date',
-					width: 'w-48',
-					cell: dateCell,
+					width: 'w-40',
 					value: (r: CashflowTransaction) => formatDisplayDate(r.date.slice(0, 10))
 				},
 				{
@@ -55,16 +77,16 @@
 					header: 'Description',
 					value: (r: CashflowTransaction) => r.description
 				},
-				{ key: 'source', header: 'Entered', cell: sourceCell },
+				{ key: 'source', header: 'Entered', width: 'w-28', cell: sourceCell },
 				{ key: 'tag', header: 'Tag', value: (r: CashflowTransaction) => r.tag },
-				{ key: 'amount', header: 'Amount', align: 'right', cell: amountCell },
+				{ key: 'amount', header: 'Amount', align: 'right', width: 'w-32', cell: amountCell },
 				...(actionCell
 					? [
 							{
 								key: 'actions',
 								header: '',
 								align: 'right' as const,
-								width: 'w-40',
+								width: 'w-32',
 								cell: actionCell
 							}
 						]

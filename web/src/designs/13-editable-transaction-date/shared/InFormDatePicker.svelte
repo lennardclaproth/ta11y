@@ -7,6 +7,7 @@
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Calendar from '$lib/components/molecules/calendar/Calendar.svelte';
+	import type { PopoverPlacement } from '$lib/components/molecules/popover/popover.types';
 	import {
 		formatDisplayDate,
 		parseISODate,
@@ -24,6 +25,8 @@
 		disabled?: boolean;
 		/** Keep the panel inside the current stacking context (required inside a dialog). */
 		portal?: boolean;
+		/** Anchor the panel so it stays within a narrow dialog. */
+		placement?: PopoverPlacement;
 		open?: boolean;
 		ariaLabel?: string;
 		onChange?: (value: string | null) => void;
@@ -38,6 +41,7 @@
 		size = 'md',
 		disabled = false,
 		portal = false,
+		placement = 'bottom-end',
 		open = $bindable(false),
 		ariaLabel = 'Select date',
 		onChange,
@@ -61,7 +65,7 @@
 	}
 </script>
 
-<Popover bind:open {portal} placement="bottom-start" class="p-3">
+<Popover bind:open {portal} {placement} class="p-3">
 	{#snippet trigger(api)}
 		<button
 			type="button"
