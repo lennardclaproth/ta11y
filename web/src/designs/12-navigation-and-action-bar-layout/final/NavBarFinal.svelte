@@ -19,6 +19,8 @@
 		change?: 'value' | 'no-snapshot' | 'no-period' | 'none';
 		/** Opens the narrow-screen overview so the prototype can show it. */
 		overviewOpen?: boolean;
+		/** Opens the period picker so the prototype can show it. */
+		periodOpen?: boolean;
 	};
 
 	let {
@@ -26,7 +28,8 @@
 		showPeriod = true,
 		loading = false,
 		change = 'value',
-		overviewOpen = false
+		overviewOpen = false,
+		periodOpen = false
 	}: Props = $props();
 
 	const isActive = (href: string) => activeHref === href || activeHref.startsWith(`${href}/`);
@@ -66,7 +69,7 @@
 		</div>
 
 		<!-- Your overview, always visible from lg. -->
-		<AccountOverview {showPeriod} {loading} {change} />
+		<AccountOverview {showPeriod} {loading} {change} {periodOpen} />
 
 		<!-- Narrow screens: destinations behind the menu, the same overview behind one entry. -->
 		<div class="flex items-center gap-1 lg:hidden">
@@ -90,7 +93,7 @@
 				id="overview-panel"
 				class={['absolute top-full right-0 mt-2 lg:hidden', zClasses.popover].join(' ')}
 			>
-				<AccountOverview layout="panel" {showPeriod} {loading} {change} />
+				<AccountOverview layout="panel" {showPeriod} {loading} {change} {periodOpen} />
 			</div>
 		{/if}
 	</div>

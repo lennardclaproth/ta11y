@@ -22,10 +22,17 @@
 		showPeriod?: boolean;
 		loading?: boolean;
 		change?: 'value' | 'no-snapshot' | 'no-period' | 'none';
+		/** Opens the period picker so the prototype can show it. */
+		periodOpen?: boolean;
 	};
 
-	let { layout = 'inline', showPeriod = true, loading = false, change = 'value' }: Props =
-		$props();
+	let {
+		layout = 'inline',
+		showPeriod = true,
+		loading = false,
+		change = 'value',
+		periodOpen = false
+	}: Props = $props();
 </script>
 
 {#if layout === 'inline'}
@@ -35,7 +42,7 @@
 	>
 		<NetWorthBlock {loading} {change} />
 		{#if showPeriod}
-			<PeriodControl />
+			<PeriodControl open={periodOpen} />
 		{/if}
 		<AccountMenu
 			name={account.name}
@@ -63,7 +70,7 @@
 			<div class="border-t border-slate-300 p-4">
 				<Text as="span" size="xs" tone="muted" class="tracking-wide uppercase">Period</Text>
 				<div class="mt-2">
-					<PeriodControl layout="block" showCaption />
+					<PeriodControl layout="block" showCaption open={periodOpen} />
 				</div>
 			</div>
 		{/if}

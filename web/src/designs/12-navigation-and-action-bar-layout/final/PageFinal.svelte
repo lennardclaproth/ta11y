@@ -33,9 +33,16 @@
 		/** Named `view` because `state` would shadow the `$state` rune. */
 		view?: State;
 		overviewOpen?: boolean;
+		/** Opens the period picker so the prototype can show the presets inside it. */
+		periodOpen?: boolean;
 	};
 
-	let { page = 'cashflow', view = 'default', overviewOpen = false }: Props = $props();
+	let {
+		page = 'cashflow',
+		view = 'default',
+		overviewOpen = false,
+		periodOpen = false
+	}: Props = $props();
 
 	let selectedIds = $state(view === 'default' ? [...selectedTransactionIds] : []);
 	let tab = $state('positions');
@@ -73,6 +80,7 @@
 			{loading}
 			change={page === 'admin' ? 'no-period' : view === 'empty' ? 'none' : 'value'}
 			{overviewOpen}
+			{periodOpen}
 		/>
 	{/snippet}
 
@@ -153,6 +161,19 @@
 				{/snippet}
 			</TransactionsTable>
 		{:else if page === 'portfolio'}
+			<!-- The row filter belongs to the positions, so it disappears on the transactions tab. -->
+			{#snippet positionStatus()}
+				<Tabs
+					tabs={[
+						{ value: 'open', label: 'Open' },
+						{ value: 'closed', label: 'Closed' },
+						{ value: 'all', label: 'All' }
+					]}
+					bind:value={closedFilter}
+					size="sm"
+					ariaLabel="Position status"
+				/>
+			{/snippet}
 			<TableHeader
 				title={tab === 'positions' ? 'Positions' : 'Transactions'}
 				meta={loading
@@ -164,6 +185,7 @@
 					? 'Search symbol or name…'
 					: 'Search transactions…'}
 				bind:searchValue={query}
+				filters={tab === 'positions' ? positionStatus : undefined}
 			>
 				{#snippet before()}
 					<Tabs
@@ -174,18 +196,6 @@
 						bind:value={tab}
 						size="sm"
 						ariaLabel="Portfolio view"
-					/>
-				{/snippet}
-				{#snippet filters()}
-					<Tabs
-						tabs={[
-							{ value: 'open', label: 'Open' },
-							{ value: 'closed', label: 'Closed' },
-							{ value: 'all', label: 'All' }
-						]}
-						bind:value={closedFilter}
-						size="sm"
-						ariaLabel="Position status"
 					/>
 				{/snippet}
 				{#snippet actions()}

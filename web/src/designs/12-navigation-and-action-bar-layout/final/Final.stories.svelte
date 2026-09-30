@@ -15,5 +15,6 @@
 <Story name="Empty" args={{ page: 'cashflow', view: 'empty' }} />
 <Story name="Error" args={{ page: 'cashflow', view: 'error' }} />
 <Story name="No matches" args={{ page: 'cashflow', view: 'no-matches' }} />
+<Story name="Period picker" args={{ page: 'cashflow', periodOpen: true }} />
 <Story name="Portfolio" args={{ page: 'portfolio' }} />
 <Story name="Admin" args={{ page: 'admin' }} />
