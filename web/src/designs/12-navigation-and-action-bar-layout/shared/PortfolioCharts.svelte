@@ -13,7 +13,7 @@
 	} from './mock-data';
 
 	/** `actions` holds the chart-level actions, e.g. "Rebuild portfolio". */
-	let { actions }: { actions?: Snippet } = $props();
+	let { actions, loading = false }: { actions?: Snippet; loading?: boolean } = $props();
 </script>
 
 <div class="flex flex-col gap-3">
@@ -23,6 +23,7 @@
 			height="h-52"
 			labels={portfolioLabels}
 			xTickFormat={monthShort}
+			{loading}
 			datasets={[
 				{
 					label: 'Market value',

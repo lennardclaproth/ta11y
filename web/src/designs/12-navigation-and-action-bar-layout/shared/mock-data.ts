@@ -10,6 +10,7 @@ import {
 	cashflowMonthly,
 	cashflowTagDistribution,
 	cashflowTransactions,
+	listings,
 	portfolioPositions,
 	portfolioSnapshots
 } from '$lib/data/fixtures';
@@ -97,6 +98,11 @@ export const portfolioCostBasis = periodSnapshots.map((point) =>
 );
 
 const latestSnapshot = periodSnapshots[periodSnapshots.length - 1];
+
+/* ---------- Admin ---------- */
+
+/** Listings for the admin story: no ISIN column, the layout is what is being shown. */
+export const adminListings = listings.slice(0, 6);
 
 export const portfolioKpis: KpiItem[] = [
 	{

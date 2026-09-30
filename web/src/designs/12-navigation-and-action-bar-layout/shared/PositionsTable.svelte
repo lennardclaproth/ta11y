@@ -5,6 +5,20 @@
 	import { scaledToNumber } from '$lib/api/money';
 	import { positions } from './mock-data';
 	import type { PortfolioPosition } from '$lib/api/types';
+
+	type Props = {
+		rows?: PortfolioPosition[];
+		loading?: boolean;
+		error?: string | null;
+		emptyText?: string;
+	};
+
+	let {
+		rows = positions,
+		loading = false,
+		error = null,
+		emptyText = 'No positions'
+	}: Props = $props();
 </script>
 
 {#snippet marketValueCell(row: PortfolioPosition)}
@@ -26,8 +40,10 @@
 {/snippet}
 
 <DataTable
-	rows={positions}
-	emptyText="No positions"
+	{rows}
+	{loading}
+	{error}
+	{emptyText}
 	class="min-h-0 flex-1"
 	columns={[
 		{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
