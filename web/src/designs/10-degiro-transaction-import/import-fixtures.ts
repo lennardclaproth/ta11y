@@ -44,6 +44,12 @@ export const destinationResults: ImportDestinationResult[] = [
 	}
 ];
 
+/** The likely "empty" outcome of a monthly export: every row overlapped with an earlier upload. */
+export const noNewRowsResults: ImportDestinationResult[] = [
+	{ destination: 'Cashflow', status: 'completed', total: 240, imported: 0, duplicates: 240, failed: 0 },
+	{ destination: 'Portfolio', status: 'completed', total: 120, imported: 0, duplicates: 120, failed: 0 }
+];
+
 export const unlinkedProducts: UnlinkedProduct[] = [
 	{ id: 'p-1', name: 'Example World Index Fund', isin: 'XX0000000001', symbol: null, transactions: 12 },
 	{ id: 'p-2', name: 'Sample Technology Corp', isin: 'XX0000000002', symbol: 'SMPL', transactions: 6 },
