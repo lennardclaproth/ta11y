@@ -96,11 +96,17 @@
 		return countToneClasses.plain;
 	}
 
-	/** What a destination has to say beyond its counts — only when it did not fully succeed. */
+	/**
+	 * What a destination has to say beyond its counts — only when it did not fully
+	 * succeed. `status_msg` is a wrapped server error meant for the log, so it is
+	 * deliberately not shown; the classified `reason` is what carries meaning here.
+	 */
 	function destinationMessage(result: ImportResult | null): string {
 		if (!result) return 'This destination did not report back.';
 		if (result.status === 'failed') {
-			return result.reason === 'file_not_recognised' ? wrongFileMessage : result.status_msg;
+			return result.reason === 'file_not_recognised'
+				? wrongFileMessage
+				: 'This destination could not process the file. Nothing was added here.';
 		}
 		if (result.failed > 0) {
 			return `${result.failed} rows could not be read and were skipped.`;
@@ -274,10 +280,16 @@
 
 		if (run_ !== runId) return;
 
-		// A file neither destination recognised is the wrong export, not a half-import:
-		// there is nothing to report, so the form answers it directly.
+		// Two outcomes have nothing to report and belong on the form, where they can be
+		// acted on: a file neither destination recognised is the wrong export, and an
+		// upload neither destination accepted never became an import at all.
 		if (outcomes.every((outcome) => outcome.result?.reason === 'file_not_recognised')) {
 			failure = wrongFileMessage;
+			phase = 'form';
+			return;
+		}
+		if (outcomes.every((outcome) => outcome.result === null)) {
+			if (!failure) failure = 'The upload could not be accepted. Try again.';
 			phase = 'form';
 			return;
 		}
@@ -418,13 +430,16 @@
 			</FormField>
 
 			<FormField label="Brokerage export" id="imp-file">
-				<Dropzone
-					bind:files
-					accept=".csv"
-					disabled={phase === 'processing'}
-					label={file ? file.name : 'Drag the CSV here, or click to browse'}
-					hint={file ? `${(file.size / 1024).toFixed(1)} KB` : 'One file, .csv, up to 10 MB'}
-				/>
+				{#snippet children(ctx)}
+					<Dropzone
+						id={ctx.id}
+						bind:files
+						accept=".csv"
+						disabled={phase === 'processing'}
+						label={file ? file.name : 'Drag the CSV here, or click to browse'}
+						hint={file ? `${(file.size / 1024).toFixed(1)} KB` : 'One file, .csv, up to 10 MB'}
+					/>
+				{/snippet}
 			</FormField>
 
 			{@render trail()}
