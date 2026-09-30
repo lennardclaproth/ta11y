@@ -35,4 +35,9 @@ var (
 	ErrImportProviderNotManual = fmt.Errorf("import provider is not manual")
 	// ErrImportProcessorUnavailable indicates no processor is configured for the import type.
 	ErrImportProcessorUnavailable = fmt.Errorf("import processor unavailable")
+	// ErrImportNotFound indicates the requested import does not exist for this account.
+	ErrImportNotFound = fmt.Errorf("import not found")
+	// ErrImportFileNotRecognised indicates the uploaded file is not the export the
+	// selected vendor's parser expects.
+	ErrImportFileNotRecognised = fmt.Errorf("this is not the export this vendor produces")
 )

@@ -98,7 +98,9 @@ var (
 )
 
 // NewTransaction creates a new Transaction instance and generates its checksum.
-func NewTransaction(desc, note, source, tag string, direction CashFlowDirection, amount money.Price, date time.Time, rowNumber int, importID *uuid.UUID, accountType *AccountType, accID uuid.UUID) (*Transaction, error) {
+// rowNumber records where the row sat in its source file; dedupSeq separates rows
+// with identical content inside one file and is what the checksum uses.
+func NewTransaction(desc, note, source, tag string, direction CashFlowDirection, amount money.Price, date time.Time, rowNumber, dedupSeq int, importID *uuid.UUID, accountType *AccountType, accID uuid.UUID) (*Transaction, error) {
 	t := &Transaction{
 		ID:          uuid.New(),
 		AccountID:   accID,
@@ -115,14 +117,18 @@ func NewTransaction(desc, note, source, tag string, direction CashFlowDirection,
 		AccountType: accountType,
 		Tag:         tag,
 	}
-	t.Checksum = t.generateChecksum()
+	t.Checksum = t.generateChecksum(dedupSeq)
 	return t, nil
 }
 
 // generateChecksum creates a checksum for the transaction based on the fields
 // description, note, source, amountCents, and date. It uses amountCents instead
 // of amount to avoid floating-point precision issues.
-func (t *Transaction) generateChecksum() string {
+//
+// It digests what the row is, not where it sat in the file: dedupSeq separates
+// identical rows within one import, so the same transaction in a partly overlapping
+// export produces the same checksum and is recognised as already imported.
+func (t *Transaction) generateChecksum(dedupSeq int) string {
 	// initialize fields to be used in checksum generation, these fields need to be
 	// of type string
 	desc := strings.TrimSpace(t.Description)
@@ -130,7 +136,7 @@ func (t *Transaction) generateChecksum() string {
 	source := strings.TrimSpace(t.Source)
 	direction := string(t.Direction)
 	amountCents := fmt.Sprintf("%d", t.AmountCents)
-	rowNumber := fmt.Sprintf("%d", t.RowNumber)
+	sequence := fmt.Sprintf("%d", dedupSeq)
 	date := t.Date.Format("20060102") // Standard date format
 	accountID := ""
 	if t.AccountID != uuid.Nil {
@@ -138,7 +144,7 @@ func (t *Transaction) generateChecksum() string {
 	}
 	// concatenate all fields to form the payload string to generate a checksum
 	const sep = "\x1F" // Unit Separator character see -> https://www.ascii-code.com/character/%E2%90%9F
-	payload := strings.Join([]string{desc, note, source, direction, amountCents, date, rowNumber, accountID}, sep)
+	payload := strings.Join([]string{desc, note, source, direction, amountCents, date, sequence, accountID}, sep)
 	// digest the payload in byte format and encode it to hexadecimal string
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])
