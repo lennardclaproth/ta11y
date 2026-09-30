@@ -1,21 +1,13 @@
 /*
-  Design prototype for issue #11 only. Each class applies ONE Garamond heading weight to every
-  heading inside its subtree — the prototype stand-in for changing the Heading atom's default
-  weight. Nothing here is meant to ship; the real change belongs in the Heading atom and app.css.
+  Design prototype for issue #11 only. Puts the chosen weight — EB Garamond regular (400), the
+  one weight with a real font file in the repo — on every heading inside the subtree: headings
+  rendered by the Heading atom, bare <h1>…<h6> that bypass the atom, and the small <h3> labels
+  in the asset-class drawer.
+
+  This is the prototype stand-in for the real change, which belongs in the @layer base heading
+  rule of app.css plus the Heading atom's default weight. Nothing in this file ships.
 */
 
 .d11-weight-400 :is(h1, h2, h3, h4, h5, h6, .d11-sample) {
 	font-weight: 400;
-}
-
-/*
-  Only the EB Garamond regular file ships today, so a browser cannot render a true 500 here:
-  it would silently fall back to the regular and variant B would look identical to variant A.
-  The hairline stroke below approximates the extra ink of a real medium so the weight can be
-  judged. The build must ship an actual EB Garamond 500 file — no stroke, no synthetic bold.
-*/
-.d11-weight-500 :is(h1, h2, h3, h4, h5, h6, .d11-sample) {
-	font-weight: 500;
-	-webkit-text-stroke: 0.3px currentColor;
-	paint-order: stroke fill;
 }
