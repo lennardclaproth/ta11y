@@ -41,6 +41,10 @@
 	<Final scene="edit-error" />
 </Story>
 
+<Story name="Error on create" asChild>
+	<Final scene="create-error" />
+</Story>
+
 <Story name="Portfolio rebuild busy" asChild>
 	<Final scene="portfolio-busy" />
 </Story>

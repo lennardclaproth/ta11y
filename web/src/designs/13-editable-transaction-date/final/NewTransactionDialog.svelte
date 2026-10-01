@@ -4,6 +4,7 @@
 	// inside the dialog. Same dialog on Cashflow and Portfolio; only the fields below differ.
 	import { untrack } from 'svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
+	import Alert from '$lib/components/molecules/alert/Alert.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
@@ -17,11 +18,14 @@
 		initialDate?: string;
 		/** Prototypes open the calendar so the fixed screenshot shows the repaired popover. */
 		showCalendar?: boolean;
+		/** Refused save: the chosen date makes this an exact duplicate of an existing transaction. */
+		error?: string | null;
+		saving?: boolean;
 	};
 
 	const today = todayISO();
 
-	let { initialDate = today, showCalendar = false }: Props = $props();
+	let { initialDate = today, showCalendar = false, error = null, saving = false }: Props = $props();
 
 	let date = $state(untrack(() => initialDate));
 	let pickerOpen = $state(false);
@@ -47,7 +51,13 @@
 
 <Dialog open title="New transaction" size="md" dismissible>
 	<div class="space-y-3">
-		<DateHeader bind:value={date} bind:open={pickerOpen} {today} />
+		<DateHeader bind:value={date} bind:open={pickerOpen} {today} disabled={saving} />
+
+		{#if error}
+			<Alert intent="error" title="This date is already taken">
+				{error}
+			</Alert>
+		{/if}
 
 		<FormField label="Type" id="f-type">
 			{#snippet children(ctx)}
@@ -82,7 +92,7 @@
 	</div>
 
 	{#snippet footer()}
-		<Button variant="ghost" intent="secondary">Cancel</Button>
-		<Button intent="success">Save</Button>
+		<Button variant="ghost" intent="secondary" disabled={saving}>Cancel</Button>
+		<Button intent="success" loading={saving}>{saving ? 'Saving' : 'Save'}</Button>
 	{/snippet}
 </Dialog>

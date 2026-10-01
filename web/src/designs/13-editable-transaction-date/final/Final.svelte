@@ -14,6 +14,7 @@
 	type Scene =
 		| 'create'
 		| 'create-backdated'
+		| 'create-error'
 		| 'edit'
 		| 'edit-imported'
 		| 'edit-saving'
@@ -64,6 +65,11 @@
 		<NewTransactionDialog />
 	{:else if scene === 'create-backdated'}
 		<NewTransactionDialog initialDate={backdatedDate} showCalendar />
+	{:else if scene === 'create-error'}
+		<NewTransactionDialog
+			initialDate={backdatedDate}
+			error="A transaction with the same amount and description already exists on 14 Jul 2026. Pick another day or cancel."
+		/>
 	{:else if scene === 'edit'}
 		<TransactionDrawer row={manualRow} date={backdatedDate} />
 	{:else if scene === 'edit-imported'}
