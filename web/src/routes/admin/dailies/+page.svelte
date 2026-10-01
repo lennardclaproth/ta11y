@@ -136,7 +136,7 @@
 				{#snippet actions()}
 					<!-- Only listings on a manual provider accept uploads; the API is the authority on
 					     which those are, so the action stays available and reports its refusal. -->
-					<Button variant="ruled" disabled={!selected} onclick={() => (uploadOpen = true)}>
+					<Button shape="default" disabled={!selected} onclick={() => (uploadOpen = true)}>
 						<Icon icon="heroicons:cloud-arrow-up" />
 						Upload prices
 					</Button>

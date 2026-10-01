@@ -125,8 +125,10 @@
 				: `${visibleListings.length} ${visibleListings.length === 1 ? 'listing' : 'listings'}`}
 			description="Manage instruments used in your portfolio and price history."
 			showSearch
-			bind:searchValue={filter}
+			searchValue={filter}
+			onSearch={(q) => (filter = q)}
 			searchPlaceholder="Search listings…"
+			searchAriaLabel="Search listings"
 		>
 			{#snippet actions()}
 				<Button variant="ruled" onclick={() => (catalogueOpen = true)}>

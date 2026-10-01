@@ -370,10 +370,12 @@
 				title={tab === 'positions' ? 'Positions' : 'Transactions'}
 				meta={tableMeta}
 				showSearch
-				bind:searchValue={searchQuery}
+				searchValue={searchQuery}
+				onSearch={(q) => (searchQuery = q)}
 				searchPlaceholder={tab === 'positions'
 					? 'Search symbol or name…'
 					: 'Search transactions…'}
+				searchAriaLabel={tab === 'positions' ? 'Search positions' : 'Search transactions'}
 				before={viewTabs}
 				filters={tab === 'positions' ? statusFilter : undefined}
 			>

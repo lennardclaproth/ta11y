@@ -139,7 +139,9 @@
 			description="API keys for the market-data providers. Stored keys are never shown here — only a hint identifying them — so revealing one is a deliberate action."
 		>
 			{#snippet actions()}
-				<Button variant="ruled" disabled={loading} onclick={load}>
+				<!-- Reloading is not a creation action, so it keeps the outline weight it had rather
+				     than becoming this screen's one filled button. -->
+				<Button variant="outline" shape="default" disabled={loading} onclick={load}>
 					<Icon icon="heroicons:arrow-path" />
 					Refresh
 				</Button>

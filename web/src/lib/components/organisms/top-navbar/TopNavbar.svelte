@@ -96,6 +96,7 @@
 		netWorth={netWorthStore.worth}
 		changePct={netWorthStore.changePct}
 		loading={netWorthStore.loading}
+		failed={netWorthStore.failed}
 		{showPeriod}
 		periodFrom={periodStore.from}
 		periodTo={periodStore.to}

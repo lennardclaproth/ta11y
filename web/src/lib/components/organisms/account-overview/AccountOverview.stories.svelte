@@ -62,6 +62,13 @@
 	</div>
 </Story>
 
+<!-- Unreachable snapshots are not an empty account, and do not read like one. -->
+<Story name="Could not be loaded" asChild>
+	<div class="flex justify-end bg-taupe-100 p-4">
+		<AccountOverview {...base} layout="panel" netWorth={null} changePct={null} failed />
+	</div>
+</Story>
+
 <!-- No snapshots at all: a dash, never a zero standing in for an unknown amount. -->
 <Story name="No snapshots" asChild>
 	<div class="flex justify-end bg-taupe-100 p-4">

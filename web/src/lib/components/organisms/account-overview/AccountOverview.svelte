@@ -35,6 +35,8 @@
 		/** Percentage change across the period, or null when the period holds no comparison. */
 		changePct?: number | null;
 		loading?: boolean;
+		/** The snapshots could not be read. Not the same as having none. */
+		failed?: boolean;
 		showPeriod?: boolean;
 		periodFrom?: string;
 		periodTo?: string;
@@ -53,6 +55,7 @@
 		netWorth = null,
 		changePct = null,
 		loading = false,
+		failed = false,
 		showPeriod = true,
 		periodFrom = '',
 		periodTo = '',
@@ -75,18 +78,20 @@
 	);
 
 	/**
-	 * The four situations stay visibly different, so a displayed zero never stands in for
-	 * "we do not know": still loading, no snapshots at all, a period without a comparison,
-	 * and a real change.
+	 * The situations stay visibly different, so a displayed zero never stands in for "we do not
+	 * know": still loading, unreachable, no snapshots at all, a period without a comparison, and
+	 * a real change. A failed read in particular must not read as an empty account.
 	 */
 	const worthCaption = $derived(
-		netWorth === null
-			? 'No snapshots yet'
-			: !showPeriod
-				? 'Latest snapshot'
-				: changePct === null
-					? 'No snapshot in this period, so no change is shown'
-					: `Change over ${rangeLabel}`
+		failed
+			? "Couldn't be loaded. Reload the page to try again."
+			: netWorth === null
+				? 'No snapshots yet'
+				: !showPeriod
+					? 'Latest snapshot'
+					: changePct === null
+						? 'No snapshot in this period, so no change is shown'
+						: `Change over ${rangeLabel}`
 	);
 
 	function handlePeriodChange(range: { from: string | null; to: string | null; preset: string }) {
@@ -102,6 +107,9 @@
 		{#if loading}
 			<Skeleton class="mt-1 h-6 w-32" />
 			<Text as="span" size="xs" tone="subtle">Loading…</Text>
+		{:else if failed}
+			<span class="text-lg font-semibold text-slate-500 tabular-nums">—</span>
+			<Text as="span" size="xs" tone="danger">{worthCaption}</Text>
 		{:else if netWorth === null}
 			<span class="text-lg font-semibold text-slate-500 tabular-nums">—</span>
 			<Text as="span" size="xs" tone="subtle">{worthCaption}</Text>

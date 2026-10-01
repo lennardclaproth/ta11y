@@ -19,6 +19,8 @@
 		showSearch?: boolean;
 		searchValue?: string;
 		searchPlaceholder?: string;
+		/** Accessible name for the search field. Kept apart from the placeholder, which ends in an ellipsis. */
+		searchAriaLabel?: string;
 		/** Debounce window (ms) before `onSearch` fires. */
 		debounceMs?: number;
 		/** Debounced query callback; fires immediately when the search is cleared. */
@@ -39,6 +41,7 @@
 		showSearch = false,
 		searchValue = $bindable(''),
 		searchPlaceholder = 'Search…',
+		searchAriaLabel = 'Search',
 		debounceMs = 300,
 		onSearch,
 		before,
@@ -47,31 +50,22 @@
 		class: className = ''
 	}: Props = $props();
 
-	/** Local echo of the field, so typing stays responsive while `onSearch` waits out the pause. */
-	let typed = $state(searchValue);
+	// Same debounce as `SearchInput`: the field stays responsive while the query waits out the
+	// pause, and the initial mount does not fire for the seed value. Clearing is immediate.
 	let mounted = false;
 
-	// Follow the committed value when it is changed from outside (clearing a filter elsewhere).
 	$effect(() => {
-		typed = searchValue;
-	});
-
-	$effect(() => {
-		const current = typed;
+		const current = searchValue;
 		if (!mounted) {
 			mounted = true;
 			return;
 		}
-		if (current === searchValue) return;
-		const timer = setTimeout(() => {
-			searchValue = current;
-			onSearch?.(current);
-		}, debounceMs);
+		if (!onSearch) return;
+		const timer = setTimeout(() => onSearch(current), debounceMs);
 		return () => clearTimeout(timer);
 	});
 
 	function clear() {
-		typed = '';
 		searchValue = '';
 		onSearch?.('');
 	}
@@ -119,12 +113,12 @@
 			/>
 			<input
 				type="search"
-				bind:value={typed}
+				bind:value={searchValue}
 				placeholder={searchPlaceholder}
-				aria-label={searchPlaceholder}
+				aria-label={searchAriaLabel}
 				class="h-10 w-full min-w-0 bg-transparent text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
 			/>
-			{#if typed}
+			{#if searchValue}
 				<button
 					type="button"
 					aria-label="Clear search"

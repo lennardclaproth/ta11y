@@ -347,6 +347,7 @@
 			showSearch
 			searchValue={descriptionFilter}
 			searchPlaceholder="Search description…"
+			searchAriaLabel="Search transactions by description"
 			onSearch={(q) => {
 				descriptionFilter = q;
 				onFilterChange();
