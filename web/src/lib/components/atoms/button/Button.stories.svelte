@@ -197,6 +197,34 @@
   </div>
 </Story>
 
+<!--
+  The ruled variant is the editorial supporting action: it hangs on a section rule next to the
+  one filled action, rather than competing with it as a second box.
+-->
+<Story name="Ruled Actions" asChild>
+  <div class="flex flex-wrap items-center justify-end gap-3 border-b border-slate-300 bg-taupe-50 px-4">
+    <Button variant="ruled">
+      <Icon icon="heroicons:tag" />
+      Tag 3 selected
+    </Button>
+
+    <Button variant="ruled">
+      <Icon icon="heroicons:cloud-arrow-up" />
+      Import CSV
+    </Button>
+
+    <Button variant="ruled" disabled>
+      <Icon icon="heroicons:arrow-path" />
+      Rebuild portfolio
+    </Button>
+
+    <Button shape="default">
+      <Icon icon="heroicons:plus" />
+      Add transaction
+    </Button>
+  </div>
+</Story>
+
 <Story name="Shapes" asChild>
   <div class="flex flex-wrap items-center gap-3">
     {#each buttonShapes as shape}

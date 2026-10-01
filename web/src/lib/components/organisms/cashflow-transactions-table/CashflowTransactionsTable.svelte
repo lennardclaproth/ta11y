@@ -30,6 +30,12 @@
 		onPageChange?: (offset: number) => void;
 		onLimitChange?: (limit: number) => void;
 		onFilterChange?: () => void;
+		/**
+		 * What an empty table says. An account with no transactions at all and a search that
+		 * matched none are different situations with different next steps, and only the page
+		 * knows which one it is in.
+		 */
+		emptyText?: string;
 		/** Bulk actions for the footer when rows are selected. */
 		bulkActions?: Snippet;
 		class?: string;
@@ -53,6 +59,7 @@
 		onPageChange,
 		onLimitChange,
 		onFilterChange,
+		emptyText = 'No transactions match your filters',
 		bulkActions,
 		class: className = ''
 	}: Props = $props();
@@ -110,7 +117,7 @@
 	{sortKey}
 	{sortDirection}
 	{onSort}
-	emptyText="No transactions match your filters"
+	{emptyText}
 	class={className}
 	columns={[
 		{
