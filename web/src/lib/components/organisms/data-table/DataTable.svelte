@@ -77,6 +77,21 @@
 		}
 	}
 
+	// The selection checkbox owns its own cell: picking rows for a bulk action must not also
+	// open one. Everything else in the row is inert, so it is the row that opens.
+	function openRow(event: MouseEvent, row: T) {
+		if (!onRowClick) return;
+		if ((event.target as HTMLElement | null)?.closest('[data-row-select]')) return;
+		onRowClick(row);
+	}
+
+	function openRowByKey(event: KeyboardEvent, row: T) {
+		if (!onRowClick) return;
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		onRowClick(row);
+	}
+
 	function toggleRow(id: string) {
 		if (!allIds.includes(id)) return;
 		selectedIds = selectedIds.includes(id)
@@ -207,14 +222,18 @@
 								'border-b border-slate-100 transition-colors',
 								selected ? 'bg-amber-50' : 'hover:bg-slate-50',
 								rowSelectable ? '' : 'text-slate-400',
-								onRowClick ? 'cursor-pointer' : ''
+								onRowClick
+									? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none'
+									: ''
 							]
 								.filter(Boolean)
 								.join(' ')}
-							onclick={() => onRowClick?.(row)}
+							tabindex={onRowClick ? 0 : undefined}
+							onclick={(event) => openRow(event, row)}
+							onkeydown={(event) => openRowByKey(event, row)}
 						>
 							{#if selectable}
-								<td class="px-3 py-2">
+								<td class="px-3 py-2" data-row-select>
 									<Checkbox
 										checked={selected}
 										disabled={!rowSelectable}

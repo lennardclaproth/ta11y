@@ -80,6 +80,24 @@ export function formatDisplayDate(iso: string | null | undefined): string {
 }
 
 /**
+ * Plain-language distance from `today` back to `iso`, e.g. "Today", "Yesterday", "78 days ago".
+ * A backdated entry is easy to mistype, so the distance is shown next to the date as a check.
+ * Empty string for invalid input; a date after `today` reads as "Today".
+ */
+export function relativeDayLabel(
+	iso: string | null | undefined,
+	today: string = todayISO()
+): string {
+	const from = parseISODate(iso);
+	const to = parseISODate(today);
+	if (!from || !to) return '';
+	const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+	if (days <= 0) return 'Today';
+	if (days === 1) return 'Yesterday';
+	return `${days} days ago`;
+}
+
+/**
  * Build a 42-cell (6×7) Monday-first grid for the month containing `month`, including leading/trailing
  * spill days from adjacent months.
  */

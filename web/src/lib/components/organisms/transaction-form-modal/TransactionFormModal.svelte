@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
-	import DatePicker from '$lib/components/molecules/date-picker/DatePicker.svelte';
+	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
@@ -27,7 +28,10 @@
 		onClose
 	}: Props = $props();
 
+	// The form always opens on today; a backdated entry is a deliberate step away from it.
+	let today = $state(todayISO());
 	let date = $state(todayISO());
+	let pickerOpen = $state(false);
 	let amount = $state('');
 	let type = $state('expense');
 	let description = $state('');
@@ -38,7 +42,9 @@
 	// Reset the form each time the modal opens.
 	$effect(() => {
 		if (open) {
-			date = todayISO();
+			today = todayISO();
+			date = today;
+			pickerOpen = false;
 			amount = '';
 			type = 'expense';
 			description = '';
@@ -74,30 +80,30 @@
 	}
 </script>
 
-<Dialog bind:open {title} size="md" {onClose}>
+<!-- While saving, Escape and the backdrop stay inert so a pending create cannot be sent twice. -->
+<Dialog
+	bind:open
+	{title}
+	size="md"
+	closeOnEscape={!submitting}
+	closeOnBackdrop={!submitting}
+	{onClose}
+>
 	<div class="space-y-3">
+		<TransactionDateHeader bind:value={date} bind:open={pickerOpen} {today} disabled={submitting} />
+
 		{#if error}
-			<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-				{error}
+			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
+			<div role="alert">
+				<Alert intent="error" title="This transaction was not saved">{error}</Alert>
 			</div>
 		{/if}
 
-		<div class="grid grid-cols-2 gap-3">
-			<FormField label="Date" id="tx-date">
-				<DatePicker value={date} onChange={(v) => (date = v ?? date)} class="w-full" />
-			</FormField>
-
-			<FormField label="Type" id="tx-type">
-				{#snippet children(ctx)}
-					<Select
-						id={ctx.id}
-						bind:value={type}
-						options={typeOptions}
-						ariaLabel="Transaction type"
-					/>
-				{/snippet}
-			</FormField>
-		</div>
+		<FormField label="Type" id="tx-type">
+			{#snippet children(ctx)}
+				<Select id={ctx.id} bind:value={type} options={typeOptions} ariaLabel="Transaction type" />
+			{/snippet}
+		</FormField>
 
 		<FormField label="Amount" id="tx-amount" error={amountError}>
 			{#snippet children(ctx)}
@@ -138,7 +144,11 @@
 	</div>
 
 	{#snippet footer()}
-		<Button variant="ghost" intent="secondary" onclick={() => (open = false)}>Cancel</Button>
-		<Button intent="success" onclick={submit} loading={submitting}>Save</Button>
+		<Button variant="ghost" intent="secondary" disabled={submitting} onclick={() => (open = false)}>
+			Cancel
+		</Button>
+		<Button intent="success" onclick={submit} loading={submitting}>
+			{submitting ? 'Saving' : 'Save'}
+		</Button>
 	{/snippet}
 </Dialog>

@@ -2,6 +2,7 @@
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Calendar from '$lib/components/molecules/calendar/Calendar.svelte';
+	import type { PopoverPlacement } from '$lib/components/molecules/popover/popover.types';
 	import {
 		formatDisplayDate,
 		parseISODate,
@@ -18,6 +19,16 @@
 		max?: string | null;
 		size?: Size;
 		disabled?: boolean;
+		/**
+		 * Append the calendar to `<body>`. Leave it on to escape clipping ancestors; turn it
+		 * **off** inside a `<dialog>`, whose top layer would otherwise cover the panel and make
+		 * the date unpickable.
+		 */
+		portal?: boolean;
+		/** Where the calendar hangs off the trigger; `bottom-end` keeps it inside a narrow dialog. */
+		placement?: PopoverPlacement;
+		/** Bindable open state of the calendar. */
+		open?: boolean;
 		ariaLabel?: string;
 		onChange?: (value: string | null) => void;
 		class?: string;
@@ -30,12 +41,14 @@
 		max = null,
 		size = 'md',
 		disabled = false,
+		portal = true,
+		placement = 'bottom-start',
+		open = $bindable(false),
 		ariaLabel = 'Select date',
 		onChange,
 		class: className = ''
 	}: Props = $props();
 
-	let open = $state(false);
 	let month = $state(startOfMonthUTC(parseISODate(value) ?? new Date()));
 
 	// Re-center the calendar on the selected value whenever the popover opens.
@@ -58,7 +71,7 @@
 	}
 </script>
 
-<Popover bind:open placement="bottom-start" class="p-3">
+<Popover bind:open {placement} {portal} class="p-3">
 	{#snippet trigger(api)}
 		<button
 			type="button"

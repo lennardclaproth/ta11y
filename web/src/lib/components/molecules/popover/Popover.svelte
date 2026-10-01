@@ -130,7 +130,13 @@
 			if (closeOnOutsideClick) setOpen(false);
 		}
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key === 'Escape' && closeOnEscape) setOpen(false);
+			if (event.key !== 'Escape' || !closeOnEscape) return;
+			// Inside a <dialog> the same Escape would also trigger the native close request, so
+			// one press would dismiss the whole form instead of just this panel. Claiming the
+			// key while the panel is open keeps Escape stepping out one layer at a time.
+			event.preventDefault();
+			event.stopPropagation();
+			setOpen(false);
 		}
 		document.addEventListener('pointerdown', onPointerDown, true);
 		document.addEventListener('keydown', onKeydown, true);
