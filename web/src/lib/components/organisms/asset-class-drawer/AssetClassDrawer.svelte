@@ -57,7 +57,7 @@
 			</div>
 
 			<section>
-				<h3 class="mb-2 text-sm font-semibold text-slate-900">Assets</h3>
+				<h3 class="mb-2 text-sm text-slate-900">Assets</h3>
 				{#if details.assets.length === 0}
 					<p class="text-sm text-slate-500">No assets in this class</p>
 				{:else}
@@ -77,7 +77,7 @@
 			</section>
 
 			<section>
-				<h3 class="mb-2 text-sm font-semibold text-slate-900">Recent changes</h3>
+				<h3 class="mb-2 text-sm text-slate-900">Recent changes</h3>
 				{#if details.mutations.length === 0}
 					<p class="text-sm text-slate-500">No recorded changes</p>
 				{:else}

@@ -56,7 +56,7 @@
     level: 'h2',
     size: 'lg',
     tone: 'default',
-    weight: 'semibold',
+    weight: 'normal',
     uppercase: false
   }}
   template={headingPlayground}
