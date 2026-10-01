@@ -17,7 +17,7 @@
 	class={['min-w-0 border-t border-slate-400 pt-3 pb-2', className].filter(Boolean).join(' ')}
 >
 	{#if title}
-		<Heading level="h2" size="md" weight="medium" class="mb-3">{title}</Heading>
+		<Heading level="h2" size="md" class="mb-3">{title}</Heading>
 	{/if}
 	{@render children()}
 </section>

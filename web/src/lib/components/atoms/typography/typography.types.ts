@@ -24,7 +24,12 @@ export const headingSizes = ['sm', 'md', 'lg', 'xl', '2xl'] as const;
 
 export const headingTones = ['default', 'muted', 'subtle'] as const;
 
-export const headingWeights = ['medium', 'semibold', 'bold'] as const;
+export const headingWeights = [
+  'normal',
+  'medium',
+  'semibold',
+  'bold'
+] as const;
 
 export type TextElement = typeof textElements[number];
 export type TextSize = typeof textSizes[number];
