@@ -3,6 +3,7 @@ package portfolio
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/account"
@@ -25,10 +26,13 @@ func (s *recordingPortfolioStore) CreateTransaction(_ context.Context, _ *portfo
 func (s *recordingPortfolioStore) CreateTransactions(_ context.Context, _ []*portfolio.Transaction) (int, error) {
 	return 0, nil
 }
+func (s *recordingPortfolioStore) UpdateTransactionOccurredAt(_ context.Context, _, _ uuid.UUID, _ time.Time, _ string) (int, error) {
+	return 0, nil
+}
 
 func TestAccountCreatedCreatesPortfolioProjection(t *testing.T) {
 	store := &recordingPortfolioStore{}
-	commands := portfolio.NewCommands(store, marketdata.Queries{}, vendor.Queries{})
+	commands := portfolio.NewCommands(store, nil, marketdata.Queries{}, vendor.Queries{}, nil)
 	handler := NewAccountCreatedHandler(commands, nil)
 
 	accID := uuid.New()

@@ -197,6 +197,20 @@ definitions:
           $ref: '#/definitions/cashflow.MonthlyAnalyticsPointResponse'
         type: array
     type: object
+  cashflow.ChangeTransactionDateRequest:
+    properties:
+      date:
+        type: string
+      id:
+        type: string
+    type: object
+  cashflow.ChangeTransactionDateResponse:
+    properties:
+      date:
+        type: string
+      id:
+        type: string
+    type: object
   cashflow.CreateManualCashflowTransactionRequest:
     properties:
       amount:
@@ -649,6 +663,22 @@ definitions:
       volume:
         type: integer
     type: object
+  portfolio.ChangePortfolioTransactionDateRequest:
+    properties:
+      id:
+        type: string
+      occurred_at:
+        type: string
+    type: object
+  portfolio.ChangePortfolioTransactionDateResponse:
+    properties:
+      id:
+        type: string
+      occurred_at:
+        type: string
+      rebuild:
+        type: string
+    type: object
   portfolio.CreateManualPortfolioTransactionRequest:
     properties:
       amount:
@@ -687,6 +717,11 @@ definitions:
       origin:
         type: string
       quantity:
+        type: string
+      rebuild:
+        description: |-
+          Rebuild says whether the positions and snapshots have caught up with this write:
+          "completed", "in_progress" (another rebuild held the lock), "skipped" or "failed".
         type: string
       source:
         type: string
@@ -1566,6 +1601,59 @@ paths:
               type: string
             type: object
       summary: Search cashflow transactions
+      tags:
+      - Transactions
+  /cashflow/transactions/date:
+    post:
+      consumes:
+      - application/json
+      description: Moves a manually entered cashflow transaction to another date,
+        today or earlier. Imported transactions keep their statement date.
+      parameters:
+      - description: Change date request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.ChangeTransactionDateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.ChangeTransactionDateResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Change a cashflow transaction date
       tags:
       - Transactions
   /cashflow/transactions/ignore/filter:
@@ -2653,12 +2741,67 @@ paths:
       summary: Get portfolio transactions
       tags:
       - portfolio
+  /portfolio/transactions/date:
+    post:
+      consumes:
+      - application/json
+      description: Moves a manually entered portfolio transaction to another date,
+        today or earlier, then rebuilds positions and snapshots. Imported transactions
+        keep their statement date.
+      parameters:
+      - description: Change date payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/portfolio.ChangePortfolioTransactionDateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/portfolio.ChangePortfolioTransactionDateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Change a portfolio transaction date
+      tags:
+      - portfolio
   /portfolio/transactions/manual:
     post:
       consumes:
       - application/json
-      description: Creates a manual portfolio transaction and persists it without
-        publishing rebuild events.
+      description: Creates a manual portfolio transaction, then rebuilds positions
+        and snapshots so they include it. The response reports whether that rebuild
+        ran.
       parameters:
       - description: Manual portfolio transaction payload
         in: body

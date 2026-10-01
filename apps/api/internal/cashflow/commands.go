@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/date"
 	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
@@ -23,6 +24,7 @@ type accountExistenceChecker interface {
 // CommandStore persists cashflow transaction mutations.
 type CommandStore interface {
 	CreateTransactions(ctx context.Context, txs []*Transaction) (int, error)
+	UpdateDate(ctx context.Context, accountID, id uuid.UUID, date time.Time, checksum string) (int, error)
 	UpdateTagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error)
 	UpdateTagByFilter(ctx context.Context, filters TransactionFilters, tag string) (int, error)
 	UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error)
@@ -65,9 +67,9 @@ func NewTransactionData(
 	dateRaw, amountRaw, typeRaw, descriptionRaw, noteRaw, tagRaw, vendorRaw, source string,
 	rowNumber *int,
 ) (TransactionData, error) {
-	date, err := time.Parse("2006-01-02", strings.TrimSpace(dateRaw))
+	txDate, err := parseTransactionDate(dateRaw)
 	if err != nil {
-		return TransactionData{}, ErrManualCashflowInvalidDate
+		return TransactionData{}, err
 	}
 
 	amount, err := money.ParsePrice(amountRaw)
@@ -103,9 +105,66 @@ func NewTransactionData(
 		Source:      source,
 		Direction:   *direction,
 		Amount:      amount,
-		Date:        date.UTC(),
+		Date:        txDate,
 		Tag:         tag,
 	}, nil
+}
+
+// parseTransactionDate reads a YYYY-MM-DD day and refuses anything after today. A
+// cashflow transaction records something that already happened, so a future day is
+// rejected at the boundary rather than left to surface as an empty month later.
+func parseTransactionDate(raw string) (time.Time, error) {
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(raw))
+	if err != nil {
+		return time.Time{}, ErrManualCashflowInvalidDate
+	}
+	parsed = parsed.UTC()
+	if parsed.After(date.StartOfDayUTC(time.Now())) {
+		return time.Time{}, ErrCashflowDateInFuture
+	}
+	return parsed, nil
+}
+
+// ChangeDate moves one manually entered transaction to another day, leaving every other
+// field as entered. The dedup checksum carries the date, so it is recomputed and checked
+// against the account's existing rows before the update.
+func (c *Commands) ChangeDate(ctx context.Context, accID, id uuid.UUID, dateRaw string) (*Transaction, error) {
+	newDate, err := parseTransactionDate(dateRaw)
+	if err != nil {
+		return nil, fmt.Errorf("change date: %w", err)
+	}
+
+	current, err := c.qs.GetTransaction(ctx, accID, id)
+	if err != nil {
+		return nil, fmt.Errorf("change date: fetch transaction: %w", err)
+	}
+	if current == nil {
+		return nil, fmt.Errorf("change date: %w", ErrNoTransactionFound)
+	}
+	if !current.IsManual() {
+		return nil, fmt.Errorf("change date: %w", ErrCashflowDateNotEditable)
+	}
+	if date.SameDayUTC(current.Date, newDate) {
+		return current, nil
+	}
+
+	moved := current.MovedTo(newDate)
+	clash, err := c.qs.GetTransactionByChecksum(ctx, accID, moved.Checksum)
+	if err != nil {
+		return nil, fmt.Errorf("change date: check for duplicate: %w", err)
+	}
+	if clash != nil && clash.ID != current.ID {
+		return nil, fmt.Errorf("change date: %w", ErrDuplicateTransaction)
+	}
+
+	updated, err := c.cs.UpdateDate(ctx, accID, id, moved.Date, moved.Checksum)
+	if err != nil {
+		return nil, fmt.Errorf("change date: %w", err)
+	}
+	if updated == 0 {
+		return nil, fmt.Errorf("change date: %w", ErrNoTransactionFound)
+	}
+	return moved, nil
 }
 
 // CreateManyResult reports the outcome of a batch cashflow create.

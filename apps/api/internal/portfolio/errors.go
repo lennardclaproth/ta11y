@@ -20,4 +20,7 @@ var (
 	ErrManualCashAmountMustBeNonZero = fmt.Errorf("amount must be non-zero for CASH transactions")
 	ErrManualQuantityMustBePositive  = fmt.Errorf("quantity must be positive")
 	ErrManualListingIdentityMissing  = fmt.Errorf("listing must provide at least one of isin or symbol")
+	ErrManualOccurredAtInFuture      = fmt.Errorf("occurred_at must be today or earlier")
+	ErrTransactionNotFound           = fmt.Errorf("no transaction found with the given id")
+	ErrTransactionDateNotEditable    = fmt.Errorf("only manually entered transactions can be moved to another date")
 )

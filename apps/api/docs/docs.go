@@ -1090,6 +1090,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/cashflow/transactions/date": {
+            "post": {
+                "description": "Moves a manually entered cashflow transaction to another date, today or earlier. Imported transactions keep their statement date.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "Change a cashflow transaction date",
+                "parameters": [
+                    {
+                        "description": "Change date request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ChangeTransactionDateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ChangeTransactionDateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/cashflow/transactions/ignore/filter": {
             "post": {
                 "description": "Set ignored=true/false for all transactions that match the supplied filter.",
@@ -2706,9 +2785,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/portfolio/transactions/date": {
+            "post": {
+                "description": "Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots. Imported transactions keep their statement date.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portfolio"
+                ],
+                "summary": "Change a portfolio transaction date",
+                "parameters": [
+                    {
+                        "description": "Change date payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/portfolio.ChangePortfolioTransactionDateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/portfolio.ChangePortfolioTransactionDateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/portfolio/transactions/manual": {
             "post": {
-                "description": "Creates a manual portfolio transaction and persists it without publishing rebuild events.",
+                "description": "Creates a manual portfolio transaction, then rebuilds positions and snapshots so they include it. The response reports whether that rebuild ran.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3161,6 +3319,28 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/cashflow.MonthlyAnalyticsPointResponse"
                     }
+                }
+            }
+        },
+        "cashflow.ChangeTransactionDateRequest": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.ChangeTransactionDateResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
                 }
             }
         },
@@ -3824,6 +4004,31 @@ const docTemplate = `{
                 }
             }
         },
+        "portfolio.ChangePortfolioTransactionDateRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "portfolio.ChangePortfolioTransactionDateResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "rebuild": {
+                    "type": "string"
+                }
+            }
+        },
         "portfolio.CreateManualPortfolioTransactionRequest": {
             "type": "object",
             "properties": {
@@ -3881,6 +4086,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "quantity": {
+                    "type": "string"
+                },
+                "rebuild": {
+                    "description": "Rebuild says whether the positions and snapshots have caught up with this write:\n\"completed\", \"in_progress\" (another rebuild held the lock), \"skipped\" or \"failed\".",
                     "type": "string"
                 },
                 "source": {
