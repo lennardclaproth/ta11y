@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -114,6 +116,48 @@ func (s *SQLXCashflowStore) CountByFilter(ctx context.Context, filters cashflow.
 		return 0, fmt.Errorf("cashflow store: count by filter: %w", err)
 	}
 	return total, nil
+}
+
+// GetTransaction returns one cashflow transaction within an account, or nil when the
+// account does not hold a transaction with that id.
+func (s *SQLXCashflowStore) GetTransaction(ctx context.Context, accountID, id uuid.UUID) (*cashflow.Transaction, error) {
+	query := s.db.Rebind(fmt.Sprintf("SELECT * FROM %s WHERE account_id = ? AND id = ?", s.tableName))
+	return s.getTransaction(ctx, query, accountID, id)
+}
+
+// GetTransactionByChecksum returns the transaction holding the given dedup checksum
+// within an account, or nil when no row holds it.
+func (s *SQLXCashflowStore) GetTransactionByChecksum(ctx context.Context, accountID uuid.UUID, checksum string) (*cashflow.Transaction, error) {
+	query := s.db.Rebind(fmt.Sprintf("SELECT * FROM %s WHERE account_id = ? AND checksum = ?", s.tableName))
+	return s.getTransaction(ctx, query, accountID, checksum)
+}
+
+func (s *SQLXCashflowStore) getTransaction(ctx context.Context, query string, args ...any) (*cashflow.Transaction, error) {
+	var tx cashflow.Transaction
+	if err := sqlx.GetContext(ctx, s.db.GetExecutor(ctx), &tx, query, args...); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("cashflow store: fetch transaction: %w", err)
+	}
+	return &tx, nil
+}
+
+// UpdateDate moves one transaction to another date, storing the checksum recomputed for
+// it. A checksum already held by another row surfaces as the feature's duplicate error.
+func (s *SQLXCashflowStore) UpdateDate(ctx context.Context, accountID, id uuid.UUID, date time.Time, checksum string) (int, error) {
+	query := s.db.Rebind(fmt.Sprintf(
+		`UPDATE %s SET date = ?, checksum = ?, updated_at = ? WHERE account_id = ? AND id = ?`,
+		s.tableName,
+	))
+	updated, err := s.exec(ctx, query, date, checksum, time.Now().UTC(), accountID, id)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, cashflow.ErrDuplicateTransaction
+		}
+		return 0, err
+	}
+	return updated, nil
 }
 
 // UpdateTagByIDs sets the tag for the given transaction IDs and returns the count updated.

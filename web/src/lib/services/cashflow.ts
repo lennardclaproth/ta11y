@@ -3,6 +3,8 @@ import { useMocks } from '$lib/api/config';
 import type {
 	CashflowBulkMutationResponse,
 	CashflowDirection,
+	ChangeCashflowTransactionDateRequest,
+	ChangeCashflowTransactionDateResponse,
 	CashflowMonthlyAnalyticsResponse,
 	CashflowTransaction,
 	CashflowTransactionsQuery,
@@ -155,6 +157,17 @@ export async function createCashflowTransactions(
 		'/cashflow/transactions/manual',
 		body
 	);
+}
+
+/** `POST /cashflow/transactions/date` */
+export async function changeCashflowTransactionDate(
+	body: ChangeCashflowTransactionDateRequest
+): Promise<ChangeCashflowTransactionDateResponse> {
+	if (useMocks) {
+		await delay();
+		return { id: body.id, date: `${body.date}T00:00:00Z` };
+	}
+	return apiSend<ChangeCashflowTransactionDateResponse>('POST', '/cashflow/transactions/date', body);
 }
 
 /** `POST /cashflow/transactions/tag` (single transaction) */

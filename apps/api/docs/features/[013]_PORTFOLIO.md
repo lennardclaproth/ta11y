@@ -1,6 +1,6 @@
-# [013]–[015] Portfolio
+# [013]–[015],[032] Portfolio
 
-> **Feature IDs:** 013 (async rebuild) · 014 (read APIs) · 015 (manual transactions) · **Area:** Core (user-facing) · **Status:** refactored; not yet wired in a compiling entrypoint
+> **Feature IDs:** 013 (async rebuild) · 014 (read APIs) · 015 (manual transactions) · 032 (date changes) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/portfolio` · `transport/http/handlers/portfolio` · `transport/messaging/handlers/portfolio` · `internal/storage/sqlx_portfolio_store.go`
 >
@@ -14,11 +14,13 @@ market data:
 - **[014] Reads** — account snapshot time series (`GET /portfolio/snapshots`), current/closed
   positions with their latest snapshot metrics (`GET /portfolio/positions`), and filtered
   transaction history (`GET /portfolio/transactions`).
-- **[015] Manual writes** — create one manual transaction (BUY/SELL/DIVIDEND/TAX/FEE/CASH).
-  Manual rows are `origin = MANUAL`, carry no import, and **do not** trigger a rebuild.
+- **[015] Manual writes** — create one manual transaction (BUY/SELL/DIVIDEND/TAX/FEE/CASH) on
+  any day up to and including today. Manual rows are `origin = MANUAL` and carry no import.
+- **[032] Change date** — move one manually entered transaction to another day, today or
+  earlier. Nothing else about it changes, and imported rows are refused.
 - **[013] Async rebuild** — a full rebuild recomputes positions → position snapshots →
   account snapshots. It is triggered asynchronously over the event bus when a portfolio CSV
-  import completes (and synchronously via `POST /portfolio/rebuild`).
+  import completes, and synchronously via `POST /portfolio/rebuild` or after a manual write.
 
 ## Domain model
 
@@ -26,9 +28,12 @@ market data:
 classDiagram
     class Commands {
         -CommandStore cs
+        -TransactionReader qs
         -marketdata.Queries mdq
         -vendor.Queries vq
+        -rebuilder rb
         +CreateTransaction(ctx, input) ManualTransactionCreateResult
+        +ChangeTransactionDate(ctx, accID, id, occurredAt) (Transaction, RebuildResult)
         +CreateAccount(ctx, accountID) Account
         +CreateMany(ctx, importID, accountID, rows) CreateManyResult
     }
@@ -91,6 +96,7 @@ classDiagram
     }
 
     Commands ..> CommandStore
+    Commands ..> Builder : asks for a rebuild after a manual write
     Queries ..> QueryStore
     Builder ..> PositionStore
     Builder ..> PortfolioStore
@@ -242,15 +248,25 @@ sequenceDiagram
 
 | Feature | Method + route | Key inputs | Success |
 | --- | --- | --- | --- |
-| [014] Snapshots | `GET /portfolio/snapshots` | query: `account_id`, `from`, `to` | 200 `[{occurred_at, market_value, total_pnl, ...}]` |
-| [014] Positions | `GET /portfolio/positions` | query: `account_id`, `include_closed` | 200 `{include_closed, data[]}` |
-| [014] Transactions | `GET /portfolio/transactions` | query: `account_id`, `from/to`, `limit/offset`, `sort_by/sort_order`, `q`, `type`, `origin`, `source`, `listing` | 200 `{pagination, data[]}` — **not yet backed by a store (see below)** |
-| [013] Rebuild | `POST /portfolio/rebuild` | body: `account_id` | **204** (synchronous) |
-| [015] Manual create | `POST /portfolio/transactions/manual` | body: `account_id`, `vendor_id`, `occurred_at`, `type`, `listing_id?`, `amount`, `quantity?`, `description?` | 201 transaction |
+The account comes from the session on every route ([030]); no request carries an `account_id`.
 
-**Error mapping (highlights):** validation → 400; `account.ErrAccountNotFound` → 404; rebuild
-`ErrBuildInProgress` → 409, `ErrPortfolioNoSnapshots` → 422; manual create maps the `ErrManual*`
-family to 400/404/422 and duplicate → 409; else 500.
+| Feature | Method + route | Key inputs | Success |
+| --- | --- | --- | --- |
+| [014] Snapshots | `GET /portfolio/snapshots` | query: `from`, `to` | 200 `[{occurred_at, market_value, total_pnl, ...}]` |
+| [014] Positions | `GET /portfolio/positions` | query: `include_closed` | 200 `{include_closed, data[]}` |
+| [014] Transactions | `GET /portfolio/transactions` | query: `from/to`, `limit/offset`, `sort_by/sort_order`, `q`, `type`, `origin`, `source`, `listing` | 200 `{pagination, data[]}` |
+| [013] Rebuild | `POST /portfolio/rebuild` | empty body | **204** (synchronous) |
+| [015] Manual create | `POST /portfolio/transactions/manual` | body: `vendor_id`, `occurred_at`, `type`, `listing_id?`, `amount`, `quantity?`, `description?` | 201 transaction + `rebuild` |
+| [032] Change date | `POST /portfolio/transactions/date` | body: `id`, `occurred_at` | 200 `{id, occurred_at, rebuild}` |
+
+**Error mapping (highlights):** validation and a date after today → 400; `account.ErrAccountNotFound`
+and an unknown transaction id → 404; rebuild `ErrBuildInProgress` → 409, `ErrPortfolioNoSnapshots`
+→ 422; manual create maps the `ErrManual*` family to 400/404/422 and duplicate → 409; changing the
+date of an imported row → 422; else 500.
+
+`rebuild` on the two manual writes is `completed`, `in_progress`, `skipped` or `failed`. The write
+itself succeeded in every case — the field only says whether positions, performance and net worth
+have caught up with it, so a client can report that rather than present a stale page as current.
 
 ## Processing rules
 
@@ -264,7 +280,20 @@ family to 400/404/422 and duplicate → 409; else 500.
   The lock is always released (fresh background context) even on cancellation.
 - **Manual create** persists `origin = MANUAL`, `import_id = NULL`, `position_id = NULL`;
   CASH encodes direction in the `Quantity` sign and stores an absolute amount; BUY/SELL derive
-  `unit_price = amount / quantity`. It emits no event and does not rebuild.
+  `unit_price = amount / quantity`. `occurred_at` must be today or earlier. It emits no event
+  of its own, but asks for a rebuild once the row is stored.
+- **Moving a transaction ([032]).** Only `origin = MANUAL` rows can be moved, and only to today
+  or earlier. The checksum carries the date, so it is recomputed for the new day and looked up
+  within the account first; a hit that is not the row itself is refused rather than written.
+  The recomputation deliberately leaves `position_id` out: a rebuild writes it onto the row long
+  after the checksum was generated, so the identity to stay comparable with is the one the row
+  was created under. Imported rows keep their statement date — moving one would change the
+  identity the next import of the same file compares against, so it would insert the old row
+  again. A move is followed by a rebuild, because the row lands elsewhere in the stream.
+- **Rebuilding after a manual write.** The rebuild itself is unchanged and still refuses to run
+  while one is in progress. A refusal is not a failed write: the transaction is stored either
+  way and the outcome is reported, with the existing `POST /portfolio/rebuild` as the way out.
+  There is no queue.
 - **Reads.** Snapshots are ordered `occurred_at ASC` (optionally date-bounded); positions join
   their latest snapshot and can include closed positions; transactions support filter + sort
   (`date` only) + offset pagination (limit ∈ {10,25,50,100}, default 25).
@@ -283,22 +312,21 @@ There is **no** rebuild-*request* event; the only async rebuild trigger is `impo
 
 | Path | Responsibility |
 | --- | --- |
-| `internal/portfolio/commands.go` | Manual create, projection create, bulk import insert + `CommandStore` |
+| `internal/portfolio/commands.go` | Manual create, change date, projection create, bulk import insert + `CommandStore`/`TransactionReader`, rebuild outcome |
 | `internal/portfolio/queries.go` | Snapshot/position reads + `QueryStore` |
 | `internal/portfolio/builder.go` | Rebuild engine + `PositionStore`/`PortfolioStore`/`TransactionStore`/`Locker`; publishes `portfolio.rebuilt` |
 | `internal/portfolio/transaction.go` · `position.go` · `portfolio.go` · `account.go` | Domain types, position math, snapshots, projection + build errors |
 | `internal/portfolio/events.go` | `TopicRebuilt` + `Rebuilt` |
-| `transport/http/handlers/portfolio/{snapshots,positions,transactions,rebuild}.go` | Read + rebuild + manual-create handlers |
+| `transport/http/handlers/portfolio/{snapshots,positions,transactions,rebuild}.go` | Read, rebuild, manual-create and change-date handlers |
 | `transport/messaging/handlers/portfolio/{account_created,import_completed}.go` | Projection + rebuild-on-import subscribers |
 | `internal/storage/sqlx_portfolio_store.go` | `SQLXPortfolioStore` implementing all six portfolio interfaces |
 
-## Refactor state / not implemented
+## Gaps / not implemented
 
-- **`GET /portfolio/transactions` has no store implementation.** The handler depends on a
-  `FetchForAccount(ctx, TransactionListQuery)` interface that no type implements yet, so the
-  transaction-read endpoint cannot currently be served even though its query/DTO types and the
-  supporting index exist.
 - `PortfolioSnapshot.CashBalance` is always built as 0 (cash positions are excluded from market
   value); EOD-import-driven revaluation is intentionally not wired.
-- No compiling entrypoint registers portfolio routes or subscribes the handlers (only the stale
-  `cmd/server/main.go` did, against removed types).
+- **Only the date can be changed after the fact.** Amount, quantity, listing and type are fixed
+  once a transaction exists, and there is no delete, so correcting anything else means
+  re-entering the transaction.
+- **Rebuilds are not queued.** One that cannot start because another is running is reported, not
+  retried; catching up is a deliberate `POST /portfolio/rebuild`.

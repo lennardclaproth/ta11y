@@ -72,6 +72,10 @@ const (
 	CashOut CashFlowDirection = "out"
 )
 
+// SourceManual is the source of a transaction entered by hand. Entries made against a
+// named vendor carry "manual:<vendor>"; imported rows carry the vendor name alone.
+const SourceManual = "manual"
+
 type Transaction struct {
 	ID          uuid.UUID         `db:"id"`
 	AccountID   uuid.UUID         `db:"account_id"`
@@ -117,6 +121,24 @@ func NewTransaction(desc, note, source, tag string, direction CashFlowDirection,
 	}
 	t.Checksum = t.generateChecksum()
 	return t, nil
+}
+
+// IsManual reports whether the transaction was entered by hand rather than imported.
+// Only manual transactions may be moved to another date: the checksum that recognises
+// a re-imported row carries its date, so moving an imported row would make the next
+// import of the same statement insert it again.
+func (t *Transaction) IsManual() bool {
+	return t.Source == SourceManual || strings.HasPrefix(t.Source, SourceManual+":")
+}
+
+// MovedTo returns a copy of the transaction dated date, with the checksum recomputed so
+// its dedup identity follows the new date.
+func (t *Transaction) MovedTo(date time.Time) *Transaction {
+	moved := *t
+	moved.Date = date.UTC()
+	moved.UpdatedAt = time.Now().UTC()
+	moved.Checksum = moved.generateChecksum()
+	return &moved
 }
 
 // generateChecksum creates a checksum for the transaction based on the fields
