@@ -6,10 +6,12 @@
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import {
 		listProviderCredentials,
@@ -125,22 +127,24 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Credentials" />
+		<TopNavbar showPeriod={false} />
 	{/snippet}
 
-	<PageContentTemplate>
-		<div
-			class="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-4"
+	<PageContentTemplate title="Credentials" titleMeta="Reference data">
+		<LedgerToolbar
+			title="External API credentials"
+			meta={loading
+				? 'Loading…'
+				: `${providers.length} ${providers.length === 1 ? 'provider' : 'providers'}`}
+			description="API keys for the market-data providers. Stored keys are never shown here — only a hint identifying them — so revealing one is a deliberate action."
 		>
-			<div>
-				<h2 class="text-2xl">External API credentials</h2>
-				<p class="mt-1 max-w-prose text-sm text-slate-600">
-					API keys for the market-data providers. Stored keys are never shown here — only a hint
-					identifying them — so revealing one is a deliberate action.
-				</p>
-			</div>
-			<Button variant="outline" disabled={loading} onclick={load}>Refresh</Button>
-		</div>
+			{#snippet actions()}
+				<Button variant="ruled" disabled={loading} onclick={load}>
+					<Icon icon="heroicons:arrow-path" />
+					Refresh
+				</Button>
+			{/snippet}
+		</LedgerToolbar>
 
 		{#if error}
 			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">

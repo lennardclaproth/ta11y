@@ -9,6 +9,7 @@
 	import DonutChart from '$lib/components/organisms/charts/DonutChart.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
 	import {
@@ -21,6 +22,7 @@
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
+	import { periodStore } from '$lib/stores/period.svelte';
 	import type { CashflowTransactionFormValue } from '$lib/components/organisms/transaction-form-modal/transaction-form-modal.types';
 	import {
 		parseQuery,
@@ -39,7 +41,6 @@
 		TagDistributionEntry
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
-	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
 	const schema: QuerySchema = {
 		description: { type: 'string' },
@@ -62,8 +63,12 @@
 	let sortDirection = $state(((initial.sort_order as string) || 'desc') as SortDirection);
 	let limit = $state((initial.limit as number) || 25);
 	let offset = $state((initial.offset as number) || 0);
-	let from = $state((initial.from as string) || '');
-	let to = $state((initial.to as string) || '');
+
+	// The period is the app's, not this page's: a link that carries one seeds it, but only
+	// while nothing has chosen a period yet, so returning here never undoes a later choice.
+	periodStore.seed((initial.from as string) || null, (initial.to as string) || null);
+	const from = $derived(periodStore.from);
+	const to = $derived(periodStore.to);
 
 	let rows = $state<CashflowTransaction[]>([]);
 	let total = $state(0);
@@ -173,6 +178,21 @@
 		void loadAnalytics();
 	});
 
+	// Keep the URL in step with the period after it is changed elsewhere (the overview, or a
+	// drag on the chart). The first run is the page's own initial state, which the URL already
+	// holds -- rewriting it there would discard a deep-linked page offset.
+	let periodSynced = false;
+	$effect(() => {
+		void periodStore.from;
+		void periodStore.to;
+		if (!periodSynced) {
+			periodSynced = true;
+			return;
+		}
+		offset = 0;
+		syncUrl();
+	});
+
 	onMount(() => {
 		let realtime: { disconnect: () => void } | null = null;
 		void accountStore.ensureLoaded().then(() => {
@@ -206,10 +226,8 @@
 		syncUrl();
 	}
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
-		from = rangeFrom;
-		to = rangeTo;
-		offset = 0;
-		syncUrl();
+		// Dragging the chart picks a period like any other, so it goes through the same store.
+		periodStore.set({ from: rangeFrom, to: rangeTo });
 		toast.info(`Filtered to ${rangeFrom} – ${rangeTo}`);
 	}
 
@@ -258,34 +276,28 @@
 		}
 	}
 
-	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
+	const tableMeta = $derived.by(() => {
+		if (loading) return 'Loading…';
+		if (error) return 'Could not load';
+		const selected = selectedIds.length > 0 ? ` · ${selectedIds.length} selected` : '';
+		return `${total} ${total === 1 ? 'row' : 'rows'}${selected}`;
+	});
+
+	// An account with no transactions and a search that matched none are different situations
+	// with different next steps, so they do not read the same.
+	const emptyText = $derived(
+		descriptionFilter.trim()
+			? `No transactions match “${descriptionFilter.trim()}”. Clear the search to see them all.`
+			: 'No transactions yet. Add one to get started.'
+	);
 </script>
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Cashflow"
-			showSearch
-			searchValue={descriptionFilter}
-			searchPlaceholder="Search description…"
-			onSearch={(q) => {
-				descriptionFilter = q;
-				onFilterChange();
-			}}
-			showDateRange
-			dateFrom={from || null}
-			dateTo={to || null}
-			onDateChange={(r) => {
-				from = r.from ?? '';
-				to = r.to ?? '';
-				offset = 0;
-				syncUrl();
-			}}
-			actions={navActions}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Cashflow">
 		{#snippet analytics()}
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-4">
 				<AnalyticsCard title="Net trend" class="lg:col-span-2">
@@ -327,15 +339,37 @@
 			</div>
 		{/snippet}
 
+		<!-- Everything that acts on these rows lives here: searching, tagging a selection and
+		     adding one. -->
 		<LedgerToolbar
 			title="Transactions"
-			actionLabel="Add transaction"
-			onAdd={() => (createOpen = true)}
-		/>
+			meta={tableMeta}
+			showSearch
+			searchValue={descriptionFilter}
+			searchPlaceholder="Search description…"
+			onSearch={(q) => {
+				descriptionFilter = q;
+				onFilterChange();
+			}}
+		>
+			{#snippet actions()}
+				{#if selectedIds.length > 0}
+					<Button variant="ruled" onclick={handleBulkTag}>
+						<Icon icon="heroicons:tag" />
+						Tag {selectedIds.length} selected
+					</Button>
+				{/if}
+				<Button shape="default" onclick={() => (createOpen = true)}>
+					<Icon icon="heroicons:plus" />
+					Add transaction
+				</Button>
+			{/snippet}
+		</LedgerToolbar>
 		<CashflowTransactionsTable
 			{rows}
 			{loading}
 			{error}
+			{emptyText}
 			{total}
 			bind:limit
 			bind:offset
@@ -350,11 +384,7 @@
 			{onPageChange}
 			{onLimitChange}
 			{onFilterChange}
-		>
-			{#snippet bulkActions()}
-				<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
-			{/snippet}
-		</CashflowTransactionsTable>
+		/>
 	</PageContentTemplate>
 </AppShellTemplate>
 
