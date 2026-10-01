@@ -77,8 +77,17 @@ type TransactionData struct {
 	Quantity    float64
 	Price       float64
 	Amount      float64
-	// RowNumber is the source row number (e.g. CSV line) and feeds the dedup checksum.
+	// RowNumber is the source row number (e.g. CSV line). It orders rows that share a
+	// day; it deliberately no longer feeds the dedup checksum, because an overlapping
+	// export moves every row to a different line.
 	RowNumber int
+	// DedupSeq distinguishes rows with identical content inside one import file and
+	// feeds the dedup checksum in RowNumber's place. Importers set it from
+	// importer.DedupSequencer; manual entries leave it zero.
+	DedupSeq int
+	// ExternalRef is the broker's own reference for the row (DEGIRO's order id). It is
+	// not stored: it only sharpens the content key the importer sequences on.
+	ExternalRef string
 }
 
 var (
@@ -164,7 +173,13 @@ func newTransaction(
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	tx.Checksum = tx.generateChecksum()
+	// Manual entries carry no sequence; their row number kept rows apart before and
+	// still does, so nothing about manual deduplication changes.
+	dedupSeq := data.DedupSeq
+	if dedupSeq == 0 {
+		dedupSeq = rowNumber
+	}
+	tx.Checksum = tx.generateChecksum(dedupSeq)
 	return tx, nil
 }
 
@@ -179,7 +194,10 @@ func (t *Transaction) GetID() (string, error) {
 	return "", ErrTransactionISINAndSymbolMissing
 }
 
-func (t *Transaction) generateChecksum() string {
+// generateChecksum digests what the row is, not where it sat in the file: dedupSeq
+// separates identical rows within one import, so the same transaction in a partly
+// overlapping export produces the same checksum and is recognised as already imported.
+func (t *Transaction) generateChecksum(dedupSeq int) string {
 	accountID := ""
 	if t.AccountID != nil {
 		accountID = t.AccountID.String()
@@ -214,7 +232,7 @@ func (t *Transaction) generateChecksum() string {
 		fmt.Sprintf("%.8f", t.Quantity),
 		fmt.Sprintf("%d", t.UnitPrice),
 		fmt.Sprintf("%d", t.AmountCents),
-		fmt.Sprintf("%d", t.RowNumber),
+		fmt.Sprintf("%d", dedupSeq),
 		accountID,
 		positionID,
 		string(t.Origin),

@@ -143,6 +143,13 @@ func (s *SQLXMarketDataStore) GetBySymbol(ctx context.Context, symbol string) (*
 	return s.selectListing(ctx, fmt.Sprintf(`SELECT * FROM %s WHERE symbol = ?`, s.listingsTable), symbol)
 }
 
+// GetByISIN returns one listing by ISIN, or (nil, nil) when it does not exist.
+// The match is exact: linking a holding to a listing on anything less would attach it
+// to the wrong instrument.
+func (s *SQLXMarketDataStore) GetByISIN(ctx context.Context, isin string) (*marketdata.Listing, error) {
+	return s.selectListing(ctx, fmt.Sprintf(`SELECT * FROM %s WHERE isin = ?`, s.listingsTable), isin)
+}
+
 func (s *SQLXMarketDataStore) selectListing(ctx context.Context, query string, arg any) (*marketdata.Listing, error) {
 	var listing marketdata.Listing
 	if err := sqlx.GetContext(ctx, s.db.GetExecutor(ctx), &listing, s.db.Rebind(query), arg); err != nil {

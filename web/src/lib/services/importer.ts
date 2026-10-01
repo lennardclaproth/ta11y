@@ -1,4 +1,4 @@
-import { ApiError, apiUpload } from '$lib/api/client';
+import { ApiError, apiGet, apiUpload } from '$lib/api/client';
 import { useMocks } from '$lib/api/config';
 import { numberToScaled } from '$lib/api/money';
 import type {
@@ -6,20 +6,29 @@ import type {
 	EOD,
 	EODImportInput,
 	ImportAcceptedResponse,
+	ImportResult,
+	ImportType,
 	PortfolioImportInput
 } from '$lib/api/types';
 import { eodByListing, listings } from '$lib/data/fixtures/marketdata';
-import { delay, mockId } from './_mock';
+import { clone, delay, mockId } from './_mock';
+import { registerMockImport, resolveMockImport } from './importer.mock';
 
 function mockAccepted(): ImportAcceptedResponse {
 	return { import_id: mockId(), status: 'pending' };
 }
 
+async function acceptMockImport(file: File, type: ImportType): Promise<ImportAcceptedResponse> {
+	await delay();
+	const accepted = mockAccepted();
+	await registerMockImport(accepted.import_id, type, file);
+	return accepted;
+}
+
 /** `POST /imports/cashflow` (multipart) */
 export async function importCashflow(input: CashflowImportInput): Promise<ImportAcceptedResponse> {
 	if (useMocks) {
-		await delay();
-		return mockAccepted();
+		return acceptMockImport(input.file, 'cashflow');
 	}
 	const form = new FormData();
 	form.append('file', input.file);
@@ -32,13 +41,25 @@ export async function importPortfolio(
 	input: PortfolioImportInput
 ): Promise<ImportAcceptedResponse> {
 	if (useMocks) {
-		await delay();
-		return mockAccepted();
+		return acceptMockImport(input.file, 'portfolio');
 	}
 	const form = new FormData();
 	form.append('file', input.file);
 	form.append('vendor_id', input.vendor_id);
 	return apiUpload<ImportAcceptedResponse>('/imports/portfolio', form);
+}
+
+/** `GET /imports/{import_id}` — poll until `status` is `completed` or `failed`. */
+export async function getImport(importId: string): Promise<ImportResult> {
+	if (useMocks) {
+		await delay();
+		const result = resolveMockImport(importId);
+		if (!result) {
+			throw new ApiError(404, 'Import not found', { import_id: 'import not found' });
+		}
+		return clone(result);
+	}
+	return apiGet<ImportResult>(`/imports/${importId}`);
 }
 
 /** `POST /imports/eod` (multipart) */

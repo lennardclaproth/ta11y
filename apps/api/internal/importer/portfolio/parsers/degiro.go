@@ -139,6 +139,9 @@ func (p *DegiroParser) ParseRow(record []string) (portfolio.TransactionData, err
 		Quantity:    quantity,
 		Price:       price,
 		Amount:      amount,
+		// DEGIRO's own order id, where the row has one. It is not stored: it only
+		// sharpens the content key that recognises an overlapping export.
+		ExternalRef: p.value(record, "Order Id"),
 	}, nil
 }
 
