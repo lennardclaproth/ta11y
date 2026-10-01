@@ -222,8 +222,10 @@
 								'border-b border-slate-100 transition-colors',
 								selected ? 'bg-amber-50' : 'hover:bg-slate-50',
 								rowSelectable ? '' : 'text-slate-400',
+								// An outline, not a ring: a ring is a box-shadow, which a collapsed table row
+								// does not paint.
 								onRowClick
-									? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none'
+									? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-slate-500'
 									: ''
 							]
 								.filter(Boolean)

@@ -81,9 +81,9 @@
 	let savingDate = $state(false);
 	let dateError = $state<string | null>(null);
 
-	// Set when a write was saved but its rebuild could not run, so what is on screen (positions,
+	// Set when a write was saved but its rebuild did not finish, so what is on screen (positions,
 	// performance, net worth) still reflects the previous result.
-	let staleSince = $state<string | null>(null);
+	let stale = $state<{ date: string; outcome: PortfolioRebuildOutcome } | null>(null);
 
 	const tabs = [
 		{ value: 'positions', label: 'Positions' },
@@ -284,10 +284,10 @@
 		}
 	}
 
-	// A write that could not be followed by a rebuild leaves the page showing the previous
+	// A write that was not followed by a finished rebuild leaves the page showing the previous
 	// result, so it says so and keeps the existing rebuild action as the way out.
 	function noteRebuild(outcome: PortfolioRebuildOutcome, date: string) {
-		staleSince = outcome === 'completed' || outcome === 'skipped' ? null : date;
+		stale = outcome === 'completed' || outcome === 'skipped' ? null : { date, outcome };
 	}
 
 	// The refusals worth naming are the ones the reader can act on: a date that already holds an
@@ -308,7 +308,7 @@
 		try {
 			await accountStore.ensureLoaded();
 			await rebuildPortfolio();
-			staleSince = null;
+			stale = null;
 			toast.success('Portfolio rebuild started');
 			void loadAll();
 		} catch {
@@ -397,12 +397,15 @@
 			</div>
 		{/snippet}
 
-		{#if staleSince}
+		{#if stale}
 			<Alert intent="warning" title="Portfolio not updated yet">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<span>
-						The transaction was saved on {formatDisplayDate(staleSince)}, but a rebuild was already
-						running. Positions, performance and net worth still show the previous result.
+						The transaction was saved on {formatDisplayDate(stale.date)}, but
+						{stale.outcome === 'in_progress'
+							? 'a rebuild was already running'
+							: 'the rebuild did not finish'}. Positions, performance and net worth still show the
+						previous result.
 					</span>
 					<Button
 						size="sm"
