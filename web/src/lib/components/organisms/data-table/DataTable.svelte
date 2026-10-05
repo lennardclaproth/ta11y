@@ -85,8 +85,12 @@
 		onRowClick(row);
 	}
 
+	// Only the row itself opens on Enter/Space. A key pressed on a control inside a cell --
+	// the selection checkbox, or anything a column renders -- bubbles up to the row, where
+	// preventDefault() would swallow the control's own handling.
 	function openRowByKey(event: KeyboardEvent, row: T) {
 		if (!onRowClick) return;
+		if (event.target !== event.currentTarget) return;
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		event.preventDefault();
 		onRowClick(row);
