@@ -44,6 +44,11 @@
 		periodPreset?: string;
 		periodPresets?: DateRangePreset[];
 		onPeriodChange?: (range: { from: string; to: string; preset: string }) => void;
+		/**
+		 * Whether the period picker is open. The narrow-screen panel this sits in closes on
+		 * Escape, and it has to let the picker have that key first.
+		 */
+		onPickerOpenChange?: (open: boolean) => void;
 		onSignOut?: () => void;
 		class?: string;
 	};
@@ -62,11 +67,16 @@
 		periodPreset = customPresetValue,
 		periodPresets = [],
 		onPeriodChange,
+		onPickerOpenChange,
 		onSignOut,
 		class: className = ''
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
+
+	$effect(() => {
+		onPickerOpenChange?.(pickerOpen);
+	});
 
 	const presetLabel = $derived(
 		periodPresets.find((item) => item.value === periodPreset)?.label ?? 'Custom'

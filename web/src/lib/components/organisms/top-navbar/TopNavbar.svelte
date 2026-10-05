@@ -29,6 +29,8 @@
 
 	let overviewOpen = $state(false);
 	let overviewTrigger = $state<HTMLButtonElement | null>(null);
+	/** Reported by the panel's overview, so Escape reaches the picker before this panel. */
+	let periodPickerOpen = $state(false);
 
 	$effect(() => {
 		void netWorthStore.ensureLoaded();
@@ -38,12 +40,14 @@
 	 * Escape closes the narrow-screen overview and hands focus back to the entry that opened it.
 	 * It is deliberately not a `Popover`: the period picker inside it is one, and it portals its
 	 * panel outside this one, so an outside-click rule here would close the overview the moment
-	 * you reached for a date.
+	 * you reached for a date. Both listen on `document` in the capture phase and this one is
+	 * registered first, so it has to stand aside while the picker is open: the inner layer closes
+	 * first, and Escape again closes the panel.
 	 */
 	$effect(() => {
 		if (!overviewOpen) return;
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key !== 'Escape') return;
+			if (event.key !== 'Escape' || periodPickerOpen) return;
 			overviewOpen = false;
 			overviewTrigger?.focus();
 		}
@@ -103,6 +107,7 @@
 		periodPreset={periodStore.preset}
 		periodPresets={periodStore.options}
 		onPeriodChange={changePeriod}
+		onPickerOpenChange={layout === 'panel' ? (open) => (periodPickerOpen = open) : undefined}
 		onSignOut={signOut}
 	/>
 {/snippet}
@@ -154,7 +159,11 @@
 				aria-expanded={overviewOpen}
 				aria-controls="account-overview-panel"
 				aria-label="Your overview"
-				onclick={() => (overviewOpen = !overviewOpen)}
+				onclick={() => {
+					overviewOpen = !overviewOpen;
+					// The panel takes its picker with it, so its last reported state goes too.
+					if (!overviewOpen) periodPickerOpen = false;
+				}}
 				class="inline-flex h-11 items-center gap-1 rounded-lg px-2 text-slate-700 transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:outline-none"
 			>
 				<Avatar name={accountName} size="sm" />
