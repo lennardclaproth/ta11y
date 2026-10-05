@@ -293,7 +293,10 @@ have caught up with it, so a client can report that rather than present a stale 
 - **Rebuilding after a manual write.** The rebuild itself is unchanged and still refuses to run
   while one is in progress. A refusal is not a failed write: the transaction is stored either
   way and the outcome is reported, with the existing `POST /portfolio/rebuild` as the way out.
-  There is no queue.
+  There is no queue. It runs on a context detached from the request — `Build` cleans positions
+  before it recomputes them, so a client that disconnects mid-write must not leave the account
+  emptied — and the write stops *waiting* after 20s, under the transport's 30s write timeout,
+  reporting `in_progress` while the rebuild carries on.
 - **Reads.** Snapshots are ordered `occurred_at ASC` (optionally date-bounded); positions join
   their latest snapshot and can include closed positions; transactions support filter + sort
   (`date` only) + offset pagination (limit ∈ {10,25,50,100}, default 25).

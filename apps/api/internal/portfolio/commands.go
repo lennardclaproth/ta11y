@@ -70,6 +70,16 @@ func NewCommands(cs CommandStore, qs TransactionReader, mdq marketdata.Queries, 
 	return &Commands{cs: cs, qs: qs, mdq: mdq, vq: vq, rb: rb}
 }
 
+const (
+	// rebuildReportTimeout caps how long a write waits for the rebuild it asked for before
+	// it answers. It stays under the transport's 30s write timeout, so the response to a
+	// write that did succeed still reaches the client.
+	rebuildReportTimeout = 20 * time.Second
+	// rebuildTimeout bounds a detached rebuild so one that hangs cannot hold the build lock
+	// for the lifetime of the process.
+	rebuildTimeout = 30 * time.Minute
+)
+
 // rebuild asks for a rebuild and classifies the outcome. A rebuild that cannot run is
 // not a failed write: the transaction is stored either way and the caller reports that
 // the portfolio has not caught up.
@@ -77,7 +87,32 @@ func (c *Commands) rebuild(ctx context.Context, accountID uuid.UUID) RebuildResu
 	if c.rb == nil {
 		return RebuildResult{Outcome: RebuildSkipped}
 	}
-	err := c.rb.Build(ctx, accountID)
+
+	// The rebuild deliberately outlives the request. Build clears the account's positions
+	// before it recomputes them, so a client that navigates away mid-write would otherwise
+	// leave the account emptied until someone rebuilds by hand.
+	buildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rebuildTimeout)
+	done := make(chan error, 1)
+	go func() {
+		defer cancel()
+		done <- c.rb.Build(buildCtx, accountID)
+	}()
+
+	// Waiting out a long rebuild would run past the write timeout and lose the response.
+	// Reporting that it is still running keeps the reply inside the window and leaves the
+	// existing rebuild action as the way out.
+	reportCtx, stopWaiting := context.WithTimeout(ctx, rebuildReportTimeout)
+	defer stopWaiting()
+
+	select {
+	case err := <-done:
+		return classifyRebuild(err)
+	case <-reportCtx.Done():
+		return RebuildResult{Outcome: RebuildInProgress}
+	}
+}
+
+func classifyRebuild(err error) RebuildResult {
 	switch {
 	case err == nil:
 		return RebuildResult{Outcome: RebuildCompleted}

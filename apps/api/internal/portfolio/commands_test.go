@@ -54,6 +54,19 @@ func (r *stubRebuilder) Build(_ context.Context, _ uuid.UUID) error {
 	return r.err
 }
 
+// contextRebuilder hands back the context its Build was called with and blocks until
+// released, so a test can tell a detached rebuild from one that dies with the request.
+type contextRebuilder struct {
+	started chan context.Context
+	release chan struct{}
+}
+
+func (r *contextRebuilder) Build(ctx context.Context, _ uuid.UUID) error {
+	r.started <- ctx
+	<-r.release
+	return nil
+}
+
 func manualTx(t *testing.T, accID uuid.UUID, day time.Time) *Transaction {
 	t.Helper()
 	tx, err := NewManualTransaction(TransactionData{
@@ -119,6 +132,35 @@ func TestChangeTransactionDateReportsRebuildAlreadyRunning(t *testing.T) {
 	if rebuild.Outcome != RebuildInProgress {
 		t.Fatalf("expected in_progress, got %q", rebuild.Outcome)
 	}
+}
+
+func TestChangeTransactionDateRebuildOutlivesTheRequest(t *testing.T) {
+	accID := uuid.New()
+	current := manualTx(t, accID, time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC))
+	store := &transactionDateStore{current: current, byChecksum: map[string]*Transaction{}}
+	rb := &contextRebuilder{started: make(chan context.Context, 1), release: make(chan struct{})}
+	commands := NewCommands(store, store, marketdata.Queries{}, vendor.Queries{}, rb)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, rebuild, err := commands.ChangeTransactionDate(ctx, accID, current.ID, "2026-07-14")
+	if err != nil {
+		t.Fatalf("change transaction date: %v", err)
+	}
+	if rebuild.Outcome != RebuildInProgress {
+		t.Fatalf("expected the write to report the rebuild as still running, got %q", rebuild.Outcome)
+	}
+
+	select {
+	case buildCtx := <-rb.started:
+		if buildCtx.Err() != nil {
+			t.Fatalf("expected the rebuild to run on a live context, got %v", buildCtx.Err())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected the rebuild to start even though the request was cancelled")
+	}
+	close(rb.release)
 }
 
 func TestChangeTransactionDateRefusesImportedTransaction(t *testing.T) {
