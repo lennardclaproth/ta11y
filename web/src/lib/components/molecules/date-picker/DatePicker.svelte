@@ -3,6 +3,7 @@
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Calendar from '$lib/components/molecules/calendar/Calendar.svelte';
 	import type { PopoverPlacement } from '$lib/components/molecules/popover/popover.types';
+	import type { ZLayer } from '$lib/styles/z-index';
 	import {
 		formatDisplayDate,
 		parseISODate,
@@ -27,6 +28,11 @@
 		portal?: boolean;
 		/** Where the calendar hangs off the trigger; `bottom-end` keeps it inside a narrow dialog. */
 		placement?: PopoverPlacement;
+		/**
+		 * Stacking layer of the calendar. Raise it to `filterPopover` inside a `Drawer`, whose
+		 * panel sits on the modal layer and would otherwise cover the portaled calendar.
+		 */
+		layer?: ZLayer;
 		/** Bindable open state of the calendar. */
 		open?: boolean;
 		ariaLabel?: string;
@@ -43,6 +49,7 @@
 		disabled = false,
 		portal = true,
 		placement = 'bottom-start',
+		layer = 'popover',
 		open = $bindable(false),
 		ariaLabel = 'Select date',
 		onChange,
@@ -71,7 +78,7 @@
 	}
 </script>
 
-<Popover bind:open {placement} {portal} class="p-3">
+<Popover bind:open {placement} {portal} {layer} class="p-3">
 	{#snippet trigger(api)}
 		<button
 			type="button"

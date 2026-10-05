@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { zClasses } from '$lib/styles/z-index';
+	import { zClasses, type ZLayer } from '$lib/styles/z-index';
 	import type { PopoverApi, PopoverPlacement } from './popover.types';
 
 	type Props = {
@@ -11,6 +11,12 @@
 		offset?: number;
 		/** Append the panel to <body> to escape clipping/transform ancestors. */
 		portal?: boolean;
+		/**
+		 * Stacking layer of the panel. The default sits below the modal scrim; raise it to
+		 * `filterPopover` when the trigger lives inside a `Drawer` or `Dialog`, or the panel
+		 * opens behind it.
+		 */
+		layer?: ZLayer;
 		/** Make the panel the same width as the trigger. */
 		matchWidth?: boolean;
 		closeOnOutsideClick?: boolean;
@@ -29,6 +35,7 @@
 		placement = 'bottom-start',
 		offset = 8,
 		portal = true,
+		layer = 'popover',
 		matchWidth = false,
 		closeOnOutsideClick = true,
 		closeOnEscape = true,
@@ -159,7 +166,7 @@
 	const panelClasses = $derived(
 		[
 			'overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md',
-			zClasses.popover,
+			zClasses[layer],
 			ready ? '' : 'invisible',
 			className
 		]

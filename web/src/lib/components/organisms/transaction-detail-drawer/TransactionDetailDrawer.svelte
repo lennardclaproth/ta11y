@@ -85,11 +85,14 @@
 					<dt class="text-sm text-slate-500">Date</dt>
 					<dd class="text-right">
 						{#if editable}
+							<!-- The drawer panel sits on the modal layer, so the portaled calendar has to be
+							     raised above it or it opens behind the panel and no day can be clicked. -->
 							<DatePicker
 								value={date}
 								max={today}
 								disabled={saving}
 								size="sm"
+								layer="filterPopover"
 								ariaLabel="Transaction date"
 								onChange={(next) => (date = next ?? date)}
 							/>
