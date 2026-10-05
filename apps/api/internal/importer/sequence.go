@@ -21,9 +21,10 @@ func NewDedupSequencer() *DedupSequencer {
 	return &DedupSequencer{seen: make(map[string]int)}
 }
 
-// Next returns the 1-based occurrence of this content within the file. The parts are
-// the fields that identify the row — date, product, amount, quantity, and the
-// broker's own order reference where the export carries one.
+// Next returns the 1-based occurrence of this content within the file. The parts have to
+// be exactly the fields the row's checksum digests — callers pass the row's own DedupKey.
+// A finer key separates rows the checksum cannot separate, which gives them the same
+// number and therefore the same checksum, and one of them is dropped as a duplicate.
 func (s *DedupSequencer) Next(parts ...string) int {
 	const sep = "\x1F"
 	key := strings.Join(parts, sep)

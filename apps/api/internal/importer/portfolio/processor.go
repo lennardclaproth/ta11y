@@ -3,7 +3,6 @@ package portfolio
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/lennardclaproth/ta11y/internal/files"
 	"github.com/lennardclaproth/ta11y/internal/importer"
@@ -74,17 +73,10 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 	data := make([]portfoliodomain.TransactionData, 0)
 	for rowNumber, row := range rows {
 		row.RowNumber = rowNumber
-		row.DedupSeq = sequencer.Next(
-			row.OccurredAt.Format("20060102"),
-			derefString(row.ISIN),
-			derefString(row.Symbol),
-			row.Description,
-			string(row.Type),
-			strconv.FormatFloat(row.Quantity, 'f', 8, 64),
-			strconv.FormatFloat(row.Price, 'f', 8, 64),
-			strconv.FormatFloat(row.Amount, 'f', 8, 64),
-			row.ExternalRef,
-		)
+		// The key is the transaction's own DedupKey, which is exactly what its checksum
+		// digests. Sequencing on anything finer would hand two rows the checksum cannot
+		// tell apart the same number, and one of them would be dropped as a duplicate.
+		row.DedupSeq = sequencer.Next(row.DedupKey()...)
 		data = append(data, row)
 	}
 	if len(data) == 0 {
@@ -100,13 +92,4 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 		Imported:   result.Imported,
 		Duplicates: result.Duplicates,
 	}, nil
-}
-
-// derefString reads an optional identifier into the dedup content key, where a missing
-// value has to compare equal across exports rather than blow up.
-func derefString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

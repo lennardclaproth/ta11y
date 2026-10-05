@@ -69,7 +69,7 @@ per destination what was new, what was already imported and what failed, plus th
 products it brought in that no listing matches yet.
 
 Repeating the import is safe. Consecutive exports overlap, so a row is recognised by
-what it is — date, product, amount, quantity and the broker's order reference — and no
+what it is — date, product, amount and quantity — and no
 longer by where it sits in the file; two identical rows inside one export still stay two
 transactions. Rows imported before this change are not converted.
 

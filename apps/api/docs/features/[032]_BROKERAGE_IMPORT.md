@@ -32,10 +32,13 @@ already imported; two genuinely identical rows in one export produce sequences 1
 and stay two transactions. The line number is still stored and still orders rows that
 share a day.
 
-The content the sequence is taken over includes the broker's own order reference where
-the export carries one (DEGIRO's `Order Id` — on the cashflow side it already travels
-in the row's note, on the portfolio side through the non-persisted
-`TransactionData.ExternalRef`).
+The content the sequence is taken over is exactly what the checksum digests, and no more:
+`TransactionData.DedupKey` on both sides is the one definition, and the processors
+sequence on it. A key that separated rows the checksum cannot separate would give both of
+them sequence 1 and therefore the same checksum, and one would be dropped as a duplicate.
+On the cashflow side that content includes the row's note, which carries DEGIRO's
+`Order Id`; the portfolio side has no equivalent field in the checksum and does not use
+one.
 
 **Existing transactions are not converted.** The checksum formula changed, so rows
 imported before this feature keep their old checksums. They are not re-detected, and

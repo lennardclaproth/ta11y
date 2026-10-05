@@ -121,6 +121,27 @@ func NewTransaction(desc, note, source, tag string, direction CashFlowDirection,
 	return t, nil
 }
 
+// checksumDateLayout is the day precision both the checksum and the dedup key work at.
+const checksumDateLayout = "20060102"
+
+// DedupKey is the content generateChecksum digests, normalised the same way and minus
+// the account, which is constant within one import, and the sequence the key is used to
+// produce.
+//
+// The importer sequences rows on this key, so the two have to stay in step. A key that
+// separates rows the checksum cannot separate gives both of them sequence 1, so they end
+// up with the same checksum and the bulk insert silently drops one as a duplicate.
+func (d TransactionData) DedupKey() []string {
+	return []string{
+		strings.TrimSpace(d.Description),
+		strings.TrimSpace(d.Note),
+		strings.TrimSpace(d.Source),
+		string(d.Direction),
+		fmt.Sprintf("%d", d.Amount),
+		d.Date.Format(checksumDateLayout),
+	}
+}
+
 // generateChecksum creates a checksum for the transaction based on the fields
 // description, note, source, amountCents, and date. It uses amountCents instead
 // of amount to avoid floating-point precision issues.
@@ -128,6 +149,9 @@ func NewTransaction(desc, note, source, tag string, direction CashFlowDirection,
 // It digests what the row is, not where it sat in the file: dedupSeq separates
 // identical rows within one import, so the same transaction in a partly overlapping
 // export produces the same checksum and is recognised as already imported.
+//
+// TransactionData.DedupKey must digest the same fields; see its doc for what goes wrong
+// when the two drift apart.
 func (t *Transaction) generateChecksum(dedupSeq int) string {
 	// initialize fields to be used in checksum generation, these fields need to be
 	// of type string
@@ -137,7 +161,7 @@ func (t *Transaction) generateChecksum(dedupSeq int) string {
 	direction := string(t.Direction)
 	amountCents := fmt.Sprintf("%d", t.AmountCents)
 	sequence := fmt.Sprintf("%d", dedupSeq)
-	date := t.Date.Format("20060102") // Standard date format
+	date := t.Date.Format(checksumDateLayout)
 	accountID := ""
 	if t.AccountID != uuid.Nil {
 		accountID = t.AccountID.String()

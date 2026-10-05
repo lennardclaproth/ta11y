@@ -3,7 +3,6 @@ package cashflow
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	cashflowdomain "github.com/lennardclaproth/ta11y/internal/cashflow"
 	"github.com/lennardclaproth/ta11y/internal/files"
@@ -73,15 +72,12 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 	for rowNumber, row := range rows {
 		row.Source = source
 		row.RowNumber = rowNumber
-		// The note carries the vendor's own reference (DEGIRO's order id), so the
-		// content key already distinguishes two same-day transfers of equal size.
-		row.DedupSeq = sequencer.Next(
-			row.Date.Format("20060102"),
-			row.Description,
-			row.Note,
-			string(row.Direction),
-			strconv.FormatInt(int64(row.Amount), 10),
-		)
+		// The key is the transaction's own DedupKey, which is exactly what its checksum
+		// digests — including the note, which carries the vendor's own reference
+		// (DEGIRO's order id) and so already separates two same-day transfers of equal
+		// size. Sequencing on anything finer would hand two rows the checksum cannot
+		// tell apart the same number, and one of them would be dropped as a duplicate.
+		row.DedupSeq = sequencer.Next(row.DedupKey()...)
 		data = append(data, row)
 	}
 	if len(data) == 0 {
