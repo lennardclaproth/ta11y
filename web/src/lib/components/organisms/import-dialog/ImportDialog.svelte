@@ -232,15 +232,23 @@
 	 * Uploads to one destination and follows it to the end. A destination that never
 	 * gets off the ground resolves to null rather than throwing, so the other half
 	 * still gets reported — partial success is the expected outcome here, not an error.
+	 *
+	 * Nothing is written back once `runFor` is no longer the current run: the user can
+	 * close the dialog mid-import and start another upload, and polling the abandoned
+	 * one keeps going for up to POLL_TIMEOUT_MS. Without the guard its counts would land
+	 * on the newer run's result screen, under the newer file's name.
 	 */
 	async function run(
+		runFor: number,
 		upload: () => Promise<{ import_id: string }>,
 		assign: (result: ImportResult | null) => void
 	): Promise<void> {
 		try {
 			const accepted = await upload();
-			assign(await poll(accepted.import_id));
+			const result = await poll(accepted.import_id);
+			if (runFor === runId) assign(result);
 		} catch (cause) {
+			if (runFor !== runId) return;
 			assign(null);
 			if (!failure) failure = describe(cause);
 		}
@@ -269,10 +277,12 @@
 		const run_ = runId;
 		await Promise.all([
 			run(
+				run_,
 				() => importCashflow({ file: current, vendor_id: vendorId }),
 				(result) => (cashflowResult = result)
 			),
 			run(
+				run_,
 				() => importPortfolio({ file: current, vendor_id: vendorId }),
 				(result) => (portfolioResult = result)
 			)
