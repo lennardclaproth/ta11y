@@ -33,6 +33,12 @@
 		/** Show the quick-range preset column. */
 		showPresets?: boolean;
 		/**
+		 * Offer "Clear". Turn it off where an empty range is not a state the caller can hold —
+		 * an app-wide period has no "no period", and clearing it would only leave the picker and
+		 * its owner disagreeing.
+		 */
+		showClear?: boolean;
+		/**
 		 * Named ranges to offer instead of the built-in list. Supplied presets read as a row
 		 * above the calendars rather than a column beside them, so one control holds both the
 		 * named period and the exact days it resolves to.
@@ -58,6 +64,7 @@
 		size = 'md',
 		disabled = false,
 		showPresets = true,
+		showClear = true,
 		presets,
 		preset = $bindable(customPresetValue),
 		open = $bindable(false),
@@ -289,7 +296,9 @@
 					{draftEnd ? `→ ${formatDisplayDate(draftEnd)}` : ''}
 				</span>
 				<div class="flex gap-2">
-					<Button size="sm" variant="ghost" intent="secondary" onclick={clear}>Clear</Button>
+					{#if showClear}
+						<Button size="sm" variant="ghost" intent="secondary" onclick={clear}>Clear</Button>
+					{/if}
 					<Button size="sm" onclick={apply} disabled={!draftStart}>Apply</Button>
 				</div>
 			</div>

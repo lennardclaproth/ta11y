@@ -95,6 +95,7 @@
 	);
 
 	function handlePeriodChange(range: { from: string | null; to: string | null; preset: string }) {
+		// The picker is told not to offer "Clear" here, so an empty range should not reach this.
 		if (!range.from || !range.to) return;
 		onPeriodChange?.({ from: range.from, to: range.to, preset: range.preset });
 	}
@@ -161,13 +162,16 @@
 
 {#snippet periodPicker(full: boolean)}
 	<!-- The committed range comes back through `onChange`; the picker's own copies of it are
-	     overwritten from above on the next render, so they are passed one way. -->
+	     overwritten from above on the next render, so they are passed one way. "Clear" is off:
+	     the app-wide period is never empty, and clearing would only blank the picker's own copies
+	     while the period it shows stays put. -->
 	<DateRangePicker
 		bind:open={pickerOpen}
 		from={periodFrom || null}
 		to={periodTo || null}
 		preset={periodPreset}
 		presets={periodPresets}
+		showClear={false}
 		trigger={full ? blockTrigger : inlineTrigger}
 		onChange={handlePeriodChange}
 	/>
