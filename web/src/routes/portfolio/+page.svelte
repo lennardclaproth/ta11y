@@ -331,6 +331,7 @@
 	<PageContentTemplate title="Portfolio">
 		{#snippet analytics()}
 			<div class="flex flex-col gap-3">
+				<KpiRow items={kpis} columns={3} />
 				<!-- Rebuilding recomputes the series this chart draws, so it hangs on the chart's
 				     own rule rather than in a menu above the page. -->
 				<AnalyticsCard title="Value vs cost basis">
