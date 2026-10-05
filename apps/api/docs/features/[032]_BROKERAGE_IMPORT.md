@@ -65,10 +65,12 @@ for a completed portfolio import — `unlinked_products`. It is scoped to the se
 account: another account's import, and an import with no account (EOD uploads are
 listing-scoped), are reported as `404`.
 
-`reason` is `file_not_recognised` when the vendor's parser refused the whole file,
-which happens when the headers are not the ones that export carries. That deserves a
-different answer than a generic failure — a different file, not a retry — so the panel
-says so and reports that nothing was changed.
+`reason` is `file_not_recognised` when the vendor's parser refused the whole file because
+its headers are not the ones that export carries (`parsers.ErrMissingHeader`). That
+deserves a different answer than a generic failure — a different file, not a retry — so
+the panel says so and reports that nothing was changed. Nothing else is classified that
+way: a read failure on the server stays a generic failure, which is the one the user can
+usefully retry.
 
 The stored upload is removed once an import reaches a terminal state: the rows have
 been taken over by the target feature and nothing reads the file again.
@@ -91,7 +93,8 @@ the panel does not claim a finish it cannot observe.
 | --- | --- |
 | `internal/importer/sequence.go` | `DedupSequencer` — the occurrence count that replaced the line number |
 | `internal/importer/queries.go` | Read side: one import's result, `FailureReason` |
-| `internal/importer/{cashflow,portfolio}/processor.go` | Stamp the sequence; classify an unreadable file |
+| `internal/importer/{cashflow,portfolio}/processor.go` | Stamp the sequence; classify a header mismatch as the wrong export |
+| `internal/importer/{cashflow,portfolio}/parsers/errors.go` | `ErrMissingHeader` — the one parse failure that means "wrong file" |
 | `internal/cashflow/transaction.go`, `internal/portfolio/transaction.go` | Checksum over content + sequence |
 | `internal/marketdata/queries.go` | `ListingByIdentity` — exact ISIN, else exact symbol |
 | `internal/portfolio/builder.go` | Position → listing linking on every rebuild |

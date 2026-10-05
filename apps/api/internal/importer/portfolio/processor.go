@@ -2,10 +2,12 @@ package portfolio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lennardclaproth/ta11y/internal/files"
 	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/importer/portfolio/parsers"
 	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
@@ -64,9 +66,13 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 
 	rows, err := parser.ParseAll(rc)
 	if err != nil {
-		// The parser only refuses the whole file when its headers are not the ones the
-		// vendor's export carries, so this is the wrong export rather than a bad row.
-		return importer.ProcessResult{}, fmt.Errorf("%w: %v", importer.ErrImportFileNotRecognised, err)
+		// Only a header mismatch means this is the wrong export. A read error is a
+		// server-side failure worth retrying, and answering it with "upload a different
+		// file" would send the user the wrong way.
+		if errors.Is(err, parsers.ErrMissingHeader) {
+			return importer.ProcessResult{}, fmt.Errorf("%w: %v", importer.ErrImportFileNotRecognised, err)
+		}
+		return importer.ProcessResult{}, fmt.Errorf("parse csv: %w", err)
 	}
 
 	sequencer := importer.NewDedupSequencer()

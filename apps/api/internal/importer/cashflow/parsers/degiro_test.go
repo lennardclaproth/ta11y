@@ -1,6 +1,7 @@
 package parsers
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -81,9 +82,30 @@ func TestDegiroParser_ParseAll_MissingRequiredHeader(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for missing required header")
 	}
-	if !strings.Contains(err.Error(), "missing required header: Change") {
-		t.Fatalf("unexpected error: %v", err)
+	// The importer classifies on this sentinel: it is what separates "that is not the
+	// DEGIRO export" from a read failure the user should simply retry.
+	if !errors.Is(err, ErrMissingHeader) {
+		t.Fatalf("expected ErrMissingHeader, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "Change") {
+		t.Fatalf("expected the missing header to be named, got %v", err)
+	}
+}
+
+func TestDegiroParser_ParseAll_ReadErrorIsNotAHeaderMismatch(t *testing.T) {
+	_, err := NewDegiroParser().ParseAll(io.NopCloser(failingReader{}))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	if errors.Is(err, ErrMissingHeader) {
+		t.Fatalf("expected a read failure not to be reported as the wrong file, got %v", err)
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, errors.New("disk is having a day")
 }
 
 func TestDegiroParser_ParseAll_FallbackToDateWhenValueDateEmpty(t *testing.T) {

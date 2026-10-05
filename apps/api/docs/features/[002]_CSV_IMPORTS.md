@@ -270,9 +270,13 @@ on a different line. `importer.DedupSequencer` counts how often identical conten
 within one file, so the same row is recognised across exports while two identical rows in
 one export stay two transactions — see [032].
 
-A parser that refuses the whole file (its headers are not that vendor's export) fails the
-import with `ErrImportFileNotRecognised`, which `importer.FailureReason` classifies as
+A parser that refuses the whole file because its headers are not that vendor's export
+(`parsers.ErrMissingHeader`, in both the cashflow and the portfolio parsers package) fails
+the import with `ErrImportFileNotRecognised`, which `importer.FailureReason` classifies as
 `file_not_recognised` so a client can answer it with "wrong file" rather than "try again".
+That sentinel is the only thing classified that way: every other parse failure — a read
+error, a close error — is a server-side failure and stays a generic one, because telling
+the user to upload a different file would send them the wrong way.
 - **EOD** — requires `listing_id`; resolves the parser by listing source; parsing is
   **all-or-nothing**: if the parser reports any row errors the import fails (reporting
   `TotalRows` and `Failed`) without persisting anything; otherwise maps rows to
