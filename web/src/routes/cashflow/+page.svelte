@@ -126,17 +126,25 @@
 		};
 	}
 
+	// A period change invalidates the load effect and then resets `offset`, so two queries can be
+	// in flight at once. Only the newest may write the table, or a slow response for the page you
+	// just left can land last and show rows the URL and the pagination control disagree with.
+	let requestId = 0;
+
 	async function load(query: CashflowTransactionsQuery) {
+		const id = ++requestId;
 		loading = true;
 		error = null;
 		try {
 			const result = await listCashflowTransactions(query);
+			if (id !== requestId) return;
 			rows = result.data;
 			total = result.pagination.total;
 		} catch {
+			if (id !== requestId) return;
 			error = 'Failed to load transactions';
 		} finally {
-			loading = false;
+			if (id === requestId) loading = false;
 		}
 	}
 
