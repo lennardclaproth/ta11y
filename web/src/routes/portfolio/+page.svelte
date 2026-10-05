@@ -252,7 +252,7 @@
 			noteRebuild(created.rebuild, txDate);
 			void loadAll();
 		} catch (err) {
-			txError = writeMessage(err, txDate);
+			txError = createMessage(err, txDate);
 			toast.error('Failed to add transaction');
 		} finally {
 			creatingTx = false;
@@ -278,7 +278,7 @@
 			noteRebuild(result.rebuild, date);
 			void loadAll();
 		} catch (err) {
-			dateError = writeMessage(err, date);
+			dateError = dateChangeMessage(err, date);
 		} finally {
 			savingDate = false;
 		}
@@ -290,16 +290,40 @@
 		stale = outcome === 'completed' || outcome === 'skipped' ? null : { date, outcome };
 	}
 
-	// The refusals worth naming are the ones the reader can act on: a date that already holds an
-	// identical transaction, or a row that came from an import and keeps its statement date.
-	function writeMessage(err: unknown, date: string): string {
-		if (err instanceof ApiError && err.status === 409) {
-			return `A transaction with the same listing and amount already exists on ${formatDisplayDate(date)}. Pick another day.`;
+	const genericWriteMessage = 'Could not save the transaction. Try again.';
+
+	function duplicateMessage(date: string): string {
+		return `A transaction with the same listing and amount already exists on ${formatDisplayDate(date)}. Pick another day.`;
+	}
+
+	// A refused write answers with one field and its reason, e.g. a vendor that is not a broker
+	// or a date in the future. That reason is the only thing that tells the reader what to change.
+	function fieldMessage(err: unknown): string | null {
+		if (!(err instanceof ApiError) || typeof err.body !== 'object' || err.body === null) {
+			return null;
 		}
+		const reason = Object.values(err.body as Record<string, unknown>).find(
+			(value) => typeof value === 'string' && value.trim() !== ''
+		);
+		return typeof reason === 'string' ? reason : null;
+	}
+
+	// The two paths share statuses but not their meaning: a 422 on the create is an unsupported
+	// vendor type, on a date change it is a row that came from an import.
+	function createMessage(err: unknown, date: string): string {
+		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
+		if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
+			return fieldMessage(err) ?? genericWriteMessage;
+		}
+		return genericWriteMessage;
+	}
+
+	function dateChangeMessage(err: unknown, date: string): string {
+		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
 		if (err instanceof ApiError && err.status === 422) {
 			return 'This transaction came from an import, so it keeps its statement date.';
 		}
-		return 'Could not save the transaction. Try again.';
+		return genericWriteMessage;
 	}
 
 	async function handleRebuild() {
