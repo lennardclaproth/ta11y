@@ -138,18 +138,23 @@
 		}
 		function onKeydown(event: KeyboardEvent) {
 			if (event.key !== 'Escape' || !closeOnEscape) return;
-			// Inside a <dialog> the same Escape would also trigger the native close request, so
-			// one press would dismiss the whole form instead of just this panel. Claiming the
-			// key while the panel is open keeps Escape stepping out one layer at a time.
+			// Inside a <dialog> the same Escape would also trigger the native close request, and
+			// inside a Drawer its own Escape handler, so one press would dismiss the whole form
+			// instead of just this panel. Marking the event as handled while the panel is open
+			// keeps Escape stepping out one layer at a time; the surrounding layer checks
+			// `defaultPrevented` before it closes.
 			event.preventDefault();
 			event.stopPropagation();
 			setOpen(false);
 		}
 		document.addEventListener('pointerdown', onPointerDown, true);
-		document.addEventListener('keydown', onKeydown, true);
+		// On `window`, not `document`: capture runs outside in, so this fires ahead of a Drawer's
+		// document-level handler, which registered first and would otherwise close before this
+		// one got to claim the key.
+		window.addEventListener('keydown', onKeydown, true);
 		return () => {
 			document.removeEventListener('pointerdown', onPointerDown, true);
-			document.removeEventListener('keydown', onKeydown, true);
+			window.removeEventListener('keydown', onKeydown, true);
 		};
 	});
 
