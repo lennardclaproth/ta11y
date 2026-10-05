@@ -1,6 +1,5 @@
 import {
 	addDaysISO,
-	addMonthsUTC,
 	formatDisplayDate,
 	parseISODate,
 	toISODate,
@@ -37,10 +36,18 @@ export const periodPresetLabels = {
 /** The presets offered in the picker, in reading order. */
 export const periodPresetOrder: PeriodPreset[] = ['1m', '3m', '6m', 'ytd', '1y', '3y', '5y', 'max'];
 
+/**
+ * `months` calendar months before `today`, keeping the day of the month. The calendar grid's
+ * `addMonthsUTC` anchors to the 1st, which would make `1M` run up to 59 days; a day the target
+ * month does not have (31 March minus one month) clamps to its last day instead of rolling over.
+ */
 function monthsBack(today: string, months: number): string {
 	const base = parseISODate(today);
 	if (!base) return today;
-	return toISODate(addMonthsUTC(base, -months));
+	const year = base.getUTCFullYear();
+	const month = base.getUTCMonth() - months;
+	const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+	return toISODate(new Date(Date.UTC(year, month, Math.min(base.getUTCDate(), lastDayOfMonth))));
 }
 
 let from = $state(`${todayISO().slice(0, 4)}-01-01`);
