@@ -12,9 +12,6 @@ import { listings } from '$lib/data/fixtures/marketdata';
 /** The headers both DEGIRO parsers require before they will read a single row. */
 const requiredHeaders = ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change'];
 
-const notRecognised =
-	'This is not the DEGIRO Account statement export. Export "Account statement" from DEGIRO and upload that CSV.';
-
 /**
  * Rows already imported in this session, per destination. The real deduplication lives
  * in the database; a module-level set is the fixture equivalent, so re-uploading a
@@ -42,7 +39,6 @@ function emptyResult(importId: string, type: ImportType): ImportResult {
 		import_id: importId,
 		type,
 		status: 'pending',
-		status_msg: '',
 		reason: '',
 		total_rows: 0,
 		imported: 0,
@@ -102,7 +98,6 @@ export async function registerMockImport(
 	if (missing.length > 0) {
 		result.status = 'failed';
 		result.reason = 'file_not_recognised';
-		result.status_msg = notRecognised;
 		return;
 	}
 

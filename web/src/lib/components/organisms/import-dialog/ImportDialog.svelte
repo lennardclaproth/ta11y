@@ -98,8 +98,8 @@
 
 	/**
 	 * What a destination has to say beyond its counts — only when it did not fully
-	 * succeed. `status_msg` is a wrapped server error meant for the log, so it is
-	 * deliberately not shown; the classified `reason` is what carries meaning here.
+	 * succeed. The classified `reason` is all the server returns about a failure; its
+	 * own error message stays in the server log.
 	 */
 	function destinationMessage(result: ImportResult | null): string {
 		if (!result) return 'This destination did not report back.';

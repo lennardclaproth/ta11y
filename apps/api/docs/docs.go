@@ -3861,9 +3861,6 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
-                "status_msg": {
-                    "type": "string"
-                },
                 "total_rows": {
                     "type": "integer"
                 },

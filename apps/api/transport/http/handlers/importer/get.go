@@ -23,11 +23,14 @@ type UnlinkedProductResponse struct {
 // ImportResultResponse reports what one import did: its lifecycle state, the counters
 // the processor produced, and the products it brought in that do not count towards
 // performance yet.
+//
+// The import's stored StatusMsg is deliberately absent. It is a wrapped Go error that
+// names upload paths, tables and driver text, and the classified Reason is what a client
+// can act on. The full message is logged where the import fails.
 type ImportResultResponse struct {
 	ImportID   uuid.UUID `json:"import_id"`
 	Type       string    `json:"type"`
 	Status     string    `json:"status"`
-	StatusMsg  string    `json:"status_msg"`
 	Reason     string    `json:"reason"`
 	TotalRows  int       `json:"total_rows"`
 	Imported   int       `json:"imported"`
@@ -88,7 +91,6 @@ func toImportResultResponse(result *importer.ImportResult) ImportResultResponse 
 		ImportID:         imp.ID,
 		Type:             string(imp.Type),
 		Status:           string(imp.Status),
-		StatusMsg:        imp.StatusMsg,
 		Reason:           importer.FailureReason(imp),
 		TotalRows:        imp.TotalRows,
 		Imported:         imp.Imported,

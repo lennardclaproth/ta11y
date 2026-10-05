@@ -49,8 +49,10 @@ export interface ImportResult {
 	import_id: string;
 	type: ImportType;
 	status: ImportStatus;
-	status_msg: string;
-	/** `file_not_recognised` when the parser refused the file, otherwise empty. */
+	/**
+	 * `file_not_recognised` when the parser refused the file, otherwise empty. This is
+	 * all a failed import says: the server's own error message stays on the server.
+	 */
 	reason: string;
 	total_rows: number;
 	imported: number;

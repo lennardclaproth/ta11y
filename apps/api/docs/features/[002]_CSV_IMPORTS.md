@@ -193,7 +193,7 @@ stateDiagram-v2
 | `pending` | File stored and record created; waiting for a worker. |
 | `processing` | A worker has claimed the import and is parsing/persisting. |
 | `completed` | The target feature accepted the batch; result counters are stored. |
-| `failed` | Validation, parsing, or persistence failed; `status_msg` holds the reason. |
+| `failed` | Validation, parsing, or persistence failed; `status_msg` holds the wrapped Go error, server-side only — it never reaches a client. |
 | `in_progress` | Legacy/compat status — present in the schema + Go const, unused by the lifecycle. |
 
 There is no `cancelled` and no `completed_with_errors` — for cashflow/portfolio a
@@ -312,7 +312,7 @@ the target feature and nothing reads the file again.
 ## Reading an import
 
 `GET /imports/{import_id}` (`importer.Queries.Result`) returns the import's `status`,
-`status_msg`, a classified `reason`, the counters, and — for a **completed portfolio**
+a classified `reason`, the counters, and — for a **completed portfolio**
 import — `unlinked_products`: the instruments it brought in that no listing matches
 (`portfolio.Queries.UnlinkedProducts`, derived at read time). The endpoint is scoped to
 the session's account; an import belonging to another account, or to none at all (EOD
