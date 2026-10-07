@@ -168,6 +168,27 @@ func newTransaction(
 	return tx, nil
 }
 
+// IsManual reports whether the transaction was entered by hand rather than imported.
+// Only manual transactions may be moved to another date: the checksum that recognises a
+// re-imported row carries its date, so moving an imported row would make the next import
+// of the same file insert it again.
+func (t *Transaction) IsManual() bool {
+	return t.Origin == TransactionOriginManual
+}
+
+// MovedTo returns a copy of the transaction occurring on day, with the dedup checksum
+// recomputed so its identity follows the new date. The position mapping is left out of
+// the copy: a rebuild writes position_id onto the row long after its checksum was
+// generated, so the identity to stay comparable with is the one it was created under.
+func (t *Transaction) MovedTo(day time.Time) *Transaction {
+	moved := *t
+	moved.PositionID = nil
+	moved.OccurredAt = day.UTC()
+	moved.UpdatedAt = time.Now().UTC()
+	moved.Checksum = moved.generateChecksum()
+	return &moved
+}
+
 // GetID returns the identifier for the transaction, which is either the ISIN or Symbol. This is used for mapping transactions to positions. If both ISIN and Symbol are missing, it returns an error.
 // ISIN takes precedence over Symbol for the ID.
 func (t *Transaction) GetID() (string, error) {

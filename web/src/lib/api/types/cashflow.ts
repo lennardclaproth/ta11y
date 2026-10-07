@@ -75,6 +75,23 @@ export interface CreateCashflowTransactionsResponse {
 	data: CashflowTransaction[];
 }
 
+/**
+ * `POST /cashflow/transactions/date` request — mirrors `cashflow.ChangeTransactionDateRequest`.
+ * Only manually entered transactions can be moved, and only to today or earlier.
+ */
+export interface ChangeCashflowTransactionDateRequest {
+	id: string;
+	/** "YYYY-MM-DD". */
+	date: string;
+}
+
+/** `POST /cashflow/transactions/date` — mirrors `cashflow.ChangeTransactionDateResponse`. */
+export interface ChangeCashflowTransactionDateResponse {
+	id: string;
+	/** RFC3339 timestamp. */
+	date: string;
+}
+
 /** Shared bulk-mutation filter body. Mirrors `cashflow.TransactionFilters`. */
 export interface CashflowTransactionFilters {
 	q?: string;

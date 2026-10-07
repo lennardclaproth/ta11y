@@ -16,7 +16,9 @@
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
-	import DatePicker from '$lib/components/molecules/date-picker/DatePicker.svelte';
+	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
+	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
 	import {
@@ -24,12 +26,15 @@
 		getPortfolioSnapshots,
 		listPortfolioTransactions,
 		createManualPortfolioTransaction,
+		changePortfolioTransactionDate,
 		rebuildPortfolio
 	} from '$lib/services/portfolio';
 	import { listVendors } from '$lib/services/vendors';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { scaledToNumber } from '$lib/api/money';
+	import { isManualPortfolioTransaction, portfolioOriginLabel } from '$lib/api/transactions';
+	import { ApiError } from '$lib/api/client';
 	import { chartColors } from '$lib/charts/theme';
 	import { formatDisplayDate, todayISO } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { KpiItem } from '$lib/components/organisms/kpi-row/kpi-row.types';
@@ -37,6 +42,7 @@
 	import type {
 		ListingSearchRow,
 		PortfolioPosition,
+		PortfolioRebuildOutcome,
 		PortfolioSnapshotPoint,
 		PortfolioTransaction,
 		PortfolioTransactionType,
@@ -61,10 +67,23 @@
 	let txListing = $state<ListingSearchRow | null>(null);
 	let txQuantity = $state('');
 	let txAmount = $state('');
+	let txToday = $state(todayISO());
 	let txDate = $state(todayISO());
+	let txPickerOpen = $state(false);
 	let txDescription = $state('');
+	let txError = $state<string | null>(null);
 	let creatingTx = $state(false);
 	let rebuilding = $state(false);
+
+	let detailRow = $state<PortfolioTransaction | null>(null);
+	let detailOpen = $state(false);
+	let detailDate = $state('');
+	let savingDate = $state(false);
+	let dateError = $state<string | null>(null);
+
+	// Set when a write was saved but its rebuild did not finish, so what is on screen (positions,
+	// performance, net worth) still reflects the previous result.
+	let stale = $state<{ date: string; outcome: PortfolioRebuildOutcome } | null>(null);
 
 	const tabs = [
 		{ value: 'positions', label: 'Positions' },
@@ -183,8 +202,12 @@
 		txListing = null;
 		txQuantity = '';
 		txAmount = '';
-		txDate = todayISO();
+		// The form always opens on today; a backdated entry is a deliberate step away from it.
+		txToday = todayISO();
+		txDate = txToday;
+		txPickerOpen = false;
 		txDescription = '';
+		txError = null;
 		txOpen = true;
 		if (vendors.length === 0) {
 			try {
@@ -212,9 +235,10 @@
 			return;
 		}
 		creatingTx = true;
+		txError = null;
 		try {
 			await accountStore.ensureLoaded();
-			await createManualPortfolioTransaction({
+			const created = await createManualPortfolioTransaction({
 				vendor_id: vendorId,
 				occurred_at: txDate,
 				type: txType,
@@ -225,12 +249,81 @@
 			});
 			txOpen = false;
 			toast.success('Transaction added');
+			noteRebuild(created.rebuild, txDate);
 			void loadAll();
-		} catch {
+		} catch (err) {
+			txError = createMessage(err, txDate);
 			toast.error('Failed to add transaction');
 		} finally {
 			creatingTx = false;
 		}
+	}
+
+	function openDetail(row: PortfolioTransaction) {
+		detailRow = row;
+		detailDate = row.occurred_at.slice(0, 10);
+		dateError = null;
+		detailOpen = true;
+	}
+
+	async function handleDateChange(date: string) {
+		const row = detailRow;
+		if (!row) return;
+		savingDate = true;
+		dateError = null;
+		try {
+			const result = await changePortfolioTransactionDate({ id: row.id, occurred_at: date });
+			detailOpen = false;
+			toast.success(`Moved to ${formatDisplayDate(date)}`);
+			noteRebuild(result.rebuild, date);
+			void loadAll();
+		} catch (err) {
+			dateError = dateChangeMessage(err, date);
+		} finally {
+			savingDate = false;
+		}
+	}
+
+	// A write that was not followed by a finished rebuild leaves the page showing the previous
+	// result, so it says so and keeps the existing rebuild action as the way out.
+	function noteRebuild(outcome: PortfolioRebuildOutcome, date: string) {
+		stale = outcome === 'completed' || outcome === 'skipped' ? null : { date, outcome };
+	}
+
+	const genericWriteMessage = 'Could not save the transaction. Try again.';
+
+	function duplicateMessage(date: string): string {
+		return `A transaction with the same listing and amount already exists on ${formatDisplayDate(date)}. Pick another day.`;
+	}
+
+	// A refused write answers with one field and its reason, e.g. a vendor that is not a broker
+	// or a date in the future. That reason is the only thing that tells the reader what to change.
+	function fieldMessage(err: unknown): string | null {
+		if (!(err instanceof ApiError) || typeof err.body !== 'object' || err.body === null) {
+			return null;
+		}
+		const reason = Object.values(err.body as Record<string, unknown>).find(
+			(value) => typeof value === 'string' && value.trim() !== ''
+		);
+		return typeof reason === 'string' ? reason : null;
+	}
+
+	// The two paths share statuses but not their meaning: a 422 on the create is an unsupported
+	// vendor type, on a date change it is a row that came from an import.
+	function createMessage(err: unknown, date: string): string {
+		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
+		if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
+			return fieldMessage(err) ?? genericWriteMessage;
+		}
+		return genericWriteMessage;
+	}
+
+	function dateChangeMessage(err: unknown, date: string): string {
+		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
+		if (err instanceof ApiError && err.status === 422) {
+			return 'This transaction came from an import, so it keeps its statement date.';
+		}
+		return genericWriteMessage;
 	}
 
 	async function handleRebuild() {
@@ -239,7 +332,9 @@
 		try {
 			await accountStore.ensureLoaded();
 			await rebuildPortfolio();
+			stale = null;
 			toast.success('Portfolio rebuild started');
+			void loadAll();
 		} catch {
 			toast.error('Failed to start rebuild');
 		} finally {
@@ -268,6 +363,14 @@
 
 {#snippet txTypeCell(row: PortfolioTransaction)}
 	<Badge intent="neutral" variant="soft" size="sm">{row.type}</Badge>
+{/snippet}
+
+<!-- Where the row came from, as a word rather than only a badge colour: it is what decides
+     whether its date can still be changed. -->
+{#snippet txOriginCell(row: PortfolioTransaction)}
+	<Badge intent={isManualPortfolioTransaction(row) ? 'info' : 'neutral'} variant="soft" size="sm">
+		{portfolioOriginLabel(row)}
+	</Badge>
 {/snippet}
 
 <AppShellTemplate>
@@ -318,6 +421,30 @@
 			</div>
 		{/snippet}
 
+		{#if stale}
+			<Alert intent="warning" title="Portfolio not updated yet">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<span>
+						The transaction was saved on {formatDisplayDate(stale.date)}, but
+						{stale.outcome === 'in_progress'
+							? 'a rebuild was already running'
+							: 'the rebuild did not finish'}. Positions, performance and net worth still show the
+						previous result.
+					</span>
+					<Button
+						size="sm"
+						variant="outline"
+						intent="secondary"
+						shape="default"
+						loading={rebuilding}
+						onclick={() => void handleRebuild()}
+					>
+						Rebuild portfolio
+					</Button>
+				</div>
+			</Alert>
+		{/if}
+
 		<div class="flex min-h-0 flex-1 flex-col">
 			<LedgerToolbar actionLabel="Add transaction" onAdd={openTx}>
 				<Tabs {tabs} bind:value={tab} ariaLabel="Portfolio view" />
@@ -354,6 +481,7 @@
 					{loading}
 					{error}
 					emptyText="No transactions"
+					onRowClick={openDetail}
 					columns={[
 						{
 							key: 'date',
@@ -361,6 +489,7 @@
 							value: (r: PortfolioTransaction) => formatDisplayDate(r.occurred_at.slice(0, 10))
 						},
 						{ key: 'type', header: 'Type', cell: txTypeCell },
+						{ key: 'origin', header: 'Entered', width: 'w-28', cell: txOriginCell },
 						{
 							key: 'symbol',
 							header: 'Symbol',
@@ -385,23 +514,34 @@
 	</PageContentTemplate>
 </AppShellTemplate>
 
-<Dialog bind:open={txOpen} title="New transaction" size="md">
+<!-- While saving, Escape and the backdrop stay inert so a pending create cannot be sent twice. -->
+<Dialog
+	bind:open={txOpen}
+	title="New transaction"
+	size="md"
+	closeOnEscape={!creatingTx}
+	closeOnBackdrop={!creatingTx}
+>
 	<div class="space-y-3">
-		<div class="grid grid-cols-2 gap-3">
-			<FormField label="Date" id="ptx-date">
-				<DatePicker value={txDate} onChange={(v) => (txDate = v ?? txDate)} class="w-full" />
-			</FormField>
-			<FormField label="Type" id="ptx-type">
-				{#snippet children(ctx)}
-					<Select
-						id={ctx.id}
-						bind:value={txType}
-						options={txTypeOptions}
-						ariaLabel="Transaction type"
-					/>
-				{/snippet}
-			</FormField>
-		</div>
+		<TransactionDateHeader
+			bind:value={txDate}
+			bind:open={txPickerOpen}
+			today={txToday}
+			disabled={creatingTx}
+		/>
+
+		{#if txError}
+			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
+			<div role="alert">
+				<Alert intent="error" title="This transaction was not saved">{txError}</Alert>
+			</div>
+		{/if}
+
+		<FormField label="Type" id="ptx-type">
+			{#snippet children(ctx)}
+				<Select id={ctx.id} bind:value={txType} options={txTypeOptions} ariaLabel="Transaction type" />
+			{/snippet}
+		</FormField>
 
 		<FormField label="Vendor" id="ptx-vendor" hint="Brokerage account">
 			{#snippet children(ctx)}
@@ -444,7 +584,40 @@
 	</div>
 
 	{#snippet footer()}
-		<Button variant="ghost" intent="secondary" onclick={() => (txOpen = false)}>Cancel</Button>
-		<Button intent="success" onclick={submitTx} loading={creatingTx}>Save</Button>
+		<Button variant="ghost" intent="secondary" disabled={creatingTx} onclick={() => (txOpen = false)}>
+			Cancel
+		</Button>
+		<Button intent="success" onclick={submitTx} loading={creatingTx}>
+			{creatingTx ? 'Saving' : 'Save'}
+		</Button>
 	{/snippet}
 </Dialog>
+
+{#snippet detailFields()}
+	{#if detailRow}
+		<div class="flex items-center justify-between gap-3 py-3">
+			<dt class="text-sm text-slate-500">Amount</dt>
+			<dd class="text-sm text-slate-800">{detailRow.amount}</dd>
+		</div>
+		<div class="flex items-center justify-between gap-3 py-3">
+			<dt class="text-sm text-slate-500">Quantity</dt>
+			<dd class="text-sm text-slate-800">{detailRow.quantity}</dd>
+		</div>
+	{/if}
+{/snippet}
+
+{#if detailRow}
+	<TransactionDetailDrawer
+		bind:open={detailOpen}
+		title={detailRow.symbol ?? detailRow.description ?? 'Transaction'}
+		originLabel={portfolioOriginLabel(detailRow)}
+		subtitle={detailRow.type}
+		editable={isManualPortfolioTransaction(detailRow)}
+		bind:date={detailDate}
+		originalDate={detailRow.occurred_at.slice(0, 10)}
+		saving={savingDate}
+		error={dateError}
+		onSave={handleDateChange}
+		details={detailFields}
+	/>
+{/if}

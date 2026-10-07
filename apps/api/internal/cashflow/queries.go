@@ -22,6 +22,8 @@ type QueryStore interface {
 	GetTagDistribution(ctx context.Context, filter AnalyticsFilter) (*TagDistribution, error)
 	ListTransactions(ctx context.Context, query TransactionListQuery) (*TransactionListResult, error)
 	CountByFilter(ctx context.Context, filters TransactionFilters) (int, error)
+	GetTransaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error)
+	GetTransactionByChecksum(ctx context.Context, accountID uuid.UUID, checksum string) (*Transaction, error)
 }
 
 // NewQueries creates cashflow read-side use cases.

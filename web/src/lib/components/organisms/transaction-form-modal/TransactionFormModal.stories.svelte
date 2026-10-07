@@ -13,6 +13,7 @@
 <script lang="ts">
 	let open = $state(false);
 	let openError = $state(false);
+	let openSaving = $state(false);
 	let lastSubmit = $state('');
 </script>
 
@@ -26,9 +27,20 @@
 	</div>
 </Story>
 
+<!-- A refused save keeps everything that was filled in, including the chosen date. -->
 <Story name="With server error" asChild>
 	<div>
 		<Button onclick={() => (openError = true)}>Open (error state)</Button>
-		<TransactionFormModal bind:open={openError} error="Could not save the transaction." />
+		<TransactionFormModal
+			bind:open={openError}
+			error="A transaction with the same amount and description already exists on 14 Jul 2026."
+		/>
+	</div>
+</Story>
+
+<Story name="Saving" asChild>
+	<div>
+		<Button onclick={() => (openSaving = true)}>Open (saving)</Button>
+		<TransactionFormModal bind:open={openSaving} submitting />
 	</div>
 </Story>

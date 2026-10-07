@@ -7,6 +7,8 @@ var (
 	ErrTransactionsRequired              = fmt.Errorf("transactions are required")
 	ErrTransactionLimitExceeded          = fmt.Errorf("transactions exceeds maximum batch size")
 	ErrManualCashflowInvalidDate         = fmt.Errorf("date must be in YYYY-MM-DD format")
+	ErrCashflowDateInFuture              = fmt.Errorf("date must be today or earlier")
+	ErrCashflowDateNotEditable           = fmt.Errorf("only manually entered transactions can be moved to another date")
 	ErrManualCashflowInvalidAmount       = fmt.Errorf("amount must be a positive decimal string with up to 6 decimals")
 	ErrManualCashflowInvalidType         = fmt.Errorf("type must be one of: in, out, income, expense")
 	ErrManualCashflowDescriptionRequired = fmt.Errorf("description is required")
