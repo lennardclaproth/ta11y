@@ -23,9 +23,9 @@ endpoint; the system never infers the type from the file contents:
 | **Portfolio** | `POST /imports/portfolio` | `file`, `vendor_id`, `account_id` | vendor name | vendor name (`DEGIRO`) | `portfolio.Commands.CreateMany` |
 | **EOD** | `POST /imports/eod` | `file`, `listing_id` | listing source | listing source (`brandnewday`) | `marketdata.Commands.CreateEODs` |
 
-The upload is **commit-and-process**: there is no preview, staging, or approval step,
-and there is currently no read/status endpoint to poll an import (see
-[Out of scope](#out-of-scope--not-implemented)). Uploads are capped at 10 MB.
+The upload is **commit-and-process**: there is no preview, staging, or approval step.
+`GET /imports/{import_id}` reads one import back once it has been accepted (see
+[Reading an import](#reading-an-import)). Uploads are capped at 10 MB.
 
 ## Domain model
 
@@ -193,7 +193,7 @@ stateDiagram-v2
 | `pending` | File stored and record created; waiting for a worker. |
 | `processing` | A worker has claimed the import and is parsing/persisting. |
 | `completed` | The target feature accepted the batch; result counters are stored. |
-| `failed` | Validation, parsing, or persistence failed; `status_msg` holds the reason. |
+| `failed` | Validation, parsing, or persistence failed; `status_msg` holds the wrapped Go error, server-side only — it never reaches a client. |
 | `in_progress` | Legacy/compat status — present in the schema + Go const, unused by the lifecycle. |
 
 There is no `cancelled` and no `completed_with_errors` — for cashflow/portfolio a
@@ -258,11 +258,25 @@ the batch to the feature → return a `ProcessResult`*, but differ in their inpu
 failure semantics:
 
 - **Cashflow** — requires `account_id`; resolves the parser by vendor name; stamps each
-  row with the vendor `source` and its CSV `row_number`; calls `cashflow.Commands.CreateMany`.
-  An empty file is a no-op success.
+  row with the vendor `source`, its CSV `row_number` and its dedup sequence; calls
+  `cashflow.Commands.CreateMany`. An empty file is a no-op success.
 - **Portfolio** — requires `account_id` **and** a brokerage vendor (re-checked in the
-  processor, not just at accept time); stamps `row_number`; calls
+  processor, not just at accept time); stamps `row_number` and the dedup sequence; calls
   `portfolio.Commands.CreateMany`.
+
+Both stamp a **dedup sequence** rather than letting the line number reach the row
+checksum: consecutive exports overlap, and in a later export every carried-over row sits
+on a different line. `importer.DedupSequencer` counts how often identical content occurs
+within one file, so the same row is recognised across exports while two identical rows in
+one export stay two transactions — see [032].
+
+A parser that refuses the whole file because its headers are not that vendor's export
+(`parsers.ErrMissingHeader`, in both the cashflow and the portfolio parsers package) fails
+the import with `ErrImportFileNotRecognised`, which `importer.FailureReason` classifies as
+`file_not_recognised` so a client can answer it with "wrong file" rather than "try again".
+That sentinel is the only thing classified that way: every other parse failure — a read
+error, a close error — is a server-side failure and stays a generic one, because telling
+the user to upload a different file would send them the wrong way.
 - **EOD** — requires `listing_id`; resolves the parser by listing source; parsing is
   **all-or-nothing**: if the parser reports any row errors the import fails (reporting
   `TotalRows` and `Failed`) without persisting anything; otherwise maps rows to
@@ -291,7 +305,18 @@ size), **`Commands`** enforce domain rules. Known feature errors map to HTTP sta
 | Anything else | — | 500 |
 
 If record creation fails after the file is written, `Commands` removes the stored file
-via `FileRemover` so a rejected upload leaves no orphan.
+via `FileRemover` so a rejected upload leaves no orphan. The same `FileRemover` drops the
+file once processing reaches `completed` or `failed`: the rows have been taken over by
+the target feature and nothing reads the file again.
+
+## Reading an import
+
+`GET /imports/{import_id}` (`importer.Queries.Result`) returns the import's `status`,
+a classified `reason`, the counters, and — for a **completed portfolio**
+import — `unlinked_products`: the instruments it brought in that no listing matches
+(`portfolio.Queries.UnlinkedProducts`, derived at read time). The endpoint is scoped to
+the session's account; an import belonging to another account, or to none at all (EOD
+uploads are listing-scoped), answers `404`.
 
 ## Events
 
@@ -313,6 +338,9 @@ without a subscriber on `import.accepted`, accepted uploads would stay `pending`
 | `internal/importer/import.go` | `Import` record, `ImportType`/`ImportStatus`, `Mark*` transitions, `NewTypedImport` |
 | `internal/importer/commands.go` | Write side: `accept` (validate → store file → create → publish) and `Process` orchestration |
 | `internal/importer/processor.go` | `Processor` interface, `ProcessResult`, parser-factory function types |
+| `internal/importer/sequence.go` | `DedupSequencer`: content-keyed occurrence count used by the row checksums |
+| `internal/importer/queries.go` | Read side: one import's result, `FailureReason` |
+| `transport/http/handlers/importer/get.go` | `GET /imports/{import_id}` |
 | `internal/importer/events.go` | Topic constants + `Accepted`/`Completed`/`Failed` payloads |
 | `internal/importer/errors.go` | Feature-level errors |
 | `internal/importer/{cashflow,portfolio,eod}/processor.go` | Type-specific parse + persist |
@@ -324,8 +352,7 @@ without a subscriber on `import.accepted`, accepted uploads would stay `pending`
 
 ## Out of scope / not implemented
 
-- **Import read/status API** — no endpoint to fetch an import or poll its progress; the
-  202 response returns only the ID and `pending`.
+- **Import history** — imports are readable by ID only; nothing lists past imports.
 - **Preview / staging / approval** — uploads commit immediately.
 - **Cancellation** — there is no `cancelled` state.
 - **Deduplication policy** — owned by the target feature (`checksum`), not the importer.

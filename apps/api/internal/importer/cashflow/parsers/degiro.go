@@ -50,6 +50,9 @@ func (p *DegiroParser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.Trans
 
 	header, err := csvReader.Read()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%w: the file has no header row", ErrMissingHeader)
+		}
 		return nil, err
 	}
 	if err := p.parseHeader(header); err != nil {
@@ -90,7 +93,7 @@ func (p *DegiroParser) parseHeader(headers []string) error {
 	required := []string{"Date", "Value date", "Product", "ISIN", "Description", "Change", "Order Id"}
 	for _, key := range required {
 		if _, ok := p.headerToColumn[key]; !ok {
-			return fmt.Errorf("missing required header: %s", key)
+			return fmt.Errorf("%w: %s", ErrMissingHeader, key)
 		}
 	}
 	return nil

@@ -11,6 +11,9 @@
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
+	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
+	import { goto } from '$app/navigation';
+	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
@@ -42,7 +45,8 @@
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
-		TagDistributionEntry
+		TagDistributionEntry,
+		Vendor
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
@@ -85,6 +89,8 @@
 	let createOpen = $state(false);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
+	let importOpen = $state(false);
+	let brokerageVendors = $state<Vendor[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -320,7 +326,22 @@
 		}
 	}
 
-	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
+	// Imports need a brokerage vendor, which the cashflow page does not otherwise load,
+	// so the list is fetched when the dialog is first opened rather than on every visit.
+	async function openImport() {
+		if (brokerageVendors.length === 0) {
+			try {
+				brokerageVendors = (await listVendors()).filter((v) => v.active && v.type === 'portfolio');
+			} catch {
+				// Leave the list empty; the dialog says there is no brokerage account.
+			}
+		}
+		importOpen = true;
+	}
+
+	const navActions: MenuItem[] = [
+		{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up', onSelect: () => void openImport() }
+	];
 </script>
 
 <AppShellTemplate>
@@ -429,6 +450,15 @@
 	error={createError}
 />
 
+<ImportDialog
+	bind:open={importOpen}
+	vendors={brokerageVendors}
+	onFinished={() => {
+		void load(currentQuery());
+		void loadAnalytics();
+	}}
+	onGoToPortfolio={() => void goto('/portfolio')}
+/>
 {#snippet detailFields()}
 	{#if detailRow}
 		<div class="flex items-center justify-between gap-3 py-3">

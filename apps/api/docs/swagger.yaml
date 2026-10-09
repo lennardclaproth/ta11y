@@ -631,6 +631,45 @@ definitions:
       status:
         type: string
     type: object
+  importer.ImportResultResponse:
+    properties:
+      created_at:
+        type: string
+      duplicates:
+        type: integer
+      failed:
+        type: integer
+      import_id:
+        type: string
+      imported:
+        type: integer
+      reason:
+        type: string
+      status:
+        type: string
+      total_rows:
+        type: integer
+      type:
+        type: string
+      unlinked_products:
+        description: UnlinkedProducts is empty until a portfolio import has completed.
+        items:
+          $ref: '#/definitions/importer.UnlinkedProductResponse'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  importer.UnlinkedProductResponse:
+    properties:
+      isin:
+        type: string
+      name:
+        type: string
+      symbol:
+        type: string
+      transactions:
+        type: integer
+    type: object
   marketdata.EOD:
     properties:
       close:
@@ -1897,6 +1936,45 @@ paths:
       summary: Health check
       tags:
       - Health
+  /imports/{import_id}:
+    get:
+      description: Returns an import's lifecycle state, row counters, and — once a
+        portfolio import has completed — the products it brought in that no listing
+        matches.
+      parameters:
+      - description: Import UUID
+        in: path
+        name: import_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/importer.ImportResultResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get import result
+      tags:
+      - imports
   /imports/cashflow:
     post:
       consumes:

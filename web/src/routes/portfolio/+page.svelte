@@ -21,6 +21,7 @@
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
+	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
 	import {
 		listPortfolioPositions,
 		getPortfolioSnapshots,
@@ -74,6 +75,7 @@
 	let txError = $state<string | null>(null);
 	let creatingTx = $state(false);
 	let rebuilding = $state(false);
+	let importOpen = $state(false);
 
 	let detailRow = $state<PortfolioTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -105,6 +107,11 @@
 	const vendorOptions = $derived(vendors.map((v) => ({ value: v.id, label: v.name })));
 
 	const navActions: MenuItem[] = [
+		{
+			label: 'Import CSV',
+			icon: 'heroicons:cloud-arrow-up',
+			onSelect: () => void openImport()
+		},
 		{
 			label: 'Rebuild portfolio',
 			icon: 'heroicons:arrow-path',
@@ -209,16 +216,24 @@
 		txDescription = '';
 		txError = null;
 		txOpen = true;
-		if (vendors.length === 0) {
-			try {
-				const all = await listVendors();
-				// Manual portfolio transactions require a brokerage/portfolio vendor.
-				vendors = all.filter((v) => v.active && v.type === 'portfolio');
-				if (vendors.length > 0) vendorId = vendors[0].id;
-			} catch {
-				// Leave the vendor list empty; the form will warn on submit.
-			}
+		await loadVendors();
+	}
+
+	// Manual portfolio transactions and broker imports both need a brokerage vendor.
+	async function loadVendors() {
+		if (vendors.length > 0) return;
+		try {
+			const all = await listVendors();
+			vendors = all.filter((v) => v.active && v.type === 'portfolio');
+			if (vendors.length > 0) vendorId = vendors[0].id;
+		} catch {
+			// Leave the vendor list empty; the form will warn on submit.
 		}
+	}
+
+	async function openImport() {
+		await loadVendors();
+		importOpen = true;
 	}
 
 	async function submitTx() {
@@ -514,7 +529,8 @@
 	</PageContentTemplate>
 </AppShellTemplate>
 
-<!-- While saving, Escape and the backdrop stay inert so a pending create cannot be sent twice. -->
+<ImportDialog bind:open={importOpen} {vendors} onFinished={() => void loadAll()} />
+
 <Dialog
 	bind:open={txOpen}
 	title="New transaction"

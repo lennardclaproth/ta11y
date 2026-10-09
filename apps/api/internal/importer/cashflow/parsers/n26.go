@@ -94,6 +94,9 @@ func (p *N26Parser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.Transact
 
 	header, err := csvReader.Read()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%w: the file has no header row", ErrMissingHeader)
+		}
 		return nil, err
 	}
 	if err := p.parseHeader(header); err != nil {
@@ -141,11 +144,11 @@ func (p *N26Parser) parseHeader(headers []string) error {
 	}
 
 	if _, ok := p.headerToColumn[n26FieldAmountEUR]; !ok {
-		return fmt.Errorf("missing required header: Amount (EUR)")
+		return fmt.Errorf("%w: Amount (EUR)", ErrMissingHeader)
 	}
 	if _, hasBooking := p.headerToColumn[n26FieldBookingDate]; !hasBooking {
 		if _, hasValue := p.headerToColumn[n26FieldValueDate]; !hasValue {
-			return fmt.Errorf("missing required header: Booking Date")
+			return fmt.Errorf("%w: Booking Date", ErrMissingHeader)
 		}
 	}
 

@@ -2,10 +2,12 @@ package portfolio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lennardclaproth/ta11y/internal/files"
 	"github.com/lennardclaproth/ta11y/internal/importer"
+	"github.com/lennardclaproth/ta11y/internal/importer/portfolio/parsers"
 	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
@@ -35,7 +37,8 @@ func NewProcessor(
 
 // Process parses the portfolio CSV into a batch of transaction data and hands the whole
 // batch to the portfolio commands, which persist it in a single bulk insert. It requires
-// a brokerage vendor and stamps each row with its CSV row number for deduplication.
+// a brokerage vendor and stamps each row with its CSV row number plus the dedup sequence
+// that lets a partly overlapping export be recognised as already imported.
 func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer.ProcessResult, error) {
 	accountID, err := imp.RequireAccountID()
 	if err != nil {
@@ -63,12 +66,23 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 
 	rows, err := parser.ParseAll(rc)
 	if err != nil {
+		// Only a header mismatch means this is the wrong export. A read error is a
+		// server-side failure worth retrying, and answering it with "upload a different
+		// file" would send the user the wrong way.
+		if errors.Is(err, parsers.ErrMissingHeader) {
+			return importer.ProcessResult{}, fmt.Errorf("%w: %v", importer.ErrImportFileNotRecognised, err)
+		}
 		return importer.ProcessResult{}, fmt.Errorf("parse csv: %w", err)
 	}
 
+	sequencer := importer.NewDedupSequencer()
 	data := make([]portfoliodomain.TransactionData, 0)
 	for rowNumber, row := range rows {
 		row.RowNumber = rowNumber
+		// The key is the transaction's own DedupKey, which is exactly what its checksum
+		// digests. Sequencing on anything finer would hand two rows the checksum cannot
+		// tell apart the same number, and one of them would be dropped as a duplicate.
+		row.DedupSeq = sequencer.Next(row.DedupKey()...)
 		data = append(data, row)
 	}
 	if len(data) == 0 {

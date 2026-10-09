@@ -56,7 +56,24 @@ and processed asynchronously. Three explicit import types are supported — cash
 portfolio, and end-of-day market data — with vendor-specific parsers (DeGiro, ING, N26
 for cashflow; DeGiro for portfolio; BrandNewDay for EOD).
 
+`GET /imports/{import_id}` reads one import back: its lifecycle state, its row counters,
+and a classified reason when the vendor's parser refused the file. The stored upload is
+removed once an import finishes, successfully or not.
+
 → Details: [CSV imports](%5B002%5D_CSV_IMPORTS.md)
+
+### Brokerage import [032]
+**Import CSV** on Cashflow and on Portfolio opens one import panel. A monthly broker
+account statement is uploaded once and fills both destinations, and the result reports
+per destination what was new, what was already imported and what failed, plus the
+products it brought in that no listing matches yet.
+
+Repeating the import is safe. Consecutive exports overlap, so a row is recognised by
+what it is — date, product, amount and quantity — and no
+longer by where it sits in the file; two identical rows inside one export still stay two
+transactions. Rows imported before this change are not converted.
+
+→ Details: [Brokerage import](%5B032%5D_BROKERAGE_IMPORT.md)
 
 ### Cashflow insights
 Users query bank/payment transactions with filtering, sorting, and pagination, and add
@@ -90,6 +107,12 @@ trades: holdings are rescaled on the split date, before any trade that day, whic
 already quoted in post-split shares. Cost basis, realized profit and income are untouched.
 The factors come from the end-of-day series the provider already returns, so no separate
 corporate-actions feed is fetched; manually imported price files report no splits.
+
+Every rebuild re-links positions to listings, so adding a listing and rebuilding links
+transactions imported earlier. The match is exact: the ISIN, or the symbol when the
+instrument has none. No match leaves the position unlinked — it still counts as a
+position, it just contributes no market value — rather than attaching it to a listing
+that merely looks similar.
 
 → Details: [Portfolio](%5B013%5D_PORTFOLIO.md)
 

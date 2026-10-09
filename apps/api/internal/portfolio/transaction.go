@@ -77,8 +77,70 @@ type TransactionData struct {
 	Quantity    float64
 	Price       float64
 	Amount      float64
-	// RowNumber is the source row number (e.g. CSV line) and feeds the dedup checksum.
+	// RowNumber is the source row number (e.g. CSV line). It orders rows that share a
+	// day; it deliberately no longer feeds the dedup checksum, because an overlapping
+	// export moves every row to a different line.
 	RowNumber int
+	// DedupSeq distinguishes rows with identical content inside one import file and
+	// feeds the dedup checksum in RowNumber's place. Importers set it from
+	// importer.DedupSequencer; manual entries leave it zero.
+	DedupSeq int
+}
+
+// checksumDateLayout is the day precision both the checksum and the dedup key work at.
+const checksumDateLayout = "20060102"
+
+// DedupKey is the content generateChecksum digests, normalised exactly as newTransaction
+// normalises it, minus the values that are constant within one import (account, position,
+// origin) and the sequence the key is used to produce.
+//
+// The importer sequences rows on this key, so the two have to stay in step. A key that
+// separates rows the checksum cannot separate gives both of them sequence 1, so they end
+// up with the same checksum and the bulk insert silently drops one as a duplicate.
+func (d TransactionData) DedupKey() []string {
+	unitPrice, _ := d.unitPrice()
+	amount, _ := d.amountCents()
+	return []string{
+		strings.TrimSpace(d.Source),
+		d.OccurredAt.Format(checksumDateLayout),
+		trimOptional(d.ISIN),
+		trimOptional(d.Symbol),
+		string(d.Type),
+		fmt.Sprintf("%.8f", d.quantity()),
+		fmt.Sprintf("%d", unitPrice),
+		fmt.Sprintf("%d", amount),
+	}
+}
+
+// quantity is the quantity the stored transaction carries. A cash row has no units, so it
+// records only the direction of its amount.
+func (d TransactionData) quantity() float64 {
+	if d.Type != TxCash {
+		return d.Quantity
+	}
+	switch {
+	case d.Amount < 0:
+		return -1
+	case d.Amount > 0:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (d TransactionData) unitPrice() (money.Price, error) {
+	return money.NewPrice(math.Abs(d.Price))
+}
+
+func (d TransactionData) amountCents() (money.Price, error) {
+	return money.NewPrice(math.Abs(d.Amount))
+}
+
+func trimOptional(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
 
 var (
@@ -114,25 +176,15 @@ func newTransaction(
 		return nil, ErrInvalidTransactionOrigin
 	}
 
-	price, err := money.NewPrice(math.Abs(data.Price))
+	price, err := data.unitPrice()
 	if err != nil {
 		return nil, fmt.Errorf("portfolio.NewTransaction price: %w", err)
 	}
-	amount, err := money.NewPrice(math.Abs(data.Amount))
+	amount, err := data.amountCents()
 	if err != nil {
 		return nil, fmt.Errorf("portfolio.NewTransaction amount: %w", err)
 	}
-	quantity := data.Quantity
-	if data.Type == TxCash {
-		switch {
-		case data.Amount < 0:
-			quantity = -1
-		case data.Amount > 0:
-			quantity = 1
-		default:
-			quantity = 0
-		}
-	}
+	quantity := data.quantity()
 	if data.ISIN == nil && data.Symbol == nil && data.Type != TxCash {
 		return nil, ErrTransactionISINAndSymbolMissing
 	}
@@ -164,7 +216,13 @@ func newTransaction(
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	tx.Checksum = tx.generateChecksum()
+	// Manual entries carry no sequence; their row number kept rows apart before and
+	// still does, so nothing about manual deduplication changes.
+	dedupSeq := data.DedupSeq
+	if dedupSeq == 0 {
+		dedupSeq = rowNumber
+	}
+	tx.Checksum = tx.generateChecksum(dedupSeq)
 	return tx, nil
 }
 
@@ -185,7 +243,7 @@ func (t *Transaction) MovedTo(day time.Time) *Transaction {
 	moved.PositionID = nil
 	moved.OccurredAt = day.UTC()
 	moved.UpdatedAt = time.Now().UTC()
-	moved.Checksum = moved.generateChecksum()
+	moved.Checksum = moved.generateChecksum(moved.RowNumber)
 	return &moved
 }
 
@@ -200,7 +258,13 @@ func (t *Transaction) GetID() (string, error) {
 	return "", ErrTransactionISINAndSymbolMissing
 }
 
-func (t *Transaction) generateChecksum() string {
+// generateChecksum digests what the row is, not where it sat in the file: dedupSeq
+// separates identical rows within one import, so the same transaction in a partly
+// overlapping export produces the same checksum and is recognised as already imported.
+//
+// TransactionData.DedupKey must digest the same fields; see its doc for what goes wrong
+// when the two drift apart.
+func (t *Transaction) generateChecksum(dedupSeq int) string {
 	accountID := ""
 	if t.AccountID != nil {
 		accountID = t.AccountID.String()
@@ -209,33 +273,17 @@ func (t *Transaction) generateChecksum() string {
 	if t.PositionID != nil {
 		positionID = t.PositionID.String()
 	}
-	if t.ISIN != nil {
-		isin := strings.TrimSpace(*t.ISIN)
-		t.ISIN = &isin
-	}
-	if t.Symbol != nil {
-		symbol := strings.TrimSpace(*t.Symbol)
-		t.Symbol = &symbol
-	}
-	isin := ""
-	if t.ISIN != nil {
-		isin = *t.ISIN
-	}
-	symbol := ""
-	if t.Symbol != nil {
-		symbol = *t.Symbol
-	}
 	const sep = "\x1F"
 	payload := strings.Join([]string{
 		strings.TrimSpace(t.Source),
-		t.OccurredAt.Format("20060102"),
-		isin,
-		symbol,
+		t.OccurredAt.Format(checksumDateLayout),
+		trimOptional(t.ISIN),
+		trimOptional(t.Symbol),
 		string(t.Type),
 		fmt.Sprintf("%.8f", t.Quantity),
 		fmt.Sprintf("%d", t.UnitPrice),
 		fmt.Sprintf("%d", t.AmountCents),
-		fmt.Sprintf("%d", t.RowNumber),
+		fmt.Sprintf("%d", dedupSeq),
 		accountID,
 		positionID,
 		string(t.Origin),
