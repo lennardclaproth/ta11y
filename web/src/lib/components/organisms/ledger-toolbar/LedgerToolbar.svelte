@@ -5,12 +5,16 @@
 	let {
 		title,
 		actionLabel,
+		actionIcon,
 		onAdd,
 		children
 	}: {
 		title?: string;
-		actionLabel: string;
-		onAdd: () => void;
+		/** Omit the label to leave the header without an action. */
+		actionLabel?: string;
+		/** Iconify id for an action that is not a creation; defaults to the bundled plus. */
+		actionIcon?: string;
+		onAdd?: () => void;
 		children?: Snippet;
 	} = $props();
 	// Bundle this essential control icon so creation remains recognizable offline.
@@ -29,5 +33,7 @@
 		{#if title}<h2 class="text-2xl">{title}</h2>{/if}
 		{@render children?.()}
 	</div>
-	<Button shape="default" onclick={onAdd}><Icon icon={plus} />{actionLabel}</Button>
+	{#if actionLabel}
+		<Button shape="default" onclick={onAdd}><Icon icon={actionIcon ?? plus} />{actionLabel}</Button>
+	{/if}
 </div>

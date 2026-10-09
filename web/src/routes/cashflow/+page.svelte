@@ -12,6 +12,7 @@
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
+	import MarkRecurringDialog from '$lib/components/organisms/mark-recurring-dialog/MarkRecurringDialog.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
 		listCashflowTransactions,
@@ -21,6 +22,11 @@
 		changeCashflowTransactionDate,
 		tagCashflowTransactionsBySelection
 	} from '$lib/services/cashflow';
+	import {
+		createRecurringItem,
+		getRecurringOverview,
+		linkRecurringTransactions
+	} from '$lib/services/recurring';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
@@ -42,8 +48,10 @@
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
+		RecurringItem,
 		TagDistributionEntry
 	} from '$lib/api/types';
+	import type { MarkRecurringValue } from '$lib/components/organisms/mark-recurring-dialog/mark-recurring-dialog.types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
@@ -85,6 +93,11 @@
 	let createOpen = $state(false);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
+
+	let markOpen = $state(false);
+	let marking = $state(false);
+	let markError = $state<string | null>(null);
+	let recurringItems = $state<RecurringItem[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -320,6 +333,64 @@
 		}
 	}
 
+	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
+
+	// The dialog offers "add to an existing item" first, so the items are read when it
+	// opens rather than on every page load: most visits never mark anything.
+	async function openMark() {
+		markError = null;
+		markOpen = true;
+		try {
+			const overview = await getRecurringOverview();
+			recurringItems = [...overview.expenses, ...overview.income];
+		} catch {
+			// Starting a new item still works without the list, so this is not reported as a
+			// failure — the dialog simply offers only that route.
+			recurringItems = [];
+		}
+	}
+
+	async function handleMarkRecurring(value: MarkRecurringValue) {
+		const ids = selectedIds;
+		marking = true;
+		markError = null;
+		try {
+			if (value.mode === 'existing') {
+				await linkRecurringTransactions(value.itemId, { ids });
+			} else {
+				await createRecurringItem({
+					name: value.name,
+					direction: value.direction,
+					rhythm: value.rhythm,
+					ids
+				});
+			}
+			markOpen = false;
+			selectedIds = [];
+			toast.success(
+				value.mode === 'existing'
+					? `Linked ${ids.length} transactions`
+					: `${value.name} added, with ${ids.length} transactions`
+			);
+		} catch (err) {
+			markError = markRecurringMessage(err);
+		} finally {
+			marking = false;
+		}
+	}
+
+	// The refusals worth naming are the ones the reader can act on: a name already taken,
+	// or an item that was ended and no longer takes transactions.
+	function markRecurringMessage(err: unknown): string {
+		if (err instanceof ApiError && err.status === 409) {
+			return 'A recurring item with that name already exists. Pick another name, or add these to it.';
+		}
+		if (err instanceof ApiError && err.status === 422) {
+			return 'That item was ended, so it takes no new transactions.';
+		}
+		return 'Could not mark these as recurring. Try again.';
+	}
+
 	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
 </script>
 
@@ -417,6 +488,9 @@
 		>
 			{#snippet bulkActions()}
 				<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
+				<Button size="sm" variant="ghost" intent="secondary" onclick={openMark}>
+					Mark as recurring
+				</Button>
 			{/snippet}
 		</CashflowTransactionsTable>
 	</PageContentTemplate>
@@ -427,6 +501,15 @@
 	onSubmit={handleCreate}
 	submitting={creating}
 	error={createError}
+/>
+
+<MarkRecurringDialog
+	bind:open={markOpen}
+	selection={selectedRows}
+	items={recurringItems}
+	saving={marking}
+	error={markError}
+	onSubmit={handleMarkRecurring}
 />
 
 {#snippet detailFields()}
