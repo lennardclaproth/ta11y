@@ -24,7 +24,7 @@
 	{#if title || actions}
 		<div class="mb-3 flex min-h-8 flex-wrap items-center justify-between gap-2">
 			{#if title}
-				<Heading level="h2" size="md" weight="medium">{title}</Heading>
+				<Heading level="h2" size="md">{title}</Heading>
 			{/if}
 			{#if actions}
 				<div class="flex flex-wrap items-center gap-2">{@render actions()}</div>

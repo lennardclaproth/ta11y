@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { zClasses } from '$lib/styles/z-index';
+	import { zClasses, type ZLayer } from '$lib/styles/z-index';
 	import type { PopoverApi, PopoverPlacement } from './popover.types';
 
 	type Props = {
@@ -11,6 +11,12 @@
 		offset?: number;
 		/** Append the panel to <body> to escape clipping/transform ancestors. */
 		portal?: boolean;
+		/**
+		 * Stacking layer of the panel. The default sits below the modal scrim; raise it to
+		 * `filterPopover` when the trigger lives inside a `Drawer` or `Dialog`, or the panel
+		 * opens behind it.
+		 */
+		layer?: ZLayer;
 		/** Make the panel the same width as the trigger. */
 		matchWidth?: boolean;
 		closeOnOutsideClick?: boolean;
@@ -29,6 +35,7 @@
 		placement = 'bottom-start',
 		offset = 8,
 		portal = true,
+		layer = 'popover',
 		matchWidth = false,
 		closeOnOutsideClick = true,
 		closeOnEscape = true,
@@ -130,13 +137,24 @@
 			if (closeOnOutsideClick) setOpen(false);
 		}
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key === 'Escape' && closeOnEscape) setOpen(false);
+			if (event.key !== 'Escape' || !closeOnEscape) return;
+			// Inside a <dialog> the same Escape would also trigger the native close request, and
+			// inside a Drawer its own Escape handler, so one press would dismiss the whole form
+			// instead of just this panel. Marking the event as handled while the panel is open
+			// keeps Escape stepping out one layer at a time; the surrounding layer checks
+			// `defaultPrevented` before it closes.
+			event.preventDefault();
+			event.stopPropagation();
+			setOpen(false);
 		}
 		document.addEventListener('pointerdown', onPointerDown, true);
-		document.addEventListener('keydown', onKeydown, true);
+		// On `window`, not `document`: capture runs outside in, so this fires ahead of a Drawer's
+		// document-level handler, which registered first and would otherwise close before this
+		// one got to claim the key.
+		window.addEventListener('keydown', onKeydown, true);
 		return () => {
 			document.removeEventListener('pointerdown', onPointerDown, true);
-			document.removeEventListener('keydown', onKeydown, true);
+			window.removeEventListener('keydown', onKeydown, true);
 		};
 	});
 
@@ -153,7 +171,7 @@
 	const panelClasses = $derived(
 		[
 			'overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md',
-			zClasses.popover,
+			zClasses[layer],
 			ready ? '' : 'invisible',
 			className
 		]

@@ -8,6 +8,7 @@
 	import SelectFilter from '$lib/components/molecules/select-filter/SelectFilter.svelte';
 	import DirectionFilter from '$lib/components/molecules/direction-filter/DirectionFilter.svelte';
 	import { scaledToNumber } from '$lib/api/money';
+	import { cashflowOriginLabel, isManualCashflowTransaction } from '$lib/api/transactions';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { CashflowDirection, CashflowTransaction } from '$lib/api/types';
@@ -26,16 +27,14 @@
 		tagFilter?: string[];
 		directionFilter?: CashflowDirection | null;
 		tagOptions?: { value: string; label: string }[];
+		/** Shown when there are no rows; say "nothing yet" and "nothing matched" differently. */
+		emptyText?: string;
 		onSort?: (key: string, direction: SortDirection) => void;
 		onPageChange?: (offset: number) => void;
 		onLimitChange?: (limit: number) => void;
 		onFilterChange?: () => void;
-		/**
-		 * What an empty table says. An account with no transactions at all and a search that
-		 * matched none are different situations with different next steps, and only the page
-		 * knows which one it is in.
-		 */
-		emptyText?: string;
+		/** Open one transaction (e.g. in a detail drawer). */
+		onRowClick?: (row: CashflowTransaction) => void;
 		/** Bulk actions for the footer when rows are selected. */
 		bulkActions?: Snippet;
 		class?: string;
@@ -55,11 +54,12 @@
 		tagFilter = $bindable([]),
 		directionFilter = $bindable(null),
 		tagOptions = [],
+		emptyText = 'No transactions match your filters',
 		onSort,
 		onPageChange,
 		onLimitChange,
 		onFilterChange,
-		emptyText = 'No transactions match your filters',
+		onRowClick,
 		bulkActions,
 		class: className = ''
 	}: Props = $props();
@@ -108,6 +108,14 @@
 	<Money amount={scaledToNumber(row.amountCents)} currency="EUR" size="sm" />
 {/snippet}
 
+<!-- Where the row came from, as a word rather than only a badge colour: it is what decides
+     whether its date can still be changed. -->
+{#snippet enteredCell(row: CashflowTransaction)}
+	<Badge intent={isManualCashflowTransaction(row) ? 'info' : 'neutral'} variant="soft" size="sm">
+		{cashflowOriginLabel(row)}
+	</Badge>
+{/snippet}
+
 <DataTable
 	{rows}
 	{loading}
@@ -117,6 +125,7 @@
 	{sortKey}
 	{sortDirection}
 	{onSort}
+	{onRowClick}
 	{emptyText}
 	class={className}
 	columns={[
@@ -134,6 +143,7 @@
 			filter: descriptionFilterControl
 		},
 		{ key: 'tag', header: 'Tag', sortKey: 'tag', cell: tagCell, filter: tagFilterControl },
+		{ key: 'source', header: 'Entered', sortKey: 'source', width: 'w-32', cell: enteredCell },
 		{ key: 'direction', header: 'Direction', cell: directionCell, filter: directionFilterControl },
 		{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell }
 	]}

@@ -175,12 +175,12 @@ No dark theme is currently defined. A future dark theme requires explicit role m
 
 | Role | Family | Existing scale and treatment |
 | --- | --- | --- |
-| Headings | EB Garamond | `sm` 18px, `md` 20px, `lg` 24px, `xl` 30px, `2xl` 36px; tight leading and tracking |
+| Headings | EB Garamond | `sm` 18px, `md` 20px, `lg` 24px, `xl` 30px, `2xl` 36px; regular weight, tight leading and tracking |
 | Interface/body | Noto Sans | Text `xs` 12px, `sm` 14px, `md` 16px, `lg` 18px; relaxed leading |
 | Controls | Noto Sans | 14px for small/medium controls; 16px for large controls |
 | Monetary values | Noto Sans | Reuse Money's tabular numeric styling and formatter |
 
-Heading weights are medium, semibold, and bold; Text also supports normal. The `font-display` token currently resolves to Noto Sans; use `font-heading` for serif headings. Fonts are locally served from `web/static/fonts/` with swap loading. Only one EB Garamond weight ships (regular), so heading weights at or above semibold are **synthesized** by the browser -- its `@font-face` must therefore declare `font-weight: 400` and nothing wider, or the browser treats the regular as covering the range and renders every heading at 400. Shipping a real semibold file is the better fix when a heavier serif is wanted.
+**Headings render at regular (400)** -- the one EB Garamond weight that ships -- so no heading weight is ever synthesized by the browser. The base layer sets `font-weight: 400` on `h1`..`h6`, which also covers bare headings that bypass the `Heading` atom, and the atom's default `weight` is `normal`. Heading weights are normal, medium, semibold, and bold; Text also supports normal. Do not reach for a heavier heading weight (or a `font-semibold` / `font-bold` utility on a heading) without shipping a real font file for it: the `@font-face` must declare `font-weight: 400` and nothing wider, or the browser treats the regular as covering the range and renders every heading at 400. The `font-display` token currently resolves to Noto Sans; use `font-heading` for serif headings. Fonts are locally served from `web/static/fonts/` with swap loading.
 
 **The Hierarchy Rule.** Choose heading level for document structure and size for visual hierarchy. Use one page h1 and meaningful subordinate levels. Reserve small text for secondary information, not the only explanation of an error or amount.
 

@@ -58,6 +58,11 @@
     @apply bg-taupe-100 text-slate-800 antialiased;
   }
 
+  /*
+    Headings render at the one EB Garamond weight that ships, so nothing is ever synthesized.
+    Setting it here rather than only on the Heading atom keeps bare `<h1>`..`<h6>` that bypass
+    the atom on the same weight. A `font-*` utility on a heading still wins over this.
+  */
   h1,
   h2,
   h3,
@@ -65,6 +70,7 @@
   h5,
   h6 {
     font-family: var(--font-heading);
+    font-weight: 400;
     @apply text-slate-900;
   }
 }

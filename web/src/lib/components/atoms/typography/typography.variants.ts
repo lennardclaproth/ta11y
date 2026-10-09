@@ -28,6 +28,7 @@ export const headingToneClasses = {
 } satisfies Record<HeadingTone, string>;
 
 export const headingWeightClasses = {
+  normal: 'font-normal',
   medium: 'font-medium',
   semibold: 'font-semibold',
   bold: 'font-bold'
