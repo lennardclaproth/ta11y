@@ -17,8 +17,12 @@ export interface IgnoreRule {
 	field: RuleField;
 	contains: string;
 	direction: RuleDirection;
-	/** Account label, or null for every account. */
-	account: string | null;
+	/**
+	 * Which bank the rule is limited to, or null for every one. A cashflow transaction has
+	 * `source` (the vendor it was imported from), not a separate account, so that is what a
+	 * rule can honestly scope on today — see the open question in the design comment.
+	 */
+	source: string | null;
 	enabled: boolean;
 	/** How many transactions this rule has ignored since it was made. */
 	ignoredTotal: number;
@@ -27,7 +31,7 @@ export interface IgnoreRule {
 	lastUsed: string;
 }
 
-export const accountLabels = ['ING — Current', 'ING — Savings', 'N26 — Everyday'] as const;
+export const sourceLabels = ['ING', 'N26'] as const;
 
 export const ignoreRules: IgnoreRule[] = [
 	{
@@ -36,7 +40,7 @@ export const ignoreRules: IgnoreRule[] = [
 		field: 'description',
 		contains: 'Transfer to savings',
 		direction: 'out',
-		account: null,
+		source: null,
 		enabled: true,
 		ignoredTotal: 48,
 		ignoredLastImport: 12,
@@ -48,7 +52,7 @@ export const ignoreRules: IgnoreRule[] = [
 		field: 'description',
 		contains: 'Credit card',
 		direction: 'out',
-		account: 'ING — Current',
+		source: 'ING',
 		enabled: true,
 		ignoredTotal: 19,
 		ignoredLastImport: 9,
@@ -60,7 +64,7 @@ export const ignoreRules: IgnoreRule[] = [
 		field: 'description',
 		contains: 'To N26 Everyday',
 		direction: 'out',
-		account: 'ING — Current',
+		source: 'ING',
 		enabled: true,
 		ignoredTotal: 31,
 		ignoredLastImport: 10,
@@ -72,7 +76,7 @@ export const ignoreRules: IgnoreRule[] = [
 		field: 'note',
 		contains: 'Own account',
 		direction: 'in',
-		account: null,
+		source: null,
 		enabled: true,
 		ignoredTotal: 27,
 		ignoredLastImport: 6,
@@ -84,7 +88,7 @@ export const ignoreRules: IgnoreRule[] = [
 		field: 'description',
 		contains: 'Round-up',
 		direction: 'out',
-		account: 'N26 — Everyday',
+		source: 'N26',
 		enabled: false,
 		ignoredTotal: 12,
 		ignoredLastImport: 0,
@@ -101,11 +105,17 @@ export function ruleSummary(rule: IgnoreRule): string {
 	const field = rule.field === 'description' ? 'Description' : 'Note';
 	const direction =
 		rule.direction === 'any' ? 'In and out' : rule.direction === 'in' ? 'Incoming' : 'Outgoing';
-	return `${field} contains “${rule.contains}” · ${direction} · ${rule.account ?? 'All accounts'}`;
+	return `${field} contains “${rule.contains}” · ${direction} · ${rule.source ?? 'All banks'}`;
 }
 
-/** A transaction plus the rule that ignored it, or `null` when it was ignored by hand. */
-export type IgnoredTransaction = CashflowTransaction & { ruleId: string | null };
+/**
+ * A transaction plus the rule that ignored it, or `null` when it was ignored by hand.
+ * `restored` marks a row the person put back themselves; rules leave it alone from then on.
+ */
+export type IgnoredTransaction = CashflowTransaction & {
+	ruleId: string | null;
+	restored?: boolean;
+};
 
 export const ignoredTransactions: IgnoredTransaction[] = [
 	{
@@ -158,6 +168,19 @@ export const ignoredTransactions: IgnoredTransaction[] = [
 	},
 	{
 		id: 'ig-05',
+		description: 'Credit card annual fee',
+		note: 'Card costs',
+		source: 'ing',
+		amountCents: s(30),
+		direction: 'out',
+		date: '2026-06-22T06:00:00Z',
+		tag: 'fees',
+		ignored: false,
+		ruleId: 'rule-2',
+		restored: true
+	},
+	{
+		id: 'ig-06',
 		description: 'Transfer to savings',
 		note: 'Own account',
 		source: 'ing',
@@ -169,25 +192,13 @@ export const ignoredTransactions: IgnoredTransaction[] = [
 		ruleId: 'rule-1'
 	},
 	{
-		id: 'ig-06',
-		description: 'Credit card payment',
-		note: 'Monthly settlement',
-		source: 'ing',
-		amountCents: s(640),
-		direction: 'out',
-		date: '2026-05-24T06:00:00Z',
-		tag: '',
-		ignored: true,
-		ruleId: 'rule-2'
-	},
-	{
 		id: 'ig-07',
 		description: 'To N26 Everyday',
 		note: 'Own account',
 		source: 'ing',
 		amountCents: s(150),
 		direction: 'out',
-		date: '2026-05-18T09:30:00Z',
+		date: '2026-06-18T09:30:00Z',
 		tag: '',
 		ignored: true,
 		ruleId: 'rule-3'
@@ -206,10 +217,41 @@ export const ignoredTransactions: IgnoredTransaction[] = [
 	}
 ];
 
+/** Rows the Cashflow ledger shows while "ignored rows" are switched on. */
+export const ledgerRows: IgnoredTransaction[] = [
+	{
+		id: 'tx-01',
+		description: 'Salary June',
+		note: '',
+		source: 'ing',
+		amountCents: s(3200),
+		direction: 'in',
+		date: '2026-06-25T07:00:00Z',
+		tag: 'salary',
+		ignored: false,
+		ruleId: null
+	},
+	...ignoredTransactions.slice(0, 4),
+	{
+		id: 'tx-02',
+		description: 'Groceries week 26',
+		note: '',
+		source: 'n26',
+		amountCents: s(96),
+		direction: 'out',
+		date: '2026-06-22T17:20:00Z',
+		tag: 'groceries',
+		ignored: false,
+		ruleId: null
+	},
+	ignoredTransactions[4],
+	ignoredTransactions[5]
+];
+
 /** Counts of the most recent cashflow import. */
 export const lastImport = {
 	file: 'statement-june.csv',
-	account: 'ING — Current',
+	bank: 'ING',
 	finishedAgo: '2 minutes ago',
 	totalRows: 207,
 	imported: 128,

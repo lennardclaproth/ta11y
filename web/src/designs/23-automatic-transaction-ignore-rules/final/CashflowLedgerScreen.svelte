@@ -1,72 +1,49 @@
 <script lang="ts">
-	// Variant A — "Ledger lane". Everything the feature needs stays on Cashflow: the ledger
-	// header gains view tabs (All / Ignored / Rules), the last import reports itself as a ruled
-	// strip above the records, and an ignored row names the rule that put it there.
+	// Final design, screen 3 of 3 — Cashflow, the two touchpoints the feature needs there.
+	//
+	// 1. "Show ignored rows" puts ignored transactions back in the ledger, each naming the rule
+	//    that put it there ("By hand" when nobody's rule did), with Restore on the row.
+	// 2. "Make an ignore rule" takes the selected rows to the Ignore rules page with a draft
+	//    prefilled — the rule is still written and previewed in the one place that owns rules.
+	//
+	// Everything else on Cashflow stays as it is: same ledger header, same table, same pager.
 	import PreviewShell from '../PreviewShell.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import FooterBar from '$lib/components/organisms/footer-bar/FooterBar.svelte';
-	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
-	import Text from '$lib/components/atoms/typography/Text.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
-	import {
-		ignoredTransactions,
-		lastImport,
-		ruleById,
-		type IgnoredTransaction
-	} from '../ignore-rules.fixture';
+	import { ledgerRows, ruleById, type IgnoredTransaction } from '../ignore-rules.fixture';
 
 	type Props = {
-		/** Start with no ignored rows, to show the state before any rule has fired. */
-		empty?: boolean;
 		loading?: boolean;
 		error?: string | null;
 		/** Lay the shell out in document flow (narrow-screen previews). */
 		flow?: boolean;
-		/**
-		 * Preselect two rows so the bulk bar is visible. Off on narrow previews: FooterBar does
-		 * not wrap, so its bulk actions collide with the pager below `sm`.
-		 */
+		/** Preselect two rows so the bulk bar is visible. */
 		selected?: boolean;
 	};
 
-	let {
-		empty = false,
-		loading = false,
-		error = null,
-		flow = false,
-		selected = true
-	}: Props = $props();
+	let { loading = false, error = null, flow = false, selected = true }: Props = $props();
 
-	let view = $state('ignored');
+	let showIgnored = $state(true);
 	let selectedIds = $state<string[]>([]);
 
 	$effect(() => {
-		selectedIds = selected ? ['ig-02', 'ig-06'] : [];
+		selectedIds = selected ? ['ig-02', 'ig-03'] : [];
 	});
 
-	const rows = $derived(empty ? [] : ignoredTransactions);
-
-	const tabs = [
-		{ value: 'all', label: 'All · 1,284' },
-		{ value: 'ignored', label: 'Ignored · 312' },
-		{ value: 'rules', label: 'Rules · 5' }
-	];
+	const rows = $derived(showIgnored ? ledgerRows : ledgerRows.filter((row) => !row.ignored));
 
 	const actions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
-
-	const counts = [
-		{ label: 'New', value: lastImport.imported },
-		{ label: 'Duplicates', value: lastImport.duplicates },
-		{ label: 'Auto-ignored', value: lastImport.autoIgnored }
-	];
 
 	function fmtDate(value: string): string {
 		return formatDisplayDate(value.slice(0, 10));
@@ -78,15 +55,18 @@
 {/snippet}
 
 {#snippet descriptionCell(row: IgnoredTransaction)}
-	<span class="text-slate-800">{row.description}</span>
+	<span class={row.ignored ? 'text-slate-500' : 'text-slate-800'}>{row.description}</span>
 {/snippet}
 
-<!-- The rule is the reason this row left the totals, so it is named rather than implied. -->
+<!-- The rule is the reason this row left the totals, so it is named rather than implied.
+     A row nobody ignored says so in words too — not by being the only one without a badge. -->
 {#snippet ignoredByCell(row: IgnoredTransaction)}
-	{#if row.ruleId}
+	{#if row.ignored && row.ruleId}
 		<Badge intent="info" variant="soft" size="sm">{ruleById(row.ruleId).name}</Badge>
-	{:else}
+	{:else if row.ignored}
 		<Badge intent="neutral" variant="soft" size="sm">By hand</Badge>
+	{:else}
+		<span class="text-sm text-slate-500">Counted</span>
 	{/if}
 {/snippet}
 
@@ -100,8 +80,10 @@
 	<Money amount={scaledToNumber(row.amountCents)} currency="EUR" size="sm" />
 {/snippet}
 
-{#snippet restoreCell()}
-	<Button size="sm" variant="ghost" intent="secondary" shape="default">Restore</Button>
+{#snippet rowActionCell(row: IgnoredTransaction)}
+	{#if row.ignored}
+		<Button size="sm" variant="ghost" intent="secondary" shape="default">Restore</Button>
+	{/if}
 {/snippet}
 
 <PreviewShell {flow}>
@@ -118,42 +100,24 @@
 
 	<PageContentTemplate>
 		<LedgerToolbar title="Transactions" actionLabel="Add transaction" onAdd={() => {}}>
-			<Tabs {tabs} bind:value={view} size="sm" ariaLabel="Ledger view" />
+			<label class="flex items-center gap-2 text-sm text-slate-700">
+				<Switch bind:checked={showIgnored} />
+				Show ignored rows
+			</label>
+			<Button size="sm" variant="ghost" intent="secondary" shape="default">
+				<Icon icon="heroicons:funnel" size="sm" />Ignore rules
+			</Button>
 		</LedgerToolbar>
 
-		<!-- The import reports itself where the records are, not in a dialog that is already gone. -->
-		<section
-			class="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-slate-200 bg-white px-4 py-2"
-			aria-label="Last import"
-		>
-			<div class="min-w-0">
-				<Text as="p" size="sm" class="text-slate-900">
-					Last import · {lastImport.file} · {lastImport.finishedAgo}
-				</Text>
-				<dl class="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-					{#each counts as count (count.label)}
-						<div class="flex items-baseline gap-1.5">
-							<dt class="text-sm text-slate-500">{count.label}</dt>
-							<dd class="text-sm text-slate-900 tabular-nums">{count.value}</dd>
-						</div>
-					{/each}
-				</dl>
-			</div>
-
-			<Button size="sm" variant="outline" intent="secondary" shape="default">
-				Review auto-ignored
-			</Button>
-		</section>
-
 		<DataTable
-			rows={rows}
+			{rows}
 			{loading}
 			{error}
 			selectable
 			bind:selectedIds
 			sortKey="date"
 			sortDirection="desc"
-			emptyText="No ignored transactions. Rules put them here as imports come in."
+			emptyText="No transactions match your filters"
 			class="min-h-0 flex-1"
 			columns={[
 				{ key: 'date', header: 'Date', sortKey: 'date', width: 'w-28', cell: dateCell },
@@ -163,20 +127,18 @@
 					sortKey: 'description',
 					cell: descriptionCell
 				},
-				{ key: 'rule', header: 'Ignored by', width: 'w-56', cell: ignoredByCell },
+				{ key: 'rule', header: 'Ignored by', width: 'w-52', cell: ignoredByCell },
 				{ key: 'direction', header: 'Direction', width: 'w-28', cell: directionCell },
 				{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell },
-				{ key: 'restore', header: '', align: 'right', width: 'w-28', cell: restoreCell }
+				{ key: 'restore', header: '', align: 'right', width: 'w-28', cell: rowActionCell }
 			]}
 		>
 			{#snippet footer()}
-				<FooterBar total={312} limit={25} offset={0} selectedCount={selectedIds.length}>
+				<FooterBar total={1284} limit={25} offset={0} selectedCount={selectedIds.length}>
 					{#snippet actions()}
-						<Button size="sm" variant="outline" intent="secondary" shape="default">
-							Restore selected
-						</Button>
+						<Button size="sm" variant="outline" intent="secondary" shape="default">Restore</Button>
 						<Button size="sm" variant="ghost" intent="secondary" shape="default">
-							Make a rule from these
+							Make an ignore rule
 						</Button>
 					{/snippet}
 				</FooterBar>

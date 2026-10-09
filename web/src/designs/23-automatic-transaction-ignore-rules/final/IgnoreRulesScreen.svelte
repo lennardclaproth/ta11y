@@ -1,7 +1,11 @@
 <script lang="ts">
-	// Variant B — "Rules desk". Ignore rules get their own page under Cashflow: a ruled index of
-	// rules on the left, the opened rule with its live preview on the right. The preview is the
-	// safety net — you see what a rule would catch before it is allowed to catch anything.
+	// Final design, screen 1 of 3 — "Ignore rules" (chosen from variant B).
+	//
+	// A page of its own under Cashflow: a ruled index of rules on the left, the opened rule with
+	// its live preview on the right. The preview is the safety net the pitch asks for — what a
+	// rule would catch is visible before it is allowed to catch anything. "Apply to existing"
+	// names its count and asks for confirmation, because it is the one action that reaches back
+	// over transactions that are already in the ledger.
 	//
 	// The page lays out its own content region instead of using PageContentTemplate: that template
 	// gives narrow screens a fixed 32rem scroll box, which suits a ledger but traps a form.
@@ -17,17 +21,18 @@
 	import Select from '$lib/components/atoms/select/Select.svelte';
 	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
+	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import Alert from '$lib/components/molecules/alert/Alert.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
-	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
+	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import {
-		accountLabels,
 		ignoreRules,
 		lastImport,
 		previewMatches,
-		previewSummary
+		previewSummary,
+		sourceLabels
 	} from '../ignore-rules.fixture';
 
 	type Props = {
@@ -37,6 +42,10 @@
 		empty?: boolean;
 		loading?: boolean;
 		error?: string | null;
+		/** The rule as typed catches nothing — the preview says so instead of staying blank. */
+		noMatches?: boolean;
+		/** Show the "apply to existing" confirmation. */
+		applyOpen?: boolean;
 		/** Lay the shell out in document flow (narrow-screen previews). */
 		flow?: boolean;
 	};
@@ -46,6 +55,8 @@
 		empty = false,
 		loading = false,
 		error = null,
+		noMatches = false,
+		applyOpen = $bindable(false),
 		flow = false
 	}: Props = $props();
 
@@ -64,16 +75,24 @@
 		{ value: 'in', label: 'Incoming only' },
 		{ value: 'out', label: 'Outgoing only' }
 	];
-	const accountOptions = [
-		{ value: 'all', label: 'All accounts' },
-		...accountLabels.map((label) => ({ value: label, label }))
+	// A cashflow transaction carries the bank it was imported from, not a separate account.
+	const sourceOptions = [
+		{ value: 'all', label: 'All banks' },
+		...sourceLabels.map((label) => ({ value: label, label }))
 	];
 
 	let fieldValue = $state('description');
-	let containsValue = $state('Credit card');
 	let directionValue = $state('out');
-	let accountValue = $state('ING — Current');
+	let sourceValue = $state('ING');
 	let nameValue = $state('Credit card payment');
+	let containsValue = $state('Credit card');
+
+	$effect(() => {
+		if (noMatches) containsValue = 'Credit card settlement 2026';
+	});
+
+	const matching = $derived(noMatches ? 0 : previewSummary.matching);
+	const sample = $derived(noMatches ? [] : previewMatches);
 
 	const directionWords = { any: 'In and out', in: 'Incoming', out: 'Outgoing' };
 </script>
@@ -113,6 +132,7 @@
 						</Button>
 					</div>
 
+					<!-- The last import reports itself here, and links to its own review page. -->
 					<div
 						class="shrink-0 border-b border-slate-200 bg-taupe-50 px-4 py-3"
 						aria-label="Last import"
@@ -140,12 +160,24 @@
 							{/each}
 						{:else if error}
 							<li class="px-4 py-6">
-								<Alert intent="error" title="Could not load your rules">{error}</Alert>
+								<Alert intent="error" title="Could not load your rules">
+									{error}
+									<Button
+										size="sm"
+										variant="outline"
+										intent="secondary"
+										shape="default"
+										class="mt-2"
+									>
+										Try again
+									</Button>
+								</Alert>
 							</li>
 						{:else if rules.length === 0}
 							<li class="px-4 py-10 text-center">
 								<Text as="p" size="sm" tone="muted">
-									No ignore rules yet. Make one from a transaction you keep ignoring by hand.
+									No ignore rules yet. Make one here, or from a transaction you keep ignoring by
+									hand on Cashflow.
 								</Text>
 							</li>
 						{:else}
@@ -173,7 +205,7 @@
 												{rule.field === 'description' ? 'Description' : 'Note'} contains “{rule.contains}”
 											</span>
 											<span class="block truncate text-xs text-slate-500">
-												{directionWords[rule.direction]} · {rule.account ?? 'All accounts'}
+												{directionWords[rule.direction]} · {rule.source ?? 'All banks'}
 											</span>
 										</span>
 										<span class="shrink-0 text-right">
@@ -197,6 +229,30 @@
 					].join(' ')}
 					aria-label="Rule detail"
 				>
+					{#if empty || error}
+						<!-- Nothing to open: explain what a rule is instead of showing a dead form. -->
+						<div
+							class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center"
+						>
+							<Heading level="h2" size="lg" class="text-slate-900">
+								{error ? 'No rule open' : 'Your first ignore rule'}
+							</Heading>
+							<Text as="p" size="sm" tone="muted" class="max-w-md">
+								{#if error}
+									Your rules did not load, so there is nothing to open. Try again on the left.
+								{:else}
+									A rule matches text in the description or note, in one direction, for one bank or
+									all. Transactions it matches arrive ignored and stay out of your monthly totals —
+									you see which rule did it, and can put any of them back.
+								{/if}
+							</Text>
+							{#if !error}
+								<Button shape="default" onclick={() => {}}>
+									<Icon icon="heroicons:plus" />New rule
+								</Button>
+							{/if}
+						</div>
+					{:else}
 					<div
 						class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3"
 					>
@@ -215,7 +271,7 @@
 						</label>
 					</div>
 
-					<div class="min-h-0 space-y-5 px-4 py-4 lg:flex-1 lg:px-6">
+					<div class="min-h-0 space-y-4 px-4 py-3 lg:flex-1 lg:px-6">
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<FormField label="Rule name" id="rule-name" class="sm:col-span-2">
 								{#snippet children(ctx)}
@@ -241,42 +297,81 @@
 								{/snippet}
 							</FormField>
 
-							<FormField label="Account" id="rule-account">
+							<FormField
+								label="Bank"
+								id="rule-source"
+								hint="Transactions carry the bank they were imported from"
+							>
 								{#snippet children(ctx)}
-									<Select id={ctx.id} bind:value={accountValue} options={accountOptions} />
+									<Select
+										id={ctx.id}
+										bind:value={sourceValue}
+										options={sourceOptions}
+										ariaDescribedby={ctx.describedby}
+									/>
 								{/snippet}
 							</FormField>
 						</div>
 
 						<!-- Preview: a rule that is too wide has to be visible before it is saved. -->
-						<section class="border-t border-slate-400 pt-3" aria-label="Matching transactions">
-							<div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+						<section class="border-t border-slate-400 pt-2" aria-label="Matching transactions">
+							<div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
 								<Heading level="h3" size="sm" class="text-slate-900">
-									Matches {previewSummary.matching} of {previewSummary.scanned.toLocaleString('en')} transactions
+									Matches {matching} of {previewSummary.scanned.toLocaleString('en')} transactions
 								</Heading>
-								<Text as="span" size="sm" tone="muted">Showing the 4 most recent</Text>
+								{#if matching > 0}
+									<Text as="span" size="sm" tone="muted">Showing the 4 most recent</Text>
+								{/if}
 							</div>
 
-							<ul class="text-sm">
-								{#each previewMatches as match (match.id)}
-									<li
-										class="flex items-baseline justify-between gap-3 border-b border-slate-200 py-2 last:border-b-0"
-									>
-										<span class="w-24 shrink-0 text-slate-500 tabular-nums">
-											{formatDisplayDate(match.date.slice(0, 10))}
-										</span>
-										<span class="min-w-0 flex-1 truncate text-slate-800">{match.description}</span>
-										<span class="shrink-0">
-											<Money amount={scaledToNumber(match.amountCents)} currency="EUR" size="sm" />
-										</span>
-									</li>
-								{/each}
-							</ul>
+							{#if matching === 0}
+								<Alert intent="info" title="Nothing matches this rule yet">
+									No transaction in your ledger contains “{containsValue}”. Save it anyway to catch
+									future imports, or widen the text.
+								</Alert>
+							{:else}
+								<ul class="text-sm">
+									{#each sample as match (match.id)}
+										<li class="border-b border-slate-200 py-1.5 last:border-b-0">
+											<!-- Narrow: the description gets the width, the date reads as a caption. -->
+											<div class="sm:hidden">
+												<div class="flex items-baseline justify-between gap-3">
+													<span class="min-w-0 flex-1 truncate text-slate-800">
+														{match.description}
+													</span>
+													<span class="shrink-0">
+														<Money
+															amount={scaledToNumber(match.amountCents)}
+															currency="EUR"
+															size="sm"
+														/>
+													</span>
+												</div>
+												<span class="text-xs text-slate-500 tabular-nums">
+													{formatDisplayDate(match.date.slice(0, 10))}
+												</span>
+											</div>
 
-							<Alert intent="warning" title="One match looks unrelated" class="mt-3">
-								“Credit card annual fee” is a real cost, not an own transfer. Narrow the text if you
-								do not want it ignored.
-							</Alert>
+											<div class="hidden items-baseline gap-3 sm:flex">
+												<span class="w-24 shrink-0 text-slate-500 tabular-nums">
+													{formatDisplayDate(match.date.slice(0, 10))}
+												</span>
+												<span class="min-w-0 flex-1 truncate text-slate-800">
+													{match.description}
+												</span>
+												<span class="w-28 shrink-0 text-right">
+													<Money amount={scaledToNumber(match.amountCents)} currency="EUR" size="sm" />
+												</span>
+											</div>
+										</li>
+									{/each}
+								</ul>
+
+								<Alert intent="warning" title="One match looks unrelated" class="mt-2">
+									“Credit card annual fee” is a real cost, not an own transfer. Narrow the text if
+									you do not want it ignored.
+								</Alert>
+							{/if}
 						</section>
 					</div>
 
@@ -285,14 +380,43 @@
 					>
 						<Text as="span" size="sm" tone="muted">Saving only affects imports from now on.</Text>
 						<div class="flex flex-wrap items-center gap-2">
-							<Button variant="outline" intent="secondary" shape="default">
-								Apply to existing ({previewSummary.notYetIgnored})
+							<Button
+								variant="outline"
+								intent="secondary"
+								shape="default"
+								disabled={matching === 0}
+								onclick={() => (applyOpen = true)}
+							>
+								Apply to existing ({matching})
 							</Button>
 							<Button shape="default">Save changes</Button>
 						</div>
 					</div>
+					{/if}
 				</section>
 			</div>
 		</Panel>
 	</div>
 </PreviewShell>
+
+<!-- Reaching back over the ledger is the one action that changes what is already there. -->
+<Dialog bind:open={applyOpen} size="md" title="Apply this rule to existing transactions">
+	<div class="space-y-3 px-5 py-4">
+		<Text as="p" size="md" class="text-slate-800">
+			<span class="text-slate-900 tabular-nums">{previewSummary.notYetIgnored}</span> transactions
+			match “{nameValue}” and are not ignored yet. They move out of your monthly totals and tag
+			split.
+		</Text>
+		<Text as="p" size="sm" tone="muted">
+			Nothing is deleted. You can show ignored rows on Cashflow and put any of them back.
+		</Text>
+	</div>
+	{#snippet footer()}
+		<div class="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-3">
+			<Button variant="ghost" intent="secondary" shape="default" onclick={() => (applyOpen = false)}>
+				Cancel
+			</Button>
+			<Button shape="default">Ignore {previewSummary.notYetIgnored} transactions</Button>
+		</div>
+	{/snippet}
+</Dialog>

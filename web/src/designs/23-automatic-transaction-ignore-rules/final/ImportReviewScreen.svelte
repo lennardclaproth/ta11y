@@ -1,7 +1,10 @@
 <script lang="ts">
-	// Variant C — "Import review". The import's own result page is the centre of the feature: the
-	// counts are read first, then the auto-ignored rows grouped under the rule that caught them, so
-	// a rule that is too wide is judged on its own harvest instead of row by row.
+	// Final design, screen 2 of 3 — "After the import" (chosen from variant C).
+	//
+	// The import's own result page: the three counts are read first, then the auto-ignored rows
+	// grouped under the rule that caught them, so a rule that is too wide is judged on its own
+	// harvest instead of row by row. While the import is still being processed the page shows
+	// that state rather than a zero; the counts fill in when the import reports it is done.
 	//
 	// The page lays out its own content region instead of using PageContentTemplate: that template
 	// gives narrow screens a fixed 32rem scroll box, which suits a ledger but cuts a reading page.
@@ -12,8 +15,9 @@
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import Spinner from '$lib/components/atoms/spinner/Spinner.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
+	import Alert from '$lib/components/molecules/alert/Alert.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import {
@@ -28,6 +32,7 @@
 	type Props = {
 		/** The import finished, but no rule matched anything. */
 		empty?: boolean;
+		/** The import is still being processed; counts are not known yet. */
 		loading?: boolean;
 		error?: string | null;
 		/** Lay the shell out in document flow (narrow-screen previews). */
@@ -51,8 +56,16 @@
 					.slice(0, 2)
 	);
 
-	const counts = [
-		{ key: 'new', label: 'New', value: lastImport.imported, note: 'added to your ledger' },
+	// With no rule matching, those rows are simply new — the counts have to agree with the text
+	// below them, or the page says two different things about the same import.
+	const autoIgnored = $derived(empty ? 0 : lastImport.autoIgnored);
+	const counts = $derived([
+		{
+			key: 'new',
+			label: 'New',
+			value: lastImport.imported + (empty ? lastImport.autoIgnored : 0),
+			note: 'added to your ledger'
+		},
 		{
 			key: 'duplicates',
 			label: 'Duplicates',
@@ -62,10 +75,10 @@
 		{
 			key: 'ignored',
 			label: 'Auto-ignored',
-			value: lastImport.autoIgnored,
+			value: autoIgnored,
 			note: 'kept out of your totals'
 		}
-	];
+	]);
 </script>
 
 <PreviewShell {flow}>
@@ -76,9 +89,19 @@
 	<div class="flex min-h-full flex-col px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8">
 		<article class="flex flex-col bg-white lg:min-h-0 lg:flex-1">
 			<header class="shrink-0 border-b border-slate-200 px-4 py-4 lg:px-8">
-				<Heading level="h1" size="2xl" class="text-slate-900">Import complete</Heading>
+				<div class="flex flex-wrap items-center gap-3">
+					<Heading level="h1" size="2xl" class="text-slate-900">
+						{loading ? 'Importing…' : 'Import complete'}
+					</Heading>
+					<!-- A word, not only a spinner: the state has to survive reduced motion and a screenshot. -->
+					{#if loading}
+						<Badge intent="info" variant="soft" size="sm">Still running</Badge>
+						<Spinner size="sm" />
+					{/if}
+				</div>
 				<Text as="p" size="sm" tone="muted" class="mt-1">
-					{lastImport.file} · {lastImport.account} · {lastImport.totalRows} rows read
+					{lastImport.file} · {lastImport.bank} ·
+					{loading ? 'reading the file' : `${lastImport.totalRows} rows read`}
 				</Text>
 
 				<!-- Counts are figures, not money: tabular, labelled, never coloured by sign. -->
@@ -87,7 +110,7 @@
 						<div class="flex flex-col gap-0.5 border-t border-slate-400 pt-2">
 							<dt class="text-sm text-slate-500">{count.label}</dt>
 							{#if loading}
-								<Skeleton class="h-8 w-16" />
+								<dd><Skeleton class="h-8 w-16" /></dd>
 							{:else}
 								<dd class="font-heading text-3xl leading-tight text-slate-900 tabular-nums">
 									{count.value}
@@ -103,8 +126,14 @@
 				{#if error}
 					<Alert intent="error" title="Could not load what was ignored">
 						{error} The import itself finished; nothing was lost.
+						<Button size="sm" variant="outline" intent="secondary" shape="default" class="mt-2">
+							Try again
+						</Button>
 					</Alert>
 				{:else if loading}
+					<Text as="p" size="sm" tone="muted">
+						This page fills in as soon as the import reports it is done. You can leave it open.
+					</Text>
 					{#each [0, 1] as index (index)}
 						<section class="border-t border-slate-400 pt-3">
 							<Skeleton class="mb-3 w-56" />
@@ -157,46 +186,50 @@
 											<div class="flex items-baseline justify-between gap-3">
 												<span class="min-w-0 flex-1 truncate text-slate-800">{row.description}</span>
 												<span class="shrink-0">
-													<Money
-														amount={scaledToNumber(row.amountCents)}
-														currency="EUR"
-														size="sm"
-													/>
+													<Money amount={scaledToNumber(row.amountCents)} currency="EUR" size="sm" />
 												</span>
 											</div>
-											<div class="mt-0.5 flex items-center justify-between gap-3">
-												<span class="text-xs text-slate-500">
+											<div class="mt-0.5 flex flex-wrap items-center justify-between gap-x-3">
+												<span class="text-xs whitespace-nowrap text-slate-500">
 													{formatDisplayDate(row.date.slice(0, 10))} ·
 													{row.direction === 'in' ? 'Incoming' : 'Outgoing'}
 												</span>
-												<Button size="sm" variant="ghost" intent="secondary" shape="default">
-													Restore
-												</Button>
+												{#if row.restored}
+													<span class="text-xs text-emerald-700">Restored · rules leave it alone</span>
+												{:else}
+													<Button size="sm" variant="ghost" intent="secondary" shape="default">
+														Restore
+													</Button>
+												{/if}
 											</div>
 										</div>
 
-										<div class="hidden items-center justify-between gap-4 sm:flex">
+										<div class="hidden items-center gap-4 sm:flex">
 											<span class="w-24 shrink-0 text-slate-500 tabular-nums">
 												{formatDisplayDate(row.date.slice(0, 10))}
 											</span>
 											<span class="min-w-0 flex-1 truncate text-slate-800">{row.description}</span>
-											<Badge
-												intent={row.direction === 'in' ? 'success' : 'error'}
-												variant="soft"
-												size="sm"
-											>
-												{row.direction === 'in' ? 'In' : 'Out'}
-											</Badge>
-											<span class="w-24 shrink-0 text-right">
-												<Money
-													amount={scaledToNumber(row.amountCents)}
-													currency="EUR"
+											<span class="w-20 shrink-0">
+												<Badge
+													intent={row.direction === 'in' ? 'success' : 'error'}
+													variant="soft"
 													size="sm"
-												/>
+												>
+													{row.direction === 'in' ? 'In' : 'Out'}
+												</Badge>
 											</span>
-											<Button size="sm" variant="ghost" intent="secondary" shape="default">
-												Restore
-											</Button>
+											<span class="w-28 shrink-0 text-right">
+												<Money amount={scaledToNumber(row.amountCents)} currency="EUR" size="sm" />
+											</span>
+											<span class="flex w-44 shrink-0 justify-end">
+												{#if row.restored}
+													<span class="text-xs text-emerald-700">Restored · rules leave it alone</span>
+												{:else}
+													<Button size="sm" variant="ghost" intent="secondary" shape="default">
+														Restore
+													</Button>
+												{/if}
+											</span>
 										</div>
 									</li>
 								{/each}
