@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Proposal for a new molecule: one calendar month of the standing, read as an entry in a
-	// ruled column rather than a table row. Composes Heading / Text / Money / Badge / ProgressBar.
+	// Proposal for a new molecule: one calendar month of the standing, read as an entry in a ruled
+	// column rather than a table row. Composes Heading / Text / Money / Badge / ProgressBar.
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
-	import ProgressBar from '$lib/components/atoms/progress-bar/ProgressBar.svelte';
-	import { monthStatusLabel, sharePercent, type GoalMonth } from '../goal-data';
+	import GoalProgress from './GoalProgress.svelte';
+	import { monthStatusLabel, type GoalMonth } from '../goal-data';
 
 	type Props = {
 		month: GoalMonth;
@@ -15,25 +15,10 @@
 
 	let { month, onOpenUnassigned }: Props = $props();
 
-	// The bar runs to half of your income, so the goal marker sits inside the track and a month
-	// that overshot still reads as overshot.
-	const scale = 50;
-
-	const share = $derived(sharePercent(month));
-	const markerLeft = $derived(`left: ${Math.min(100, (month.goalPercent / scale) * 100)}%`);
-
-	// Missed needs attention; it is not a validation error, so amber rather than red — and the
-	// word is always there next to the colour.
 	const badgeIntent = {
 		met: 'success',
 		missed: 'warning',
 		'in-progress': 'neutral'
-	} as const;
-
-	const barIntent = {
-		met: 'success',
-		missed: 'warning',
-		'in-progress': 'primary'
 	} as const;
 </script>
 
@@ -46,28 +31,17 @@
 	</div>
 
 	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-8">
-		<div class="relative min-w-0 flex-1">
-			<ProgressBar
-				value={Math.min(share, scale)}
-				max={scale}
-				size="lg"
-				intent={barIntent[month.status]}
-				ariaLabel="{share}% of marked income put towards wealth, goal {month.goalPercent}%"
-			/>
-			<span class="absolute inset-y-0 w-0.5 bg-slate-800" style={markerLeft} aria-hidden="true"
-			></span>
-			<Text size="xs" tone="muted" class="mt-1">
-				{share}% of income · goal {month.goalPercent}%
-			</Text>
+		<div class="min-w-0 flex-1">
+			<GoalProgress {month} />
 		</div>
 
-		<!-- Fixed column widths so the amounts line up down the whole page, not just inside one entry. -->
+		<!-- Fixed column widths so the amounts line up down the whole column, not just inside one entry. -->
 		<dl class="flex shrink-0 justify-end gap-6">
-			<div class="flex w-32 flex-col items-end gap-0.5">
+			<div class="flex w-28 flex-col items-end gap-0.5">
 				<dt class="text-xs text-slate-500">Income</dt>
 				<dd><Money amount={month.income} currency="EUR" size="md" /></dd>
 			</div>
-			<div class="flex w-32 flex-col items-end gap-0.5">
+			<div class="flex w-28 flex-col items-end gap-0.5">
 				<dt class="text-xs text-slate-500">To wealth</dt>
 				<dd><Money amount={month.contributed} currency="EUR" size="md" weight="semibold" /></dd>
 			</div>
@@ -82,5 +56,7 @@
 		>
 			{month.unassigned} transactions in {month.label} are not assigned yet
 		</button>
+	{:else}
+		<Text size="xs" tone="muted">All transactions in this month are assigned.</Text>
 	{/if}
 </article>

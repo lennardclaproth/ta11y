@@ -23,12 +23,13 @@
 	} as const;
 </script>
 
-<ol class="flex flex-wrap items-start gap-3">
+<!-- Marks stay small enough that a year of months still fits one line in a quarter-width card. -->
+<ol class="flex flex-wrap items-start gap-2">
 	{#each marks as mark (mark.month)}
-		<li class="flex w-10 flex-col items-center gap-1">
+		<li class="flex w-9 flex-col items-center gap-1">
 			<span
 				class={[
-					'flex size-9 items-center justify-center rounded-full border',
+					'flex size-8 items-center justify-center rounded-full border',
 					markClasses[mark.status]
 				].join(' ')}
 			>
