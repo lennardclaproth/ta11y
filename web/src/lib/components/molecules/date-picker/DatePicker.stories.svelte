@@ -47,3 +47,11 @@
 		<DatePicker value="2026-06-12" disabled />
 	</div>
 </Story>
+
+<!-- Inside a <dialog> the portal would put the calendar under the top layer, so it stays
+     in place and anchors to the trigger's right edge to fit a narrow form. -->
+<Story name="Inside a dialog (no portal)" asChild>
+	<div class="flex min-h-72 items-start justify-end">
+		<DatePicker value="2026-06-12" portal={false} placement="bottom-end" size="sm" />
+	</div>
+</Story>

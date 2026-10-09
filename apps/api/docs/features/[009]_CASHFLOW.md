@@ -1,6 +1,6 @@
-# [009]–[012],[023] Cashflow
+# [009]–[012],[023],[032] Cashflow
 
-> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · **Area:** Core (user-facing) · **Status:** refactored; not yet wired in a compiling entrypoint
+> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · 032 (date changes) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/cashflow` · `transport/http/handlers/cashflow` · `internal/storage/sqlx_cashflow_store.go` · `internal/importer/cashflow`
 >
@@ -21,7 +21,10 @@ ignored:
   filter.
 - **[012] Ignore** — mark a selection or a filter match as ignored / not-ignored; ignored
   rows drop out of analytics totals.
-- **[023] Manual create** — bulk-create up to 100 manual transactions for an account.
+- **[023] Manual create** — bulk-create up to 100 manual transactions for an account, on any
+  day up to and including today.
+- **[032] Change date** — move one manually entered transaction to another day, today or
+  earlier. Nothing else about it changes, and imported rows are refused.
 
 ## Domain model
 
@@ -32,6 +35,7 @@ classDiagram
         -QueryStore qs
         -accountExistenceChecker aec
         +CreateMany(ctx, accID, importID, data) CreateManyResult
+        +ChangeDate(ctx, accID, id, date) Transaction
         +TagByID(ctx, id, tag) error
         +TagByIDs(ctx, ids, tag) int
         +TagByFilter(ctx, tag, accID, filters) BulkTagResult
@@ -47,6 +51,7 @@ classDiagram
     class CommandStore {
         <<interface>>
         +CreateTransactions(ctx, txs) int
+        +UpdateDate(ctx, accID, id, date, checksum) int
         +UpdateTagByIDs(ctx, ids, tag) int
         +UpdateTagByFilter(ctx, filters, tag) int
         +UpdateIgnoredByIDs(ctx, ids, ignored) int
@@ -58,6 +63,8 @@ classDiagram
         +GetTagDistribution(ctx, filter) TagDistribution
         +ListTransactions(ctx, query) TransactionListResult
         +CountByFilter(ctx, filters) int
+        +GetTransaction(ctx, accID, id) Transaction
+        +GetTransactionByChecksum(ctx, accID, checksum) Transaction
     }
     class accountExistenceChecker {
         <<interface>>
@@ -182,7 +189,8 @@ sequenceDiagram
 | Capability | Method + route | Key inputs | Success |
 | --- | --- | --- | --- |
 | [009] Query | `GET /cashflow/transactions` | query: `limit/offset`, `sort_by/sort_order`, `q`, `description/note/source`, `direction`, `tags`, `untagged`, `hide_ignored`, `from/to` | 200 `{pagination, data[]}` |
-| [023] Manual create | `POST /cashflow/transactions/manual` | body: `account_id`, `transactions[]` (`date`, `amount`, `type`, `description`, `note`, `tag`, `vendor?`) | 201 `{created_count, data[]}` |
+| [023] Manual create | `POST /cashflow/transactions/manual` | body: `transactions[]` (`date`, `amount`, `type`, `description`, `note`, `tag`, `vendor?`) | 201 `{created_count, data[]}` |
+| [032] Change date | `POST /cashflow/transactions/date` | body: `id`, `date` | 200 `{id, date}` |
 | [010] Monthly | `GET /cashflow/analytics/monthly` | query: `from`, `to`, `include_ignored` | 200 `{data[]}` |
 | [010] Tag distribution | `GET /cashflow/analytics/tags` | query: `from`, `to`, `include_ignored` | 200 `{combined, incoming, outgoing}` |
 | [011] Tag one | `POST /cashflow/transactions/tag` | body: `id`, `tag` | 200 |
@@ -191,9 +199,11 @@ sequenceDiagram
 | [012] Ignore selection | `POST /cashflow/transactions/ignore/selection` | body: `ignored?` (default true), `ids[]` | 200 `{updated_count, status}` |
 | [012] Ignore filter | `POST /cashflow/transactions/ignore/filter` | body: `ignored?`, `filters` | 200 |
 
-**Error mapping (common):** decode / validation / `ParseDirection` / bad sort / bad date range
-→ 400; manual create `ErrAccountNotFound` → 404; manual create with any duplicate → 409; store
-errors → 500. Tagging a non-existent ID returns 200 (zero rows updated).
+**Error mapping (common):** decode / validation / `ParseDirection` / bad sort / bad date range /
+a date after today → 400; manual create `ErrAccountNotFound` and an unknown transaction id → 404;
+manual create with any duplicate, or a date change that would produce one → 409; changing the
+date of an imported row → 422; store errors → 500. Tagging a non-existent ID returns 200 (zero
+rows updated).
 
 ## Processing rules
 
@@ -207,7 +217,14 @@ errors → 500. Tagging a non-existent ID returns 200 (zero rows updated).
   their generated row number, so manual deduplication is unchanged. Rows imported before this
   change keep their old checksums and are not converted.
 - **Manual create.** Capped at 100 rows (`ErrTransactionLimitExceeded`); `tag` is required;
-  `source` = `manual` or `manual:<vendor>`; any duplicate in the batch yields a 409.
+  `source` = `manual` or `manual:<vendor>`; any duplicate in the batch yields a 409. The date
+  must be today or earlier — a cashflow transaction records something that already happened.
+- **Moving a transaction ([032]).** Only rows whose `source` is `manual` / `manual:<vendor>`
+  can be moved, and only to today or earlier. Because the checksum carries the date, it is
+  recomputed for the new day and looked up within the account first; a hit that is not the row
+  itself is refused rather than written (the unique index would refuse it anyway). Imported
+  rows keep their statement date: moving one would change the identity the next import of the
+  same file compares against, so it would insert the old row again.
 - **Filtering.** `description`/`note`/`source` use case-insensitive `LIKE %v%`; `direction`
   exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`; `from`/`to`
   bound `date`; `q` fuzzy-matches description/note/tag. Conditions are AND-joined.
@@ -227,16 +244,16 @@ subscribe to `import.completed`.
 
 | Path | Responsibility |
 | --- | --- |
-| `internal/cashflow/commands.go` | Write side: `CreateMany`, tag/ignore commands, `CommandStore`, bulk-tag result/mode |
+| `internal/cashflow/commands.go` | Write side: `CreateMany`, `ChangeDate`, tag/ignore commands, `CommandStore`, bulk-tag result/mode |
 | `internal/cashflow/queries.go` | Read side: list + analytics, `QueryStore`, sort fields, `ParseTransactionSort` |
 | `internal/cashflow/filters.go` | App-level `TransactionFilters` for bulk mutations |
 | `internal/cashflow/transaction.go` | `Transaction`, checksum, `CashFlowDirection`/`AccountType`, `CsvParser` |
 | `internal/cashflow/errors.go` | Manual-create + account errors |
-| `transport/http/handlers/cashflow/*.go` | Query, manual create, analytics, tag (×3), ignore (×2) handlers + DTOs |
+| `transport/http/handlers/cashflow/*.go` | Query, manual create, change date, analytics, tag (×3), ignore (×2) handlers + DTOs |
 | `internal/storage/sqlx_cashflow_store.go` | `SQLXCashflowStore` (both interfaces): inserts, list/count, tag/ignore, analytics SQL |
 | `internal/importer/cashflow/` | Import processor + vendor CSV parsers (ING / DeGiro / N26) |
 
-## Refactor state / not implemented
+## Gaps / not implemented
 
 - **Async bulk tagging is not implemented.** `TagByFilter`/`IgnoreByFilter` always run
   synchronously and return `Mode: sync`; the HTTP 202 branch and `TagByFilterModeAsync` are
@@ -245,4 +262,6 @@ subscribe to `import.completed`.
   orphaned scaffolding with no caller.
 - **No cashflow account projection wiring.** `cashflow.accounts` exists in the schema but no
   `account.created` handler or cashflow-account store populates it in the refactored tree.
-- The new entrypoint does not yet register cashflow routes (only the stale `cmd/server/main.go` did).
+- **Only the date can be changed after the fact.** Amount, description, tag and direction are
+  fixed once a transaction exists, and there is no delete, so correcting anything else means
+  re-entering the transaction.

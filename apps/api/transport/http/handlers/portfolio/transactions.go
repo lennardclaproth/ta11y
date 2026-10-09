@@ -159,6 +159,33 @@ type ManualPortfolioTransactionResponse struct {
 	UnitPrice   string     `json:"unit_price"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	// Rebuild says whether the positions and snapshots have caught up with this write:
+	// "completed", "in_progress" (another rebuild held the lock), "skipped" or "failed".
+	Rebuild string `json:"rebuild"`
+}
+
+// ChangePortfolioTransactionDateRequest moves one manual transaction to another date.
+type ChangePortfolioTransactionDateRequest struct {
+	ID         uuid.UUID `json:"id"`
+	OccurredAt string    `json:"occurred_at"`
+}
+
+func (r ChangePortfolioTransactionDateRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	if r.ID == uuid.Nil {
+		problems["id"] = "id is required"
+	}
+	if strings.TrimSpace(r.OccurredAt) == "" {
+		problems["occurred_at"] = "occurred_at is required"
+	}
+	return len(problems) == 0, problems
+}
+
+// ChangePortfolioTransactionDateResponse returns the transaction on its new date.
+type ChangePortfolioTransactionDateResponse struct {
+	ID         uuid.UUID `json:"id"`
+	OccurredAt time.Time `json:"occurred_at"`
+	Rebuild    string    `json:"rebuild"`
 }
 
 // GetPortfolioTransactions returns transaction history for a portfolio account.
@@ -328,10 +355,10 @@ func toPortfolioTransactionResponses(rows []portfoliodomain.TransactionWithListi
 	return out
 }
 
-// CreateManualPortfolioTransaction creates a manual portfolio transaction without triggering rebuilds.
+// CreateManualPortfolioTransaction creates a manual portfolio transaction and rebuilds the portfolio.
 //
 // @Summary Create manual portfolio transaction
-// @Description Creates a manual portfolio transaction and persists it without publishing rebuild events.
+// @Description Creates a manual portfolio transaction, then rebuilds positions and snapshots so they include it. The response reports whether that rebuild ran.
 // @Tags portfolio
 // @Accept json
 // @Produce json
@@ -390,8 +417,95 @@ func CreateManualPortfolioTransaction(
 			return
 		}
 
+		logRebuildOutcome(r, log, result.Rebuild, *result.Transaction.AccountID)
+
 		_ = httpx.JSONEncode(w, http.StatusCreated, toManualPortfolioTransactionResponse(result))
 	})
+}
+
+// ChangePortfolioTransactionDate moves a manual portfolio transaction to another date.
+//
+// @Summary Change a portfolio transaction date
+// @Description Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots. Imported transactions keep their statement date.
+// @Tags portfolio
+// @Accept json
+// @Produce json
+// @Param request body ChangePortfolioTransactionDateRequest true "Change date payload"
+// @Success 200 {object} ChangePortfolioTransactionDateResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /portfolio/transactions/date [post]
+func ChangePortfolioTransactionDate(
+	log logging.Logger,
+	commands *portfoliodomain.Commands,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+		req, err := httpx.JSONDecode[ChangePortfolioTransactionDateRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
+		}
+		if ok, problems := req.isValid(); !ok {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+		if commands == nil {
+			log.Error(r.Context(), "portfolio change date: commands are not configured", errors.New("portfolio commands not configured"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to change the transaction date"})
+			return
+		}
+
+		tx, rebuild, err := commands.ChangeTransactionDate(r.Context(), accountID, req.ID, req.OccurredAt)
+		if err != nil {
+			writeChangePortfolioTransactionDateError(w, r, log, err)
+			return
+		}
+		logRebuildOutcome(r, log, rebuild, accountID)
+
+		_ = httpx.JSONEncode(w, http.StatusOK, ChangePortfolioTransactionDateResponse{
+			ID:         tx.ID,
+			OccurredAt: tx.OccurredAt,
+			Rebuild:    string(rebuild.Outcome),
+		})
+	})
+}
+
+func writeChangePortfolioTransactionDateError(w http.ResponseWriter, r *http.Request, log logging.Logger, err error) {
+	switch {
+	case errors.Is(err, portfoliodomain.ErrTransactionNotFound):
+		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"id": portfoliodomain.ErrTransactionNotFound.Error()})
+	case errors.Is(err, portfoliodomain.ErrTransactionDateNotEditable):
+		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"transaction": portfoliodomain.ErrTransactionDateNotEditable.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualOccurredAtInFuture):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"occurred_at": portfoliodomain.ErrManualOccurredAtInFuture.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualInvalidOccurredAt):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"occurred_at": portfoliodomain.ErrManualInvalidOccurredAt.Error()})
+	case errors.Is(err, portfoliodomain.ErrDuplicateTransaction):
+		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"transaction": "duplicate transaction"})
+	default:
+		log.Error(r.Context(), "portfolio change date: failed to move transaction", err)
+		_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to change the transaction date"})
+	}
+}
+
+// logRebuildOutcome records a rebuild that was attempted and errored. The write itself
+// succeeded, so the response reports the outcome rather than failing; the reason the
+// rebuild could not finish would otherwise be lost.
+func logRebuildOutcome(r *http.Request, log logging.Logger, result portfoliodomain.RebuildResult, accountID uuid.UUID) {
+	if result.Outcome != portfoliodomain.RebuildFailed {
+		return
+	}
+	log.Error(r.Context(), "portfolio transaction: rebuild after write failed", result.Err, "account_id", accountID.String())
 }
 
 func writeManualPortfolioTransactionError(w http.ResponseWriter, r *http.Request, log logging.Logger, err error) {
@@ -432,12 +546,14 @@ func toManualPortfolioTransactionResponse(result *portfoliodomain.ManualTransact
 		UnitPrice:   formatDecimal(tx.UnitPrice.Float64()),
 		CreatedAt:   tx.CreatedAt,
 		UpdatedAt:   tx.UpdatedAt,
+		Rebuild:     string(result.Rebuild.Outcome),
 	}
 }
 
 func isManualValidationErr(err error) bool {
 	return errors.Is(err, portfoliodomain.ErrManualVendorNotActive) ||
 		errors.Is(err, portfoliodomain.ErrManualInvalidOccurredAt) ||
+		errors.Is(err, portfoliodomain.ErrManualOccurredAtInFuture) ||
 		errors.Is(err, portfoliodomain.ErrManualInvalidType) ||
 		errors.Is(err, portfoliodomain.ErrManualInvalidAmount) ||
 		errors.Is(err, portfoliodomain.ErrManualInvalidQuantity) ||

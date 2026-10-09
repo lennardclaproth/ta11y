@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/date"
 	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
 
 type Commands struct {
 	cs  CommandStore
+	qs  TransactionReader
 	mdq marketdata.Queries
 	vq  vendor.Queries
+	rb  rebuilder
 }
 
 // CommandStore persists portfolio accounts and transactions.
@@ -23,11 +26,103 @@ type CommandStore interface {
 	CreateAccount(ctx context.Context, acc *Account) error
 	CreateTransaction(ctx context.Context, tx *Transaction) error
 	CreateTransactions(ctx context.Context, txs []*Transaction) (int, error)
+	UpdateTransactionOccurredAt(ctx context.Context, accountID, id uuid.UUID, occurredAt time.Time, checksum string) (int, error)
 }
 
-// NewCommands constructs the portfolio write-side use cases.
-func NewCommands(cs CommandStore, mdq marketdata.Queries, vq vendor.Queries) *Commands {
-	return &Commands{cs: cs, mdq: mdq, vq: vq}
+// TransactionReader reads the single transactions a write has to inspect first.
+type TransactionReader interface {
+	Transaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error)
+	TransactionByChecksum(ctx context.Context, accountID uuid.UUID, checksum string) (*Transaction, error)
+}
+
+// rebuilder recomputes positions and snapshots for an account. Writing a transaction by
+// hand changes the stream a rebuild reads, so the write asks for one; the rebuild itself
+// is unchanged and still refuses to run twice at once.
+type rebuilder interface {
+	Build(ctx context.Context, accountID uuid.UUID) error
+}
+
+// RebuildOutcome reports what happened to the rebuild a write asked for. The write has
+// already succeeded in every case -- the outcome only says whether the positions,
+// performance and net worth on screen have caught up with it yet.
+type RebuildOutcome string
+
+const (
+	// RebuildCompleted means the rebuild ran and the account is up to date.
+	RebuildCompleted RebuildOutcome = "completed"
+	// RebuildInProgress means another rebuild held the lock, so this one did not run.
+	RebuildInProgress RebuildOutcome = "in_progress"
+	// RebuildSkipped means there was nothing to rebuild yet, or no rebuilder is wired.
+	RebuildSkipped RebuildOutcome = "skipped"
+	// RebuildFailed means the rebuild was attempted and errored; Err carries the reason.
+	RebuildFailed RebuildOutcome = "failed"
+)
+
+// RebuildResult reports the outcome of the rebuild a write asked for.
+type RebuildResult struct {
+	Outcome RebuildOutcome
+	Err     error
+}
+
+// NewCommands constructs the portfolio write-side use cases. The rebuilder may be nil,
+// in which case manual writes report their rebuild as skipped.
+func NewCommands(cs CommandStore, qs TransactionReader, mdq marketdata.Queries, vq vendor.Queries, rb rebuilder) *Commands {
+	return &Commands{cs: cs, qs: qs, mdq: mdq, vq: vq, rb: rb}
+}
+
+const (
+	// rebuildReportTimeout caps how long a write waits for the rebuild it asked for before
+	// it answers. It stays under the transport's 30s write timeout, so the response to a
+	// write that did succeed still reaches the client.
+	rebuildReportTimeout = 20 * time.Second
+	// rebuildTimeout bounds a detached rebuild so one that hangs cannot hold the build lock
+	// for the lifetime of the process.
+	rebuildTimeout = 30 * time.Minute
+)
+
+// rebuild asks for a rebuild and classifies the outcome. A rebuild that cannot run is
+// not a failed write: the transaction is stored either way and the caller reports that
+// the portfolio has not caught up.
+func (c *Commands) rebuild(ctx context.Context, accountID uuid.UUID) RebuildResult {
+	if c.rb == nil {
+		return RebuildResult{Outcome: RebuildSkipped}
+	}
+
+	// The rebuild deliberately outlives the request. Build clears the account's positions
+	// before it recomputes them, so a client that navigates away mid-write would otherwise
+	// leave the account emptied until someone rebuilds by hand.
+	buildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rebuildTimeout)
+	done := make(chan error, 1)
+	go func() {
+		defer cancel()
+		done <- c.rb.Build(buildCtx, accountID)
+	}()
+
+	// Waiting out a long rebuild would run past the write timeout and lose the response.
+	// Reporting that it is still running keeps the reply inside the window and leaves the
+	// existing rebuild action as the way out.
+	reportCtx, stopWaiting := context.WithTimeout(ctx, rebuildReportTimeout)
+	defer stopWaiting()
+
+	select {
+	case err := <-done:
+		return classifyRebuild(err)
+	case <-reportCtx.Done():
+		return RebuildResult{Outcome: RebuildInProgress}
+	}
+}
+
+func classifyRebuild(err error) RebuildResult {
+	switch {
+	case err == nil:
+		return RebuildResult{Outcome: RebuildCompleted}
+	case errors.Is(err, ErrBuildInProgress):
+		return RebuildResult{Outcome: RebuildInProgress}
+	case errors.Is(err, ErrPortfolioNoSnapshots), errors.Is(err, ErrAccountNotFound):
+		return RebuildResult{Outcome: RebuildSkipped}
+	default:
+		return RebuildResult{Outcome: RebuildFailed, Err: err}
+	}
 }
 
 type ManualTransactionInput struct {
@@ -45,6 +140,68 @@ type ManualTransactionCreateResult struct {
 	Transaction  *Transaction
 	ListingID    *uuid.UUID
 	SignedAmount float64
+	Rebuild      RebuildResult
+}
+
+// parseOccurredAt reads a YYYY-MM-DD day and refuses anything after today. A portfolio
+// transaction records a trade that already happened, so a future day is rejected at the
+// boundary rather than left to distort the snapshots a rebuild derives from it.
+func parseOccurredAt(raw string) (time.Time, error) {
+	occurredAt, err := time.Parse("2006-01-02", strings.TrimSpace(raw))
+	if err != nil {
+		return time.Time{}, ErrManualInvalidOccurredAt
+	}
+	occurredAt = occurredAt.UTC()
+	if occurredAt.After(date.StartOfDayUTC(time.Now())) {
+		return time.Time{}, ErrManualOccurredAtInFuture
+	}
+	return occurredAt, nil
+}
+
+// ChangeTransactionDate moves one manually entered transaction to another day, leaving
+// every other field as entered, then asks for a rebuild because the moved row lands
+// elsewhere in the stream positions and snapshots are computed from.
+func (c *Commands) ChangeTransactionDate(ctx context.Context, accountID, id uuid.UUID, occurredAtRaw string) (*Transaction, RebuildResult, error) {
+	occurredAt, err := parseOccurredAt(occurredAtRaw)
+	if err != nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", err)
+	}
+	if c.qs == nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: no transaction reader configured")
+	}
+
+	current, err := c.qs.Transaction(ctx, accountID, id)
+	if err != nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: fetch transaction: %w", err)
+	}
+	if current == nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", ErrTransactionNotFound)
+	}
+	if !current.IsManual() {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", ErrTransactionDateNotEditable)
+	}
+	if date.SameDayUTC(current.OccurredAt, occurredAt) {
+		return current, RebuildResult{Outcome: RebuildSkipped}, nil
+	}
+
+	moved := current.MovedTo(occurredAt)
+	clash, err := c.qs.TransactionByChecksum(ctx, accountID, moved.Checksum)
+	if err != nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: check for duplicate: %w", err)
+	}
+	if clash != nil && clash.ID != current.ID {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", ErrDuplicateTransaction)
+	}
+
+	updated, err := c.cs.UpdateTransactionOccurredAt(ctx, accountID, id, moved.OccurredAt, moved.Checksum)
+	if err != nil {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", err)
+	}
+	if updated == 0 {
+		return nil, RebuildResult{}, fmt.Errorf("change transaction date: %w", ErrTransactionNotFound)
+	}
+
+	return moved, c.rebuild(ctx, accountID), nil
 }
 
 func (c *Commands) CreateTransaction(ctx context.Context, input ManualTransactionInput) (*ManualTransactionCreateResult, error) {
@@ -62,11 +219,10 @@ func (c *Commands) CreateTransaction(ctx context.Context, input ManualTransactio
 		return nil, ErrManualVendorTypeNotSupported
 	}
 
-	occurredAt, err := time.Parse("2006-01-02", strings.TrimSpace(input.OccurredAt))
+	occurredAt, err := parseOccurredAt(input.OccurredAt)
 	if err != nil {
-		return nil, ErrManualInvalidOccurredAt
+		return nil, err
 	}
-	occurredAt = occurredAt.UTC()
 
 	txType, err := parseManualType(input.Type)
 	if err != nil {
@@ -133,6 +289,7 @@ func (c *Commands) CreateTransaction(ctx context.Context, input ManualTransactio
 		Transaction:  tx,
 		ListingID:    listingID,
 		SignedAmount: signedAmount,
+		Rebuild:      c.rebuild(ctx, input.AccountID),
 	}, nil
 }
 

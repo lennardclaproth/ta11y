@@ -29,12 +29,13 @@ type SQLXPortfolioStore struct {
 }
 
 var (
-	_ portfolio.CommandStore     = (*SQLXPortfolioStore)(nil)
-	_ portfolio.QueryStore       = (*SQLXPortfolioStore)(nil)
-	_ portfolio.PositionStore    = (*SQLXPortfolioStore)(nil)
-	_ portfolio.PortfolioStore   = (*SQLXPortfolioStore)(nil)
-	_ portfolio.TransactionStore = (*SQLXPortfolioStore)(nil)
-	_ portfolio.Locker           = (*SQLXPortfolioStore)(nil)
+	_ portfolio.CommandStore      = (*SQLXPortfolioStore)(nil)
+	_ portfolio.QueryStore        = (*SQLXPortfolioStore)(nil)
+	_ portfolio.PositionStore     = (*SQLXPortfolioStore)(nil)
+	_ portfolio.PortfolioStore    = (*SQLXPortfolioStore)(nil)
+	_ portfolio.TransactionStore  = (*SQLXPortfolioStore)(nil)
+	_ portfolio.TransactionReader = (*SQLXPortfolioStore)(nil)
+	_ portfolio.Locker            = (*SQLXPortfolioStore)(nil)
 )
 
 // NewSQLXPortfolioStore creates a portfolio store backed by SQLX.
@@ -150,6 +151,53 @@ func (s *SQLXPortfolioStore) CreateTransactions(ctx context.Context, txs []*port
 	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, txs)
 	if err != nil {
 		return 0, fmt.Errorf("portfolio store: bulk insert transactions: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("portfolio store: rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
+// Transaction returns one portfolio transaction within an account, or nil when the
+// account does not hold a transaction with that id.
+func (s *SQLXPortfolioStore) Transaction(ctx context.Context, accountID, id uuid.UUID) (*portfolio.Transaction, error) {
+	query := s.db.Rebind(fmt.Sprintf("SELECT * FROM %s WHERE account_id = ? AND id = ?", s.transactionsTable))
+	return s.transaction(ctx, query, accountID, id)
+}
+
+// TransactionByChecksum returns the transaction holding the given dedup checksum within
+// an account, or nil when no row holds it.
+func (s *SQLXPortfolioStore) TransactionByChecksum(ctx context.Context, accountID uuid.UUID, checksum string) (*portfolio.Transaction, error) {
+	query := s.db.Rebind(fmt.Sprintf("SELECT * FROM %s WHERE account_id = ? AND checksum = ?", s.transactionsTable))
+	return s.transaction(ctx, query, accountID, checksum)
+}
+
+func (s *SQLXPortfolioStore) transaction(ctx context.Context, query string, args ...any) (*portfolio.Transaction, error) {
+	var tx portfolio.Transaction
+	if err := sqlx.GetContext(ctx, s.db.GetExecutor(ctx), &tx, query, args...); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("portfolio store: fetch transaction: %w", err)
+	}
+	return &tx, nil
+}
+
+// UpdateTransactionOccurredAt moves one transaction to another date, storing the
+// checksum recomputed for it. A checksum already held by another row surfaces as the
+// feature's duplicate error.
+func (s *SQLXPortfolioStore) UpdateTransactionOccurredAt(ctx context.Context, accountID, id uuid.UUID, occurredAt time.Time, checksum string) (int, error) {
+	query := s.db.Rebind(fmt.Sprintf(
+		`UPDATE %s SET occurred_at = ?, checksum = ?, updated_at = ? WHERE account_id = ? AND id = ?`,
+		s.transactionsTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, occurredAt, checksum, time.Now().UTC(), accountID, id)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, portfolio.ErrDuplicateTransaction
+		}
+		return 0, fmt.Errorf("portfolio store: update transaction date: %w", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {

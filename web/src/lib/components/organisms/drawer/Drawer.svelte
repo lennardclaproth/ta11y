@@ -41,11 +41,14 @@
 		onClose?.();
 	}
 
-	// Close on Escape while open.
+	// Close on Escape while open, unless a layer above already claimed the key: an open popover
+	// inside the drawer calls preventDefault() so one press steps out of the popover rather than
+	// discarding the whole drawer. stopPropagation() cannot do that — both listeners sit on
+	// `document`, so neither stops the other.
 	$effect(() => {
 		if (!open) return;
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key === 'Escape' && dismissible) close();
+			if (event.key === 'Escape' && dismissible && !event.defaultPrevented) close();
 		}
 		document.addEventListener('keydown', onKeydown, true);
 		return () => document.removeEventListener('keydown', onKeydown, true);

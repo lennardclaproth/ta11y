@@ -233,6 +233,7 @@ func buildApplication(
 	portfolioCommands := portfolio.NewCommands(portfolioStore, *marketDataQueries, *vendorQueries)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
+	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
 	assetsQueries := assets.NewQueries(assetsStore)
 	assetsBuilder := assets.NewBuilder(assetsStore, assetsStore)
 	assetsSyncer := assets.NewSyncer(portfolioQueries, assetsBuilder, assetsStore, assetsStore)
@@ -392,6 +393,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/manual", cashflowhttp.CreateTransactions(app.log, app.cashflowCommands))
 	protected("GET /cashflow/analytics/monthly", cashflowhttp.GetMonthlyAnalytics(app.log, app.cashflowQueries))
 	protected("GET /cashflow/analytics/tags", cashflowhttp.GetCashflowTagDistribution(app.log, app.cashflowQueries))
+	protected("POST /cashflow/transactions/date", cashflowhttp.ChangeTransactionDate(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/tag", cashflowhttp.TagTransaction(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/tag/selection", cashflowhttp.TagTransactionsBySelection(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
@@ -402,6 +404,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("GET /portfolio/snapshots", portfoliohttp.GetPortfolioSnapshots(app.log, app.accountQueries, app.portfolioQueries))
 	protected("GET /portfolio/transactions", portfoliohttp.GetPortfolioTransactions(app.log, app.accountQueries, app.portfolioStore))
 	protected("POST /portfolio/transactions/manual", portfoliohttp.CreateManualPortfolioTransaction(app.log, app.portfolioCommands))
+	protected("POST /portfolio/transactions/date", portfoliohttp.ChangePortfolioTransactionDate(app.log, app.portfolioCommands))
 	protected("POST /portfolio/rebuild", portfoliohttp.RebuildPortfolio(app.log, app.portfolioBuilder))
 
 	protected("GET /assets/classes", assethttp.GetClasses(app.log, *app.assetsQueries))

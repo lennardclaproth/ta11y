@@ -81,12 +81,25 @@ manual transactions. They can view monthly and per-tag analytics, tag transactio
 (individually, by selection, or by filter), and ignore/unignore transactions to exclude
 them from totals.
 
+A manual transaction is entered on any day up to and including today, and a transaction
+entered by hand can later be moved to another day — the one correction the application
+allows after the fact. Imported transactions keep their statement date: the fingerprint
+that recognises a re-imported row carries its date, so moving one would make the next
+import of the same file add the old row alongside it.
+
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
 ### Portfolio management
 Users read portfolio snapshots, current positions, and transaction history, add manual
 portfolio transactions, and request asynchronous portfolio rebuilds that recompute
 positions and snapshots from transactions and market data.
+
+A manual transaction is entered on any day up to and including today, and one entered by
+hand can later be moved to another day; imported transactions keep their statement date.
+Because a backdated or moved trade lands elsewhere in the stream a rebuild reads, the
+write asks for one itself and reports whether it ran — a rebuild already in progress is
+not queued, so the response says the positions on screen are still the previous result and
+leaves the rebuild action as the way out.
 
 Rebuilds account for share splits. A split changes the share count without changing the
 money invested, so it is replayed as an event in the same chronological stream as the

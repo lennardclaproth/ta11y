@@ -95,6 +95,37 @@ export interface CreateManualPortfolioTransactionRequest {
 	description?: string;
 }
 
+/**
+ * What happened to the rebuild a portfolio write asked for. The write itself succeeded in
+ * every case; the outcome only says whether positions, performance and net worth have
+ * caught up with it yet.
+ */
+export type PortfolioRebuildOutcome = 'completed' | 'in_progress' | 'skipped' | 'failed';
+
+/** `POST /portfolio/transactions/manual` — mirrors `portfolio.ManualPortfolioTransactionResponse`. */
+export interface ManualPortfolioTransactionResponse extends PortfolioTransaction {
+	rebuild: PortfolioRebuildOutcome;
+}
+
+/**
+ * `POST /portfolio/transactions/date` request — mirrors
+ * `portfolio.ChangePortfolioTransactionDateRequest`. Only manually entered transactions can
+ * be moved, and only to today or earlier.
+ */
+export interface ChangePortfolioTransactionDateRequest {
+	id: string;
+	/** "YYYY-MM-DD". */
+	occurred_at: string;
+}
+
+/** `POST /portfolio/transactions/date` — mirrors `portfolio.ChangePortfolioTransactionDateResponse`. */
+export interface ChangePortfolioTransactionDateResponse {
+	id: string;
+	/** RFC3339 timestamp. */
+	occurred_at: string;
+	rebuild: PortfolioRebuildOutcome;
+}
+
 /** Query filters for `GET /portfolio/positions`. */
 export interface PortfolioPositionsQuery {
 	include_closed?: boolean;

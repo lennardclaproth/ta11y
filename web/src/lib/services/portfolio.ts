@@ -1,14 +1,16 @@
 import { apiGet, apiSend } from '$lib/api/client';
 import { DEMO_ACCOUNT_ID, useMocks } from '$lib/api/config';
 import type {
+	ChangePortfolioTransactionDateRequest,
+	ChangePortfolioTransactionDateResponse,
 	CreateManualPortfolioTransactionRequest,
+	ManualPortfolioTransactionResponse,
 	PortfolioPositionsQuery,
 	PortfolioPositionsResponse,
 	PortfolioSnapshotsQuery,
 	PortfolioSnapshotsResponse,
-	PortfolioTransaction,
 	PortfolioTransactionsQuery,
-	PortfolioTransactionsResponse,
+	PortfolioTransactionsResponse
 } from '$lib/api/types';
 import {
 	portfolioPositions,
@@ -90,10 +92,10 @@ export async function listPortfolioTransactions(
 	return apiGet<PortfolioTransactionsResponse>('/portfolio/transactions', { ...query });
 }
 
-/** `POST /portfolio/transactions/manual` */
+/** `POST /portfolio/transactions/manual` — also rebuilds, reporting whether that ran. */
 export async function createManualPortfolioTransaction(
 	body: CreateManualPortfolioTransactionRequest
-): Promise<PortfolioTransaction> {
+): Promise<ManualPortfolioTransactionResponse> {
 	if (useMocks) {
 		await delay();
 		const now = new Date().toISOString();
@@ -112,10 +114,30 @@ export async function createManualPortfolioTransaction(
 			quantity: body.quantity ?? '0',
 			unit_price: '0',
 			created_at: now,
-			updated_at: now
+			updated_at: now,
+			rebuild: 'completed'
 		};
 	}
-	return apiSend<PortfolioTransaction>('POST', '/portfolio/transactions/manual', body);
+	return apiSend<ManualPortfolioTransactionResponse>(
+		'POST',
+		'/portfolio/transactions/manual',
+		body
+	);
+}
+
+/** `POST /portfolio/transactions/date` — also rebuilds, reporting whether that ran. */
+export async function changePortfolioTransactionDate(
+	body: ChangePortfolioTransactionDateRequest
+): Promise<ChangePortfolioTransactionDateResponse> {
+	if (useMocks) {
+		await delay();
+		return { id: body.id, occurred_at: `${body.occurred_at}T00:00:00Z`, rebuild: 'completed' };
+	}
+	return apiSend<ChangePortfolioTransactionDateResponse>(
+		'POST',
+		'/portfolio/transactions/date',
+		body
+	);
 }
 
 /** `POST /portfolio/rebuild` — the account is taken from the session. */

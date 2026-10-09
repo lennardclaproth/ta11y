@@ -189,6 +189,7 @@ func isManualCashflowValidationError(err error) bool {
 	return errors.Is(err, cashflow.ErrTransactionsRequired) ||
 		errors.Is(err, cashflow.ErrTransactionLimitExceeded) ||
 		errors.Is(err, cashflow.ErrManualCashflowInvalidDate) ||
+		errors.Is(err, cashflow.ErrCashflowDateInFuture) ||
 		errors.Is(err, cashflow.ErrManualCashflowInvalidAmount) ||
 		errors.Is(err, cashflow.ErrManualCashflowInvalidType) ||
 		errors.Is(err, cashflow.ErrManualCashflowDescriptionRequired) ||
