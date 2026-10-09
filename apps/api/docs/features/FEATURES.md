@@ -72,6 +72,26 @@ import of the same file add the old row alongside it.
 
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
+### Recurring items [033]
+Users see their subscriptions, fixed costs and recurring income in one place: to or from
+whom, how often (monthly, quarterly or yearly), how the amount moved over time, and when the
+next one is expected. An item is created by pointing cashflow transactions at it — a new item
+or an existing one — or by confirming a pattern ta11y found in the account's history. Nothing
+becomes an item without that confirmation, and a dismissed suggestion is not offered again.
+
+Once an item is confirmed, the rows of a later cashflow import that match it (same
+counterparty, same direction, an amount within a quarter of the last one) are linked to it, so
+a recurring payment is pointed at once rather than after every statement. A row that does not
+belong is unlinked in the item; the transaction itself stays in Cashflow. Ending an item is a
+date, not a delete: from the chosen month it is no longer expected and nothing new is linked,
+while everything before it keeps its history.
+
+Items are unrelated to tags and the ignored status: marking changes neither, so the tag
+distribution and monthly totals on Cashflow do not move. ta11y reports the amounts as they
+were charged and labels none of them expensive, and raises no notification anywhere.
+
+→ Details: [Recurring items](%5B033%5D_RECURRING_ITEMS.md)
+
 ### Portfolio management
 Users read portfolio snapshots, current positions, and transaction history, add manual
 portfolio transactions, and request asynchronous portfolio rebuilds that recompute
