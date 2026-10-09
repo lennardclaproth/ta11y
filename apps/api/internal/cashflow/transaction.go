@@ -144,6 +144,8 @@ func (d TransactionData) DedupKey() []string {
 		fmt.Sprintf("%d", d.Amount),
 		d.Date.Format(checksumDateLayout),
 	}
+}
+
 // IsManual reports whether the transaction was entered by hand rather than imported.
 // Only manual transactions may be moved to another date: the checksum that recognises
 // a re-imported row carries its date, so moving an imported row would make the next
@@ -158,7 +160,7 @@ func (t *Transaction) MovedTo(date time.Time) *Transaction {
 	moved := *t
 	moved.Date = date.UTC()
 	moved.UpdatedAt = time.Now().UTC()
-	moved.Checksum = moved.generateChecksum()
+	moved.Checksum = moved.generateChecksum(moved.RowNumber)
 	return &moved
 }
 

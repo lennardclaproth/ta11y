@@ -243,7 +243,7 @@ func (t *Transaction) MovedTo(day time.Time) *Transaction {
 	moved.PositionID = nil
 	moved.OccurredAt = day.UTC()
 	moved.UpdatedAt = time.Now().UTC()
-	moved.Checksum = moved.generateChecksum()
+	moved.Checksum = moved.generateChecksum(moved.RowNumber)
 	return &moved
 }
 

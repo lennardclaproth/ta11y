@@ -230,7 +230,6 @@ func buildApplication(
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, accountQueries)
 	cashflowQueries := cashflow.NewQueries(cashflowStore)
-	portfolioCommands := portfolio.NewCommands(portfolioStore, *marketDataQueries, *vendorQueries)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
 	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
