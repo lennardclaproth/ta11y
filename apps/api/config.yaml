@@ -1,6 +1,7 @@
 server:
   environment: development  # development or production
   port: 6060                # HTTP server port
+  # host: 127.0.0.1         # Interface to listen on; omit for all interfaces (needed in Docker)
   # Browser origins allowed to call the API cross-origin. Defaults to the
   # SvelteKit dev server (http://localhost:5199) when omitted. Use ["*"] to
   # allow any origin (dev only).
