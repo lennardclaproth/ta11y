@@ -16,6 +16,20 @@ var (
 	ErrManualCashflowTagRequired         = fmt.Errorf("tag is required")
 )
 
+// Recurring item Errors
+var (
+	ErrRecurringNameRequired         = fmt.Errorf("name is required")
+	ErrRecurringInvalidRhythm        = fmt.Errorf("rhythm must be one of: monthly, quarterly, yearly")
+	ErrRecurringInvalidMonth         = fmt.Errorf("month must be in YYYY-MM format")
+	ErrRecurringItemNotFound         = fmt.Errorf("no recurring item found with the given ID")
+	ErrRecurringItemExists           = fmt.Errorf("a recurring item with that name already exists")
+	ErrRecurringItemEnded            = fmt.Errorf("an ended recurring item takes no new transactions")
+	ErrRecurringTransactionsRequired = fmt.Errorf("at least one transaction is required")
+	ErrRecurringTransactionNotFound  = fmt.Errorf("transaction not found in this account")
+	ErrRecurringTransactionLinked    = fmt.Errorf("transaction already belongs to a recurring item")
+	ErrRecurringSuggestionNotFound   = fmt.Errorf("no suggestion found for that pattern")
+)
+
 // Account Errors
 var (
 	ErrAccountNotFound = fmt.Errorf("account not found")
