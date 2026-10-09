@@ -76,3 +76,44 @@ export function monthYearShort(iso: string): string {
 	const date = utc(iso);
 	return `${shortMonths[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
+
+const rhythmMonths = { monthly: 1, quarterly: 3, yearly: 12 } as const;
+
+/**
+ * The dates the amounts of an item were observed on: the last one is `lastSeen`, the earlier ones
+ * step back by the rhythm. Enough for a chart axis in a prototype — the real dates come from the
+ * linked transactions.
+ */
+export function historyDates(
+	lastSeen: string,
+	rhythm: keyof typeof rhythmMonths,
+	count: number
+): string[] {
+	const step = rhythmMonths[rhythm];
+	const end = utc(lastSeen);
+	return Array.from({ length: count }, (_, index) => {
+		const date = new Date(end);
+		date.setUTCMonth(date.getUTCMonth() - (count - 1 - index) * step);
+		return date.toISOString().slice(0, 10);
+	});
+}
+
+/** "Jun '26" — short enough for a chart tick, unambiguous across years. */
+export function tickLabel(iso: string): string {
+	const date = utc(iso);
+	return `${shortMonths[date.getUTCMonth()]} '${String(date.getUTCFullYear()).slice(2)}`;
+}
+
+/** The months you can end an item from, starting at the current month. */
+export function endMonthOptions(count = 6): { value: string; label: string }[] {
+	const start = utc(today);
+	return Array.from({ length: count }, (_, index) => {
+		const date = new Date(start);
+		date.setUTCDate(1);
+		date.setUTCMonth(date.getUTCMonth() + index);
+		return {
+			value: date.toISOString().slice(0, 7),
+			label: monthLabel(date.toISOString().slice(0, 10))
+		};
+	});
+}

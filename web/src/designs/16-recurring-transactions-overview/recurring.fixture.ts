@@ -249,10 +249,126 @@ export const expenseTrendMonths = [
 ];
 export const expenseTrendTotals = [1700, 1725, 1740, 1752, 1765, 1777];
 
-/** Transactions of one item, for the "open a post" detail in the prototypes. */
-export const sampleItemTransactions = [
-	{ id: 'tx-1', date: '2026-09-18', description: 'PIXEL STREAM MONTHLY', amount: 12 },
-	{ id: 'tx-2', date: '2026-08-18', description: 'PIXEL STREAM MONTHLY', amount: 12 },
-	{ id: 'tx-3', date: '2026-07-18', description: 'PIXEL STREAM MONTHLY', amount: 10 },
-	{ id: 'tx-4', date: '2026-06-18', description: 'PIXEL STREAM MONTHLY', amount: 10 }
+/** Same months, the running recurring income. */
+export const incomeTrendTotals = [5220, 5220, 5220, 5550, 5550, 5550];
+
+export interface LinkedTransaction {
+	id: string;
+	date: string;
+	description: string;
+	amount: number;
+	/** Where the row came from, shown as a word. */
+	origin: 'Imported' | 'Manual';
+	/** Set when an overlapping import produced the same row twice. */
+	duplicate?: boolean;
+}
+
+/**
+ * Transactions of one item, for the opened item in the prototypes. The last pair is the same
+ * payment twice: an overlapping import can do that, and unlinking is how you correct it.
+ */
+export const linkedTransactions: LinkedTransaction[] = [
+	{
+		id: 'tx-1',
+		date: '2026-09-18',
+		description: 'PIXEL STREAM MONTHLY',
+		amount: 12,
+		origin: 'Imported'
+	},
+	{
+		id: 'tx-2',
+		date: '2026-08-18',
+		description: 'PIXEL STREAM MONTHLY',
+		amount: 12,
+		origin: 'Imported'
+	},
+	{
+		id: 'tx-3',
+		date: '2026-07-18',
+		description: 'PIXEL STREAM MONTHLY',
+		amount: 10,
+		origin: 'Imported'
+	},
+	{
+		id: 'tx-4',
+		date: '2026-07-18',
+		description: 'PIXEL STREAM MONTHLY',
+		amount: 10,
+		origin: 'Imported',
+		duplicate: true
+	},
+	{
+		id: 'tx-5',
+		date: '2026-06-18',
+		description: 'PIXEL STREAM MONTHLY',
+		amount: 10,
+		origin: 'Imported'
+	},
+	{
+		id: 'tx-6',
+		date: '2026-05-18',
+		description: 'Pixel Stream',
+		amount: 9,
+		origin: 'Manual'
+	}
 ];
+
+/** The item the prototypes open: its amount grew from €9 to €12 without any announcement. */
+export const openedItem: RecurringItem = recurringExpenses[5];
+
+/**
+ * A slice of Cashflow, for the "mark as recurring" entry point. Shaped like the rows the real
+ * transactions table takes, but fake throughout.
+ */
+export const cashflowRows = [
+	{
+		id: 'cf-1',
+		date: '2026-10-06',
+		description: 'CLOUDLOCKER*SUB 0312',
+		tag: 'Software',
+		direction: 'out' as const,
+		amount: 4
+	},
+	{
+		id: 'cf-2',
+		date: '2026-10-05',
+		description: 'NORTHWIND RETAINER OCT',
+		tag: 'Work',
+		direction: 'in' as const,
+		amount: 1500
+	},
+	{
+		id: 'cf-3',
+		date: '2026-10-02',
+		description: 'HARBOUR MARKET',
+		tag: 'Groceries',
+		direction: 'out' as const,
+		amount: 62
+	},
+	{
+		id: 'cf-4',
+		date: '2026-10-01',
+		description: 'HARBOUR RENTALS OCT',
+		tag: 'Housing',
+		direction: 'out' as const,
+		amount: 1450
+	},
+	{
+		id: 'cf-5',
+		date: '2026-09-18',
+		description: 'PIXEL STREAM MONTHLY',
+		tag: 'Entertainment',
+		direction: 'out' as const,
+		amount: 12
+	},
+	{
+		id: 'cf-6',
+		date: '2026-09-15',
+		description: 'ST. HARBOUR FND DONATIE',
+		tag: 'Uncategorized',
+		direction: 'out' as const,
+		amount: 10
+	}
+];
+
+export type CashflowRow = (typeof cashflowRows)[number];
