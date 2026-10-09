@@ -5,9 +5,9 @@
 	import { scaledToNumber } from '$lib/api/money';
 	import { chartColors } from '$lib/charts/theme';
 
-	type Props = { height?: string };
+	type Props = { height?: string; loading?: boolean };
 
-	let { height = 'h-44' }: Props = $props();
+	let { height = 'h-44', loading = false }: Props = $props();
 
 	const monthShort = (iso: string) =>
 		new Date(`${iso}T00:00:00Z`).toLocaleDateString('en', { month: 'short', timeZone: 'UTC' });
@@ -15,6 +15,7 @@
 
 <TimeSeriesChart
 	{height}
+	{loading}
 	labels={cashflowMonthly.map((m) => m.month)}
 	xTickFormat={monthShort}
 	datasets={[

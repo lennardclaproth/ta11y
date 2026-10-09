@@ -33,7 +33,7 @@ export const goalMonths: GoalMonth[] = [
 		income: 5000,
 		contributed: 900,
 		goalPercent: 30,
-		unassigned: 6,
+		unassigned: 5,
 		status: 'in-progress'
 	},
 	{

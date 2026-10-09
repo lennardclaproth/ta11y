@@ -5,9 +5,9 @@
 	import { scaledToNumber } from '$lib/api/money';
 	import { donutRamps } from '$lib/charts/theme';
 
-	type Props = { direction: 'in' | 'out' };
+	type Props = { direction: 'in' | 'out'; loading?: boolean };
 
-	let { direction }: Props = $props();
+	let { direction, loading = false }: Props = $props();
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
 
@@ -19,6 +19,7 @@
 <DonutChart
 	data={entries.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
 	ramp={direction === 'in' ? donutRamps.incoming : donutRamps.outgoing}
+	{loading}
 	formatValue={euro}
 	centerLabel={direction === 'in' ? 'In' : 'Out'}
 />

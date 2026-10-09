@@ -6,12 +6,16 @@
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import ActionMenu from '$lib/components/molecules/action-menu/ActionMenu.svelte';
 	import SelectFilter from '$lib/components/molecules/select-filter/SelectFilter.svelte';
 	import { purposeLabel, type GoalTransaction } from '../goal-data';
 
 	type Props = {
 		rows: GoalTransaction[];
 		selectedIds?: string[];
+		/** Bindable Purpose filter, so a story can open on a filtered ledger. */
+		purposeFilter?: string[];
+		total?: number;
 		loading?: boolean;
 		error?: string | null;
 		emptyText?: string;
@@ -21,18 +25,27 @@
 	let {
 		rows,
 		selectedIds = $bindable([]),
+		purposeFilter = $bindable([]),
+		total,
 		loading = false,
 		error = null,
 		emptyText = 'No transactions match your filters',
 		class: className = ''
 	}: Props = $props();
 
-	let purposeFilter = $state<string[]>([]);
-
 	const purposeOptions = [
 		{ value: 'income', label: 'Income' },
 		{ value: 'wealth', label: 'To wealth' },
 		{ value: 'none', label: 'Not assigned' }
+	];
+
+	// The bulk actions do not fit beside "n selected" on a 390px footer, so below `sm` the same
+	// actions live in one menu instead of being hidden or wrapped off-screen.
+	const bulkItems = [
+		{ label: 'Mark as income' },
+		{ label: 'Mark as wealth' },
+		{ label: 'Clear purpose' },
+		{ label: 'Tag', divider: true }
 	];
 </script>
 
@@ -85,16 +98,34 @@
 		},
 		{ key: 'tag', header: 'Tag', sortKey: 'tag', cell: tagCell },
 		{ key: 'direction', header: 'Direction', cell: directionCell },
-		{ key: 'purpose', header: 'Purpose', width: 'w-40', cell: purposeCell, filter: purposeFilterControl },
+		{
+			key: 'purpose',
+			header: 'Purpose',
+			width: 'w-40',
+			cell: purposeCell,
+			filter: purposeFilterControl
+		},
 		{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell }
 	]}
 >
 	{#snippet footer()}
-		<FooterBar total={rows.length} limit={25} offset={0} selectedCount={selectedIds.length}>
+		<FooterBar
+			total={total ?? rows.length}
+			limit={25}
+			offset={0}
+			selectedCount={selectedIds.length}
+		>
 			{#snippet actions()}
-				<Button size="sm" variant="ghost" intent="secondary">Tag</Button>
-				<Button size="sm" variant="outline" intent="success">Mark as income</Button>
-				<Button size="sm" variant="outline" intent="info">Mark as wealth</Button>
+				<!-- The wrapper carries the breakpoint: `hidden` on the Button itself loses to the
+				     atom's own `inline-flex`, which Tailwind emits later in the sheet. -->
+				<span class="hidden items-center gap-2 sm:flex">
+					<Button size="sm" variant="ghost" intent="secondary">Tag</Button>
+					<Button size="sm" variant="outline" intent="success">Mark as income</Button>
+					<Button size="sm" variant="outline" intent="info">Mark as wealth</Button>
+				</span>
+				<span class="sm:hidden">
+					<ActionMenu items={bulkItems} label="Mark…" placement="top-start" />
+				</span>
 			{/snippet}
 		</FooterBar>
 	{/snippet}
