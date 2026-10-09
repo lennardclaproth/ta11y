@@ -47,7 +47,7 @@ Every page follows one arrangement, so a control's place says what it affects:
 | Your overview | `organisms/account-overview` | Account, net worth with its change, the one period, sign out. Inline from `lg`, behind one entry below it. |
 | Page heading | `templates/page-content` (`title`) | The page's own `h1`, on the page rather than in the bar. |
 | Chart section | `molecules/analytics-card` (`actions`) | Actions that recompute the chart, such as rebuilding the portfolio. |
-| Ledger header | `organisms/ledger-toolbar` | Everything that acts on the rows: searching, row filters, adding, selection actions. |
+| Ledger header | `organisms/ledger-toolbar` | Everything that acts on the rows: searching, row filters, adding, importing, selection actions. |
 
 The period is one app-wide value in `stores/period.svelte.ts`, with eight presets (`1M … Max`)
 plus a hand-picked range, chosen in the account overview and read by whichever page is open. It
@@ -93,10 +93,6 @@ total-worth snapshots behind the account overview).
 - **No `pages/` Atomic tier** — route components carry page composition directly.
 - **No admin accounts screen.** `GET`/`POST /accounts` are admin-only and have no UI, so the
   `admin` flag can only be set on the bootstrapped account.
-- **No cashflow or portfolio CSV import UI.** `importCashflow` and `importPortfolio` exist in
-  the service layer with no caller; only the EOD upload is wired. There is therefore no
-  **Import CSV** action in the ledger header either — a button with nothing behind it is worse
-  than none, so it appears once the import panel exists.
 - **The period is not persisted.** It is one in-memory value, so it survives navigating between
   pages but not a reload, which starts at year-to-date again.
 - **Net worth is only as fresh as the snapshots.** They are rebuilt when a portfolio rebuild

@@ -198,6 +198,7 @@ func (c *Commands) Process(ctx context.Context, importID uuid.UUID) error {
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err
 	}
+	c.cleanup(imp.Path)
 	c.publishCompleted(ctx, imp)
 	return nil
 }
@@ -284,8 +285,12 @@ func (c *Commands) accept(ctx context.Context, file io.Reader, importType Import
 	return imp.ID, nil
 }
 
+// cleanup drops the stored upload. It runs both when a record could not be created
+// (so a rejected upload leaves no orphan) and once processing has reached a terminal
+// state: the rows have been taken over by the target feature and nothing reads the
+// file again, so keeping a copy of somebody's account statement on disk buys nothing.
 func (c *Commands) cleanup(path string) {
-	if c.remover == nil {
+	if c.remover == nil || path == "" {
 		return
 	}
 	_ = c.remover.Remove(path)
@@ -323,6 +328,7 @@ func (c *Commands) markFailed(ctx context.Context, imp *Import, result ProcessRe
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err
 	}
+	c.cleanup(imp.Path)
 	c.publishFailed(ctx, imp, reason)
 	return reason
 }

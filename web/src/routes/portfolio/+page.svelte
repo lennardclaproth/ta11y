@@ -21,6 +21,7 @@
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
+	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
 	import {
 		listPortfolioPositions,
 		getPortfolioSnapshots,
@@ -83,6 +84,7 @@
 	let txError = $state<string | null>(null);
 	let creatingTx = $state(false);
 	let rebuilding = $state(false);
+	let importOpen = $state(false);
 
 	let detailRow = $state<PortfolioTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -254,16 +256,24 @@
 		txDescription = '';
 		txError = null;
 		txOpen = true;
-		if (vendors.length === 0) {
-			try {
-				const all = await listVendors();
-				// Manual portfolio transactions require a brokerage/portfolio vendor.
-				vendors = all.filter((v) => v.active && v.type === 'portfolio');
-				if (vendors.length > 0) vendorId = vendors[0].id;
-			} catch {
-				// Leave the vendor list empty; the form will warn on submit.
-			}
+		await loadVendors();
+	}
+
+	// Manual portfolio transactions and broker imports both need a brokerage vendor.
+	async function loadVendors() {
+		if (vendors.length > 0) return;
+		try {
+			const all = await listVendors();
+			vendors = all.filter((v) => v.active && v.type === 'portfolio');
+			if (vendors.length > 0) vendorId = vendors[0].id;
+		} catch {
+			// Leave the vendor list empty; the form will warn on submit.
 		}
+	}
+
+	async function openImport() {
+		await loadVendors();
+		importOpen = true;
 	}
 
 	async function submitTx() {
@@ -508,6 +518,10 @@
 				filters={tab === 'positions' ? statusFilter : undefined}
 			>
 				{#snippet actions()}
+					<Button variant="ruled" onclick={() => void openImport()}>
+						<Icon icon="heroicons:cloud-arrow-up" />
+						Import CSV
+					</Button>
 					<Button shape="default" onclick={openTx}>
 						<Icon icon="heroicons:plus" />
 						Add transaction
@@ -575,7 +589,8 @@
 	</PageContentTemplate>
 </AppShellTemplate>
 
-<!-- While saving, Escape and the backdrop stay inert so a pending create cannot be sent twice. -->
+<ImportDialog bind:open={importOpen} {vendors} onFinished={() => void loadAll()} />
+
 <Dialog
 	bind:open={txOpen}
 	title="New transaction"

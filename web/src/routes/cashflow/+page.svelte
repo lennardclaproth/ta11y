@@ -12,6 +12,9 @@
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
+	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
+	import { goto } from '$app/navigation';
+	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
@@ -44,7 +47,8 @@
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
-		TagDistributionEntry
+		TagDistributionEntry,
+		Vendor
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 
@@ -90,6 +94,8 @@
 	let createOpen = $state(false);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
+	let importOpen = $state(false);
+	let brokerageVendors = $state<Vendor[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -355,6 +361,19 @@
 		const selected = selectedIds.length > 0 ? ` · ${selectedIds.length} selected` : '';
 		return `${total} ${total === 1 ? 'row' : 'rows'}${selected}`;
 	});
+
+	// Imports need a brokerage vendor, which the cashflow page does not otherwise load,
+	// so the list is fetched when the dialog is first opened rather than on every visit.
+	async function openImport() {
+		if (brokerageVendors.length === 0) {
+			try {
+				brokerageVendors = (await listVendors()).filter((v) => v.active && v.type === 'portfolio');
+			} catch {
+				// Leave the list empty; the dialog says there is no brokerage account.
+			}
+		}
+		importOpen = true;
+	}
 </script>
 
 <AppShellTemplate>
@@ -404,8 +423,8 @@
 			</div>
 		{/snippet}
 
-		<!-- Everything that acts on these rows lives here: searching, tagging a selection and
-		     adding one. -->
+		<!-- Everything that acts on these rows lives here: searching, tagging a selection,
+		     importing a statement and adding one. -->
 		<LedgerToolbar
 			title="Transactions"
 			meta={tableMeta}
@@ -425,6 +444,10 @@
 						Tag {selectedIds.length} selected
 					</Button>
 				{/if}
+				<Button variant="ruled" onclick={() => void openImport()}>
+					<Icon icon="heroicons:cloud-arrow-up" />
+					Import CSV
+				</Button>
 				<Button shape="default" onclick={() => (createOpen = true)}>
 					<Icon icon="heroicons:plus" />
 					Add transaction
@@ -462,6 +485,15 @@
 	error={createError}
 />
 
+<ImportDialog
+	bind:open={importOpen}
+	vendors={brokerageVendors}
+	onFinished={() => {
+		void load(currentQuery());
+		void loadAnalytics();
+	}}
+	onGoToPortfolio={() => void goto('/portfolio')}
+/>
 {#snippet detailFields()}
 	{#if detailRow}
 		<div class="flex items-center justify-between gap-3 py-3">
