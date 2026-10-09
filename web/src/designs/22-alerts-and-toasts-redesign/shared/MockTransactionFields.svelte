@@ -10,6 +10,13 @@
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import FieldError from './FieldError.svelte';
 
+	type Props = {
+		/** Show the per-field error on Amount. */
+		invalid?: boolean;
+	};
+
+	let { invalid = true }: Props = $props();
+
 	const typeOptions = [
 		{ value: 'expense', label: 'Expense' },
 		{ value: 'income', label: 'Income' }
@@ -28,11 +35,18 @@
 		{/snippet}
 	</FormField>
 
-	<div class="flex flex-col gap-1.5">
-		<Label for="demo-amount" required>Amount</Label>
-		<CurrencyInput id="demo-amount" value="" intent="error" ariaDescribedby="demo-amount-error" />
-		<FieldError id="demo-amount-error" message="Amount is required" />
-	</div>
+	{#if invalid}
+		<div class="flex flex-col gap-1.5">
+			<Label for="demo-amount" required>Amount</Label>
+			<CurrencyInput id="demo-amount" value="" intent="error" ariaDescribedby="demo-amount-error" />
+			<FieldError id="demo-amount-error" message="Amount is required" />
+		</div>
+	{:else}
+		<div class="flex flex-col gap-1.5">
+			<Label for="demo-amount" required>Amount</Label>
+			<CurrencyInput id="demo-amount" value="1200.00" />
+		</div>
+	{/if}
 
 	<FormField label="Description" id="demo-description">
 		{#snippet children(ctx)}

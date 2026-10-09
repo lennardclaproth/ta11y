@@ -1,27 +1,28 @@
 <script lang="ts">
 	/**
-	 * Static stand-in for the Cashflow page (masthead + ledger toolbar + records), used only to
-	 * show a notification in its real surroundings. Not a component proposal.
+	 * Static stand-in for the Cashflow page (masthead + ledger toolbar + records), used only to show
+	 * a notification in its real surroundings. Not a component proposal.
 	 */
 	import type { Snippet } from 'svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
+	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import { mockRows } from './mock-data';
 
 	type Props = {
-		/** In-flow band directly under the masthead (variant C). */
+		/** Full-bleed band region directly under the masthead. */
 		banner?: Snippet;
 		/** Persistent notice inside the content panel, above the records. */
 		notice?: Snippet;
-		/** Floating layer, positioned inside the frame instead of the viewport. */
-		overlay?: Snippet;
+		/** What the records area shows. */
+		state?: 'rows' | 'loading' | 'empty' | 'no-matches' | 'failed';
 		class?: string;
 	};
 
-	let { banner, notice, overlay, class: className = '' }: Props = $props();
+	let { banner, notice, state = 'rows', class: className = '' }: Props = $props();
 </script>
 
 <div
-	class={['relative overflow-hidden border border-slate-300 bg-taupe-100 text-slate-800', className]
+	class={['overflow-hidden border border-slate-300 bg-taupe-100 text-slate-800', className]
 		.filter(Boolean)
 		.join(' ')}
 >
@@ -38,15 +39,14 @@
 		</div>
 		<div class="flex flex-wrap items-center justify-between gap-3 pt-4">
 			<h2 class="font-heading text-4xl leading-none tracking-tight text-slate-900">Cashflow</h2>
-			<span
-				class="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-500"
+			<span class="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-500"
 				>Search description…</span
 			>
 		</div>
 	</header>
 
 	{#if banner}
-		<div class="px-4 pb-4 lg:px-6">{@render banner()}</div>
+		<div class="pb-4">{@render banner()}</div>
 	{/if}
 
 	<div class="px-4 pb-5 lg:px-6">
@@ -62,35 +62,51 @@
 			</div>
 
 			{#if notice}
-				<div class="border-b border-slate-200 px-4 py-3">{@render notice()}</div>
+				<div class="border-b border-slate-200">{@render notice()}</div>
 			{/if}
 
-			<table class="w-full text-sm">
-				<thead>
-					<tr class="border-b border-slate-200 text-xs tracking-wider text-slate-500 uppercase">
-						<th scope="col" class="px-4 py-2 text-left font-medium">Date</th>
-						<th scope="col" class="px-4 py-2 text-left font-medium">Description</th>
-						<th scope="col" class="hidden px-4 py-2 text-left font-medium sm:table-cell">Tag</th>
-						<th scope="col" class="px-4 py-2 text-right font-medium">Amount</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each mockRows as row (row.description)}
-						<tr class="border-b border-slate-200/70">
-							<td class="px-4 py-2.5 whitespace-nowrap text-slate-500">{row.date}</td>
-							<td class="px-4 py-2.5 text-slate-800">{row.description}</td>
-							<td class="hidden px-4 py-2.5 text-slate-500 sm:table-cell">{row.tag}</td>
-							<td class="px-4 py-2.5 text-right">
-								<Money amount={row.amount} size="sm" colored />
-							</td>
-						</tr>
+			{#if state === 'loading'}
+				<div class="flex flex-col gap-3 px-4 py-5" aria-busy="true" aria-label="Loading transactions">
+					{#each ['a', 'b', 'c', 'd'] as key (key)}
+						<Skeleton height="1.25rem" />
 					{/each}
-				</tbody>
-			</table>
+				</div>
+			{:else if state === 'empty'}
+				<div class="flex flex-col items-start gap-1 px-4 py-8">
+					<p class="font-heading text-xl text-slate-900">No transactions yet</p>
+					<p class="text-sm text-slate-500">Add your first transaction to start your ledger.</p>
+				</div>
+			{:else if state === 'failed'}
+				<!-- The notice carries the failure; no zero and no fake rows underneath it. -->
+			{:else if state === 'no-matches'}
+				<div class="flex flex-col items-start gap-1 px-4 py-8">
+					<p class="font-heading text-xl text-slate-900">No matching transactions</p>
+					<p class="text-sm text-slate-500">Clear the search or widen the period.</p>
+				</div>
+			{:else}
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-slate-200 text-xs tracking-wider text-slate-500 uppercase">
+							<th scope="col" class="px-4 py-2 text-left font-medium">Date</th>
+							<th scope="col" class="px-4 py-2 text-left font-medium">Description</th>
+							<th scope="col" class="hidden px-4 py-2 text-left font-medium sm:table-cell">Tag</th>
+							<th scope="col" class="px-4 py-2 text-right font-medium">Amount</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each mockRows as row (row.description)}
+							<tr class="border-b border-slate-200/70">
+								<td class="px-4 py-2.5 whitespace-nowrap text-slate-500">{row.date}</td>
+								<td class="px-4 py-2.5 text-slate-800">{row.description}</td>
+								<td class="hidden px-4 py-2.5 text-slate-500 sm:table-cell">{row.tag}</td>
+								<td class="px-4 py-2.5 text-right">
+									<Money amount={row.amount} size="sm" colored />
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
 		</div>
 	</div>
-
-	{#if overlay}
-		{@render overlay()}
-	{/if}
 </div>

@@ -13,11 +13,20 @@
 		top?: Snippet;
 		/** Notice directly above the footer, next to the failing action. */
 		bottom?: Snippet;
+		/** Save in flight: the action is busy and no notice has been produced yet. */
+		saving?: boolean;
 		children: Snippet;
 		class?: string;
 	};
 
-	let { title = 'New transaction', top, bottom, children, class: className = '' }: Props = $props();
+	let {
+		title = 'New transaction',
+		top,
+		bottom,
+		saving = false,
+		children,
+		class: className = ''
+	}: Props = $props();
 </script>
 
 <div class={['bg-slate-900/40 p-6', className].filter(Boolean).join(' ')}>
@@ -42,8 +51,8 @@
 		{/if}
 
 		<footer class="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
-			<Button variant="ghost" intent="secondary">Cancel</Button>
-			<Button intent="success">Save</Button>
+			<Button variant="ghost" intent="secondary" disabled={saving}>Cancel</Button>
+			<Button intent="success" loading={saving}>Save</Button>
 		</footer>
 	</div>
 </div>
