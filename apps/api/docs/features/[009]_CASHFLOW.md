@@ -1,6 +1,6 @@
-# [009]–[012],[023],[032] Cashflow
+# [009]–[012],[023],[032],[033] Cashflow
 
-> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · 032 (date changes) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · 032 (date changes) · 033 (goal purpose) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/cashflow` · `transport/http/handlers/cashflow` · `internal/storage/sqlx_cashflow_store.go` · `internal/importer/cashflow`
 >
@@ -25,6 +25,10 @@ ignored:
   day up to and including today.
 - **[032] Change date** — move one manually entered transaction to another day, today or
   earlier. Nothing else about it changes, and imported rows are refused.
+- **[033] Purpose** — mark a selection or a filter match as `income`, as `wealth`, or as
+  nothing, for the monthly wealth goal. Independent of the tag and the ignored flag; only
+  incoming money can be income and only outgoing money a contribution. See
+  [Monthly wealth goal](%5B033%5D_WEALTH_GOAL.md) for what the marks are scored against.
 
 ## Domain model
 
@@ -115,6 +119,7 @@ erDiagram
         string direction "CHECK in|out"
         date date
         string tag "default ''"
+        string purpose "CHECK ''|income|wealth, default ''"
         string account_type "CHECK checking|savings|credit|brokerage, nullable"
         bool ignored "default false"
         int row_number
@@ -198,6 +203,8 @@ sequenceDiagram
 | [011] Tag filter | `POST /cashflow/transactions/tag/filter` | body: `tag`, `account_id?`, `filters` | 200 (sync) / 202 (async, dead) |
 | [012] Ignore selection | `POST /cashflow/transactions/ignore/selection` | body: `ignored?` (default true), `ids[]` | 200 `{updated_count, status}` |
 | [012] Ignore filter | `POST /cashflow/transactions/ignore/filter` | body: `ignored?`, `filters` | 200 |
+| [033] Purpose selection | `POST /cashflow/transactions/purpose/selection` | body: `purpose`, `ids[]` | 200 `{updated_count, matched_count, status}` |
+| [033] Purpose filter | `POST /cashflow/transactions/purpose/filter` | body: `purpose`, `filters` | 200 `{updated_count, matched_count, status}` |
 
 **Error mapping (common):** decode / validation / `ParseDirection` / bad sort / bad date range /
 a date after today → 400; manual create `ErrAccountNotFound` and an unknown transaction id → 404;
@@ -222,8 +229,13 @@ rows updated).
   rows keep their statement date: moving one would change the identity the next import of the
   same file compares against, so it would insert the old row again.
 - **Filtering.** `description`/`note`/`source` use case-insensitive `LIKE %v%`; `direction`
-  exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`; `from`/`to`
+  exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`;
+  `purpose` OR-matches `income` / `wealth` / `none` (the empty purpose); `from`/`to`
   bound `date`; `q` fuzzy-matches description/note/tag. Conditions are AND-joined.
+- **Marking a purpose ([033]).** The direction a purpose needs is part of the match, so a
+  mixed selection updates only the rows it can and the response reports `updated_count`
+  against `matched_count`; clearing a purpose carries no direction predicate. The mark is
+  independent of the tag and the ignored flag.
 - **Sorting/pagination.** Uses `internal/sorting`; sortable fields are `date` (default, DESC),
   `description`, `note`, `tag`, `source`, `amount`. Offset pagination with default limit 100.
 - **Analytics.** Monthly buckets by month (`DATE_TRUNC` / `STRFTIME`) summing in/out and

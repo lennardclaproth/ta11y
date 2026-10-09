@@ -2,7 +2,8 @@ import { numberToScaled as s } from '$lib/api/money';
 import type {
 	CashflowTransaction,
 	CashflowMonthlyPoint,
-	TagDistributionEntry
+	TagDistributionEntry,
+	TransactionPurpose
 } from '$lib/api/types';
 
 /**
@@ -10,7 +11,7 @@ import type {
  * untagged and a couple ignored rows so table filtering / empty / pagination states are exercisable.
  * `amountCents` is the 1e6-scaled magnitude; sign is carried by `direction`.
  */
-export const cashflowTransactions: CashflowTransaction[] = [
+const transactions: Omit<CashflowTransaction, 'purpose'>[] = [
 	{
 		id: 'cf-0001',
 		description: 'Monthly salary',
@@ -342,6 +343,32 @@ export const cashflowTransactions: CashflowTransaction[] = [
 		ignored: false
 	}
 ];
+
+/**
+ * What the fixtures assume has been pointed at for the monthly wealth goal [033]: the pay and
+ * the invoices are the income, the savings transfer is the contribution. Everything else is
+ * still unassigned, so the "not assigned" filter and the standing's open counts have rows.
+ * Only incoming money can be income and only outgoing money a contribution, exactly as the
+ * backend enforces it.
+ */
+const purposeByTag: Record<string, TransactionPurpose> = {
+	salary: 'income',
+	freelance: 'income',
+	savings: 'wealth',
+	investments: 'wealth'
+};
+
+function fixturePurpose(tx: Omit<CashflowTransaction, 'purpose'>): TransactionPurpose {
+	const purpose = purposeByTag[tx.tag] ?? '';
+	if (purpose === 'income' && tx.direction !== 'in') return '';
+	if (purpose === 'wealth' && tx.direction !== 'out') return '';
+	return purpose;
+}
+
+export const cashflowTransactions: CashflowTransaction[] = transactions.map((tx) => ({
+	...tx,
+	purpose: fixturePurpose(tx)
+}));
 
 /** Monthly incoming/outgoing/net totals (1e6-scaled). First-of-month keys, oldest → newest. */
 export const cashflowMonthly: CashflowMonthlyPoint[] = [

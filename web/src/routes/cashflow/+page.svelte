@@ -8,10 +8,21 @@
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
 	import DonutChart from '$lib/components/organisms/charts/DonutChart.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
+	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import CardRail from '$lib/components/molecules/card-rail/CardRail.svelte';
+	import { cardRailWidths } from '$lib/components/molecules/card-rail/card-rail.types';
+	import ActionMenu from '$lib/components/molecules/action-menu/ActionMenu.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
+	import RunningMonthCard from '$lib/components/organisms/wealth-goal-cards/RunningMonthCard.svelte';
+	import StreakCard from '$lib/components/organisms/wealth-goal-cards/StreakCard.svelte';
+	import MonthlyStandingCard from '$lib/components/organisms/wealth-goal-cards/MonthlyStandingCard.svelte';
+	import NoGoalCard from '$lib/components/organisms/wealth-goal-cards/NoGoalCard.svelte';
+	import GoalErrorCard from '$lib/components/organisms/wealth-goal-cards/GoalErrorCard.svelte';
+	import GoalLoadingCard from '$lib/components/organisms/wealth-goal-cards/GoalLoadingCard.svelte';
+	import SetGoalDialog from '$lib/components/organisms/set-goal-dialog/SetGoalDialog.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
 		listCashflowTransactions,
@@ -21,6 +32,13 @@
 		changeCashflowTransactionDate,
 		tagCashflowTransactionsBySelection
 	} from '$lib/services/cashflow';
+	import {
+		getWealthGoalStanding,
+		markCashflowPurposeByFilter,
+		markCashflowPurposeBySelection,
+		setWealthGoal
+	} from '$lib/services/wealthgoal';
+	import { monthLabel, monthRange } from '$lib/api/wealthgoal';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
@@ -42,7 +60,10 @@
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
-		TagDistributionEntry
+		MonthStanding,
+		TagDistributionEntry,
+		TransactionPurpose,
+		WealthGoalStandingResponse
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
@@ -51,6 +72,7 @@
 		description: { type: 'string' },
 		tags: { type: 'string[]' },
 		direction: { type: 'string' },
+		purpose: { type: 'string[]' },
 		sort_by: { type: 'string' },
 		sort_order: { type: 'string' },
 		limit: { type: 'number' },
@@ -64,6 +86,7 @@
 	let descriptionFilter = $state((initial.description as string) || '');
 	let tagFilter = $state(initial.tags as string[]);
 	let directionFilter = $state(((initial.direction as string) || null) as CashflowDirection | null);
+	let purposeFilter = $state(initial.purpose as string[]);
 	let sortKey = $state((initial.sort_by as string) || 'date');
 	let sortDirection = $state(((initial.sort_order as string) || 'desc') as SortDirection);
 	let limit = $state((initial.limit as number) || 25);
@@ -81,6 +104,17 @@
 	let incoming = $state<TagDistributionEntry[]>([]);
 	let outgoing = $state<TagDistributionEntry[]>([]);
 	let analyticsLoading = $state(true);
+
+	let standing = $state<WealthGoalStandingResponse | null>(null);
+	let standingLoading = $state(true);
+	let standingError = $state(false);
+	let goalOpen = $state(false);
+	let goalPercent = $state(30);
+	let goalSaving = $state(false);
+	let goalError = $state<string | null>(null);
+	// The month the standing sent you to, shown on the ledger header so the jump is undoable
+	// by eye.
+	let scopedMonth = $state<string | null>(null);
 
 	let createOpen = $state(false);
 	let creating = $state(false);
@@ -102,7 +136,14 @@
 
 	// An empty ledger and an empty result set are different situations, so they read differently.
 	const filtering = $derived(
-		Boolean(descriptionFilter || tagFilter.length > 0 || directionFilter || from || to)
+		Boolean(
+			descriptionFilter ||
+			tagFilter.length > 0 ||
+			directionFilter ||
+			purposeFilter.length > 0 ||
+			from ||
+			to
+		)
 	);
 	const emptyText = $derived(
 		filtering
@@ -119,6 +160,7 @@
 			description: descriptionFilter || undefined,
 			tags: tagFilter.join(',') || undefined,
 			direction: directionFilter ?? undefined,
+			purpose: purposeFilter.join(',') || undefined,
 			sort_by: (sortKey || 'date') as CashflowTransactionsQuery['sort_by'],
 			sort_order: sortDirection,
 			limit,
@@ -134,6 +176,7 @@
 			description: descriptionFilter,
 			tags: tagFilter,
 			direction: directionFilter ?? '',
+			purpose: purposeFilter,
 			sort_by: sortKey,
 			sort_order: sortDirection,
 			limit,
@@ -195,6 +238,136 @@
 		void loadAnalytics();
 	});
 
+	// The standing scores whole calendar months, so it deliberately ignores the page's date
+	// range: narrowing the ledger to a week must not make a month look empty.
+	async function loadStanding() {
+		standingLoading = true;
+		standingError = false;
+		try {
+			standing = await getWealthGoalStanding();
+			if (standing.goal) goalPercent = standing.goal.share_percent;
+		} catch {
+			standing = null;
+			standingError = true;
+		} finally {
+			standingLoading = false;
+		}
+	}
+
+	$effect(() => {
+		void loadStanding();
+	});
+
+	const runningMonth = $derived(standing?.months.find((m) => m.result === 'in_progress') ?? null);
+	const finishedMonths = $derived(standing?.months.filter((m) => m.result !== 'in_progress') ?? []);
+	// A new goal applies from the month you set it in; before the first one that is this month.
+	const goalEffectiveFrom = $derived(
+		runningMonth?.month ?? new Date().toISOString().slice(0, 7) + '-01'
+	);
+
+	async function handleSaveGoal(percent: number) {
+		goalSaving = true;
+		goalError = null;
+		try {
+			await setWealthGoal({ share_percent: percent });
+			goalOpen = false;
+			toast.success(`Monthly goal set to ${percent}% of income`);
+			void loadStanding();
+		} catch (err) {
+			goalError =
+				err instanceof ApiError && err.status === 400
+					? 'A goal is a whole percentage between 0 and 100.'
+					: 'Could not save your monthly goal. Try again.';
+		} finally {
+			goalSaving = false;
+		}
+	}
+
+	// The standing sends you to exactly the transactions that keep a month incomplete: the
+	// month as the date range, and the Purpose filter on "not assigned".
+	function openUnassigned(month: MonthStanding) {
+		const range = monthRange(month.month);
+		from = range.from;
+		to = range.to;
+		purposeFilter = ['none'];
+		scopedMonth = month.month;
+		selectedIds = [];
+		offset = 0;
+		syncUrl();
+	}
+
+	function clearScope() {
+		scopedMonth = null;
+		purposeFilter = [];
+		from = '';
+		to = '';
+		offset = 0;
+		syncUrl();
+	}
+
+	// Marking is reported honestly: income only sticks to incoming money and a contribution
+	// only to outgoing money, so a mixed selection says how much of it actually moved.
+	function reportMarked(updated: number, matched: number, purpose: TransactionPurpose) {
+		const what = purpose === 'income' ? 'income' : purpose === 'wealth' ? 'wealth' : 'unassigned';
+		if (updated === 0) {
+			toast.info(
+				purpose === 'income'
+					? 'Nothing marked: only incoming money can be income.'
+					: purpose === 'wealth'
+						? 'Nothing marked: only outgoing money can be a contribution.'
+						: 'Nothing to clear.'
+			);
+			return;
+		}
+		if (updated < matched) {
+			toast.success(
+				`Marked ${updated} of ${matched} transactions as ${what}; the rest are the other direction.`
+			);
+			return;
+		}
+		toast.success(`Marked ${updated} transactions as ${what}`);
+	}
+
+	async function handleMarkSelection(purpose: TransactionPurpose) {
+		const ids = selectedIds;
+		if (ids.length === 0) return;
+		try {
+			const result = await markCashflowPurposeBySelection({
+				purpose: purpose === '' ? 'none' : purpose,
+				ids
+			});
+			reportMarked(result.updated_count, result.matched_count, purpose);
+			selectedIds = [];
+			void load(currentQuery());
+			void loadStanding();
+		} catch {
+			toast.error('Failed to mark transactions');
+		}
+	}
+
+	async function handleMarkFilter(purpose: TransactionPurpose) {
+		try {
+			const result = await markCashflowPurposeByFilter({
+				purpose: purpose === '' ? 'none' : purpose,
+				filters: {
+					description: descriptionFilter || undefined,
+					tags: tagFilter.join(',') || undefined,
+					direction: directionFilter ?? undefined,
+					purpose: purposeFilter.join(',') || undefined,
+					from: from || undefined,
+					to: to || undefined,
+					hide_ignored: true
+				}
+			});
+			reportMarked(result.updated_count, result.matched_count, purpose);
+			selectedIds = [];
+			void load(currentQuery());
+			void loadStanding();
+		} catch {
+			toast.error('Failed to mark transactions');
+		}
+	}
+
 	onMount(() => {
 		let realtime: { disconnect: () => void } | null = null;
 		void accountStore.ensureLoaded().then(() => {
@@ -205,6 +378,7 @@
 				onRefresh: () => {
 					void load(currentQuery());
 					void loadAnalytics();
+					void loadStanding();
 				}
 			});
 		});
@@ -224,12 +398,16 @@
 		syncUrl();
 	}
 	function onFilterChange() {
+		// Changing a filter by hand leaves the month the standing sent you to, so the ledger
+		// header stops claiming you are still looking at it.
+		scopedMonth = null;
 		offset = 0;
 		syncUrl();
 	}
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
 		from = rangeFrom;
 		to = rangeTo;
+		scopedMonth = null;
 		offset = 0;
 		syncUrl();
 		toast.info(`Filtered to ${rangeFrom} – ${rangeTo}`);
@@ -321,6 +499,20 @@
 	}
 
 	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
+
+	const cardGroups = [
+		{ id: 'cashflow', label: 'Cashflow overview' },
+		{ id: 'goal', label: 'Wealth goal' }
+	];
+
+	// Below `sm` three bulk actions do not fit beside "n selected" in the footer, so the same
+	// actions live in one menu rather than wrapping off-screen.
+	const bulkMarkItems: MenuItem[] = $derived([
+		{ label: 'Mark as income', onSelect: () => handleMarkSelection('income') },
+		{ label: 'Mark as wealth', onSelect: () => handleMarkSelection('wealth') },
+		{ label: 'Clear purpose', onSelect: () => handleMarkSelection('') },
+		{ label: 'Tag', divider: true, onSelect: () => handleBulkTag() }
+	]);
 </script>
 
 <AppShellTemplate>
@@ -349,51 +541,137 @@
 
 	<PageContentTemplate>
 		{#snippet analytics()}
-			<div class="grid grid-cols-1 gap-3 lg:grid-cols-4">
-				<AnalyticsCard title="Net trend" class="lg:col-span-2">
-					<TimeSeriesChart
-						height="h-44"
-						labels={monthly.map((m) => m.month)}
-						xTickFormat={monthShort}
-						loading={analyticsLoading}
-						enableRangeSelect
-						{onRangeSelect}
-						datasets={[
-							{
-								label: 'Net',
-								data: monthly.map((m) => scaledToNumber(m.net_cents)),
-								color: chartColors.net,
-								signed: true
-							}
-						]}
-					/>
-				</AnalyticsCard>
-				<AnalyticsCard title="Incoming">
-					<DonutChart
-						data={incoming.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
-						ramp={donutRamps.incoming}
-						loading={analyticsLoading}
-						formatValue={euro}
-						centerLabel="In"
-					/>
-				</AnalyticsCard>
-				<AnalyticsCard title="Outgoing">
-					<DonutChart
-						data={outgoing.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
-						ramp={donutRamps.outgoing}
-						loading={analyticsLoading}
-						formatValue={euro}
-						centerLabel="Out"
-					/>
-				</AnalyticsCard>
-			</div>
+			<!-- The band is one scrolling rail in two groups: the cashflow charts, and the wealth
+			     goal. The ledger underneath never changes, so you mark transactions and read the
+			     score on the same page. Which cards you see becomes a setting later. -->
+			<CardRail
+				groups={cardGroups}
+				ariaLabel="Cashflow and wealth-goal cards"
+				hint="Scroll sideways for the rest — which cards you see becomes a setting later."
+			>
+				<div data-card="trend" data-group="cashflow" class={cardRailWidths.wide}>
+					<AnalyticsCard title="Net trend">
+						<TimeSeriesChart
+							height="h-44"
+							labels={monthly.map((m) => m.month)}
+							xTickFormat={monthShort}
+							loading={analyticsLoading}
+							enableRangeSelect
+							{onRangeSelect}
+							datasets={[
+								{
+									label: 'Net',
+									data: monthly.map((m) => scaledToNumber(m.net_cents)),
+									color: chartColors.net,
+									signed: true
+								}
+							]}
+						/>
+					</AnalyticsCard>
+				</div>
+				<div data-card="incoming" data-group="cashflow" class={cardRailWidths.default}>
+					<AnalyticsCard title="Incoming">
+						<DonutChart
+							data={incoming.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
+							ramp={donutRamps.incoming}
+							loading={analyticsLoading}
+							formatValue={euro}
+							centerLabel="In"
+						/>
+					</AnalyticsCard>
+				</div>
+				<div data-card="outgoing" data-group="cashflow" class={cardRailWidths.default}>
+					<AnalyticsCard title="Outgoing">
+						<DonutChart
+							data={outgoing.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
+							ramp={donutRamps.outgoing}
+							loading={analyticsLoading}
+							formatValue={euro}
+							centerLabel="Out"
+						/>
+					</AnalyticsCard>
+				</div>
+
+				{#if standingLoading}
+					<div data-card="month" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="This month against your goal">
+							<GoalLoadingCard shape="month" />
+						</AnalyticsCard>
+					</div>
+					<div data-card="streak" data-group="goal" class={cardRailWidths.default}>
+						<AnalyticsCard title="Streak">
+							<GoalLoadingCard shape="streak" />
+						</AnalyticsCard>
+					</div>
+					<div data-card="standing" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="Monthly standing">
+							<GoalLoadingCard shape="rows" />
+						</AnalyticsCard>
+					</div>
+				{:else if standingError}
+					<div data-card="month" data-group="goal" class={cardRailWidths.solo}>
+						<AnalyticsCard title="Wealth goal">
+							<GoalErrorCard onRetry={() => loadStanding()} />
+						</AnalyticsCard>
+					</div>
+				{:else if !standing?.goal || !runningMonth}
+					<div data-card="month" data-group="goal" class={cardRailWidths.solo}>
+						<AnalyticsCard title="Wealth goal">
+							<NoGoalCard onSet={() => (goalOpen = true)} />
+						</AnalyticsCard>
+					</div>
+				{:else}
+					<div data-card="month" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="{monthLabel(runningMonth.month)} against your goal">
+							<RunningMonthCard
+								month={runningMonth}
+								stacked
+								onOpenUnassigned={openUnassigned}
+								onAdjust={() => (goalOpen = true)}
+							/>
+						</AnalyticsCard>
+					</div>
+					<div data-card="streak" data-group="goal" class={cardRailWidths.default}>
+						<AnalyticsCard title="Streak">
+							<StreakCard
+								months={standing.months}
+								currentStreak={standing.current_streak}
+								bestStreak={standing.best_streak}
+							/>
+						</AnalyticsCard>
+					</div>
+					<div data-card="standing" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="Monthly standing">
+							<MonthlyStandingCard months={finishedMonths} onOpenUnassigned={openUnassigned} />
+						</AnalyticsCard>
+					</div>
+				{/if}
+			</CardRail>
 		{/snippet}
 
 		<LedgerToolbar
 			title="Transactions"
 			actionLabel="Add transaction"
 			onAdd={() => (createOpen = true)}
-		/>
+		>
+			{#if scopedMonth}
+				<Badge intent="info" variant="soft" size="sm">{monthLabel(scopedMonth)}</Badge>
+				<Button size="sm" variant="ghost" intent="secondary" onclick={clearScope}>
+					Show all transactions
+				</Button>
+			{/if}
+			<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
+			{#if !loading && !error && filtering && total > 0}
+				<ActionMenu
+					label="Mark all {total} matches…"
+					items={[
+						{ label: 'Mark as income', onSelect: () => handleMarkFilter('income') },
+						{ label: 'Mark as wealth', onSelect: () => handleMarkFilter('wealth') },
+						{ label: 'Clear purpose', onSelect: () => handleMarkFilter('') }
+					]}
+				/>
+			{/if}
+		</LedgerToolbar>
 		<CashflowTransactionsTable
 			{rows}
 			{loading}
@@ -407,6 +685,7 @@
 			bind:descriptionFilter
 			bind:tagFilter
 			bind:directionFilter
+			bind:purposeFilter
 			{tagOptions}
 			{emptyText}
 			{onSort}
@@ -416,7 +695,30 @@
 			onRowClick={openDetail}
 		>
 			{#snippet bulkActions()}
-				<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
+				<!-- The wrapper carries the breakpoint: `hidden` on the Button itself loses to the
+				     atom's own `inline-flex`, which Tailwind emits later in the sheet. -->
+				<span class="hidden items-center gap-2 sm:flex">
+					<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
+					<Button
+						size="sm"
+						variant="outline"
+						intent="success"
+						onclick={() => handleMarkSelection('income')}
+					>
+						Mark as income
+					</Button>
+					<Button
+						size="sm"
+						variant="outline"
+						intent="info"
+						onclick={() => handleMarkSelection('wealth')}
+					>
+						Mark as wealth
+					</Button>
+				</span>
+				<span class="sm:hidden">
+					<ActionMenu items={bulkMarkItems} label="Mark…" placement="top-start" />
+				</span>
 			{/snippet}
 		</CashflowTransactionsTable>
 	</PageContentTemplate>
@@ -427,6 +729,16 @@
 	onSubmit={handleCreate}
 	submitting={creating}
 	error={createError}
+/>
+
+<SetGoalDialog
+	bind:open={goalOpen}
+	bind:percent={goalPercent}
+	exampleIncome={scaledToNumber(runningMonth?.income_cents ?? 0)}
+	effectiveFrom={goalEffectiveFrom}
+	saving={goalSaving}
+	error={goalError}
+	onSave={handleSaveGoal}
 />
 
 {#snippet detailFields()}

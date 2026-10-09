@@ -1051,6 +1051,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Comma-separated goal purpose filter: income, wealth, none",
+                        "name": "purpose",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Start date (YYYY-MM-DD)",
                         "name": "from",
                         "in": "query"
@@ -1324,6 +1330,110 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/transactions/purpose/filter": {
+            "post": {
+                "description": "Set purpose=income/wealth/none for all transactions matching the supplied filter. Income only applies to incoming money and wealth only to outgoing money.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "Mark filtered cashflow transactions for the monthly goal",
+                "parameters": [
+                    {
+                        "description": "Filter purpose request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.MarkPurposeByFilterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.MarkPurposeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/transactions/purpose/selection": {
+            "post": {
+                "description": "Set purpose=income/wealth/none for selected transaction IDs. Income only applies to incoming money and wealth only to outgoing money; rows of the other direction are left unchanged.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "Mark selected cashflow transactions for the monthly goal",
+                "parameters": [
+                    {
+                        "description": "Selection purpose request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.MarkPurposeBySelectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.MarkPurposeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2978,6 +3088,131 @@ const docTemplate = `{
                 }
             }
         },
+        "/wealth-goal": {
+            "get": {
+                "description": "The share of income that should go towards wealth each month. ` + "`" + `goal` + "`" + ` is null when none has been set.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WealthGoal"
+                ],
+                "summary": "Get the monthly wealth goal",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/wealthgoal.GoalResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Sets the share of income that should go towards wealth each month. The new goal applies from the current calendar month; months already scored keep the goal they were judged by.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WealthGoal"
+                ],
+                "summary": "Set the monthly wealth goal",
+                "parameters": [
+                    {
+                        "description": "Monthly goal",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/wealthgoal.SetGoalRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/wealthgoal.GoalResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/wealth-goal/standing": {
+            "get": {
+                "description": "Per calendar month: what was marked as income, what went towards wealth, the goal that applied, and whether the month was met. The running month is never scored, and the streak counts only finished months.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WealthGoal"
+                ],
+                "summary": "Get the monthly wealth-goal standing",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "How many calendar months back to score (default 12, max 60)",
+                        "name": "months",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/wealthgoal.StandingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/ws/accounts/{account_id}": {
             "get": {
                 "description": "Opens an account-scoped websocket that emits data-changed notifications.",
@@ -3394,6 +3629,10 @@ const docTemplate = `{
                 "note": {
                     "type": "string"
                 },
+                "purpose": {
+                    "description": "Purpose is what the transaction counts as towards the monthly wealth goal:\n\"income\", \"wealth\", or \"\" when nobody has pointed at it yet.",
+                    "type": "string"
+                },
                 "source": {
                     "type": "string"
                 },
@@ -3441,6 +3680,45 @@ const docTemplate = `{
         "cashflow.IgnoreTransactionsResponse": {
             "type": "object",
             "properties": {
+                "status": {
+                    "type": "string"
+                },
+                "updated_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cashflow.MarkPurposeByFilterRequest": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "$ref": "#/definitions/transport_http_handlers_cashflow.TransactionFilters"
+                },
+                "purpose": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.MarkPurposeBySelectionRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "purpose": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.MarkPurposeResponse": {
+            "type": "object",
+            "properties": {
+                "matched_count": {
+                    "type": "integer"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -4298,6 +4576,10 @@ const docTemplate = `{
                 "note": {
                     "type": "string"
                 },
+                "purpose": {
+                    "description": "Purpose is a comma-separated goal purpose filter: income, wealth, none.",
+                    "type": "string"
+                },
                 "q": {
                     "type": "string"
                 },
@@ -4312,6 +4594,18 @@ const docTemplate = `{
                 },
                 "untagged": {
                     "type": "boolean"
+                }
+            }
+        },
+        "transport_http_handlers_wealthgoal.Goal": {
+            "type": "object",
+            "properties": {
+                "effective_from": {
+                    "description": "EffectiveFrom is the first of the calendar month the goal started applying in,\nas \"YYYY-MM-DD\".",
+                    "type": "string"
+                },
+                "share_percent": {
+                    "type": "integer"
                 }
             }
         },
@@ -4338,6 +4632,70 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "wealthgoal.GoalResponse": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "$ref": "#/definitions/transport_http_handlers_wealthgoal.Goal"
+                }
+            }
+        },
+        "wealthgoal.MonthStandingResponse": {
+            "type": "object",
+            "properties": {
+                "contributed_cents": {
+                    "type": "integer"
+                },
+                "goal_percent": {
+                    "description": "GoalPercent is the goal in force in this month, not today's goal.",
+                    "type": "integer"
+                },
+                "income_cents": {
+                    "description": "IncomeCents and ContributedCents are 1e6-scaled, like every amount in this API.",
+                    "type": "integer"
+                },
+                "month": {
+                    "description": "Month is the first of the calendar month, as \"YYYY-MM-DD\".",
+                    "type": "string"
+                },
+                "result": {
+                    "description": "Result is one of met, missed, in_progress, not_scored.",
+                    "type": "string"
+                },
+                "unassigned_count": {
+                    "description": "UnassignedCount is how many transactions in the month carry no purpose yet.",
+                    "type": "integer"
+                }
+            }
+        },
+        "wealthgoal.SetGoalRequest": {
+            "type": "object",
+            "properties": {
+                "share_percent": {
+                    "type": "integer"
+                }
+            }
+        },
+        "wealthgoal.StandingResponse": {
+            "type": "object",
+            "properties": {
+                "best_streak": {
+                    "type": "integer"
+                },
+                "current_streak": {
+                    "type": "integer"
+                },
+                "goal": {
+                    "$ref": "#/definitions/transport_http_handlers_wealthgoal.Goal"
+                },
+                "months": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/wealthgoal.MonthStandingResponse"
+                    }
                 }
             }
         }

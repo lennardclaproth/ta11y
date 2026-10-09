@@ -6,3 +6,4 @@ export * from './marketdata';
 export * from './vendors';
 export * from './importer';
 export * from './realtime';
+export * from './wealthgoal';

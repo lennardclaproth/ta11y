@@ -70,7 +70,22 @@ allows after the fact. Imported transactions keep their statement date: the fing
 that recognises a re-imported row carries its date, so moving one would make the next
 import of the same file add the old row alongside it.
 
+A transaction also carries a **purpose** for the monthly wealth goal ([033]) — income, a
+contribution towards wealth, or nothing — set per selection or per filter, independently of
+its tag and its ignored state.
+
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
+
+### Monthly wealth goal [033]
+Users set one goal: the share of the income they mark each month that should go towards
+wealth. Marking transactions on Cashflow as income or as a contribution feeds a monthly
+standing that scores each calendar month against the goal that applied in it, shows how many
+of its transactions are still unmarked, and keeps the run of met months as the one
+encouragement. Only incoming money can be income and only outgoing money a contribution, so
+the two sides of a transfer between your own accounts are never both counted. A new goal
+applies from the month it is set in; the running month is never scored.
+
+→ Details: [Monthly wealth goal](%5B033%5D_WEALTH_GOAL.md)
 
 ### Portfolio management
 Users read portfolio snapshots, current positions, and transaction history, add manual

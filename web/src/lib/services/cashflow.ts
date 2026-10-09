@@ -45,12 +45,19 @@ function mockTransactions(query: CashflowTransactionsQuery): CashflowTransaction
 		.split(',')
 		.map((t) => t.trim())
 		.filter(Boolean);
+	// "none" on the wire is the empty purpose on a transaction.
+	const purposes = (query.purpose ?? '')
+		.split(',')
+		.map((p) => p.trim())
+		.filter(Boolean)
+		.map((p) => (p === 'none' ? '' : p));
 
 	let rows = cashflowTransactions.filter((tx) => {
 		if (query.direction && tx.direction !== query.direction) return false;
 		if (query.hide_ignored && tx.ignored) return false;
 		if (query.untagged && tx.tag !== '') return false;
 		if (tags.length > 0 && !tags.includes(tx.tag)) return false;
+		if (purposes.length > 0 && !purposes.includes(tx.purpose)) return false;
 		if (!contains(tx.description, query.description)) return false;
 		if (!contains(tx.note, query.note)) return false;
 		if (!contains(tx.source, query.source)) return false;
@@ -112,7 +119,10 @@ export async function getCashflowMonthly(
 }
 
 /** Sum the (1e6-scaled) magnitudes per tag for one direction, largest first. */
-function tagTotals(rows: CashflowTransaction[], direction: CashflowDirection): TagDistributionEntry[] {
+function tagTotals(
+	rows: CashflowTransaction[],
+	direction: CashflowDirection
+): TagDistributionEntry[] {
 	const totals = new Map<string, number>();
 	for (const tx of rows) {
 		if (tx.direction !== direction) continue;
@@ -152,11 +162,7 @@ export async function createCashflowTransactions(
 		await delay();
 		return { created_count: body.transactions.length, data: [] };
 	}
-	return apiSend<CreateCashflowTransactionsResponse>(
-		'POST',
-		'/cashflow/transactions/manual',
-		body
-	);
+	return apiSend<CreateCashflowTransactionsResponse>('POST', '/cashflow/transactions/manual', body);
 }
 
 /** `POST /cashflow/transactions/date` */
@@ -167,7 +173,11 @@ export async function changeCashflowTransactionDate(
 		await delay();
 		return { id: body.id, date: `${body.date}T00:00:00Z` };
 	}
-	return apiSend<ChangeCashflowTransactionDateResponse>('POST', '/cashflow/transactions/date', body);
+	return apiSend<ChangeCashflowTransactionDateResponse>(
+		'POST',
+		'/cashflow/transactions/date',
+		body
+	);
 }
 
 /** `POST /cashflow/transactions/tag` (single transaction) */
