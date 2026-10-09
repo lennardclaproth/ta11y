@@ -70,6 +70,9 @@ type CreateTransactionResponse struct {
 	Date        time.Time `json:"date"`
 	Tag         string    `json:"tag"`
 	Ignored     bool      `json:"ignored"`
+	// Purpose is what the transaction counts as towards the monthly wealth goal:
+	// "income", "wealth", or "" when nobody has pointed at it yet.
+	Purpose string `json:"purpose"`
 }
 
 // TransactionsResponse returns the manual cashflow create result.
@@ -151,6 +154,7 @@ func CreateTransactions(
 				Date:        tx.Date,
 				Tag:         tx.Tag,
 				Ignored:     tx.Ignored,
+				Purpose:     string(tx.Purpose),
 			})
 		}
 

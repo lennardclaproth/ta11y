@@ -32,6 +32,7 @@ import (
 	"github.com/lennardclaproth/ta11y/internal/portfolio"
 	"github.com/lennardclaproth/ta11y/internal/storage"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/wealthgoal"
 	"github.com/lennardclaproth/ta11y/migrations"
 	apphttp "github.com/lennardclaproth/ta11y/transport/http"
 	basehandlers "github.com/lennardclaproth/ta11y/transport/http/handlers"
@@ -43,6 +44,7 @@ import (
 	marketdatahttp "github.com/lennardclaproth/ta11y/transport/http/handlers/marketdata"
 	portfoliohttp "github.com/lennardclaproth/ta11y/transport/http/handlers/portfolio"
 	vendorshttp "github.com/lennardclaproth/ta11y/transport/http/handlers/vendors"
+	wealthgoalhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/wealthgoal"
 	assetsevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/assets"
 	importerevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/importer"
 	portfolioevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/portfolio"
@@ -69,6 +71,9 @@ type application struct {
 
 	cashflowCommands *cashflow.Commands
 	cashflowQueries  *cashflow.Queries
+
+	wealthGoalCommands *wealthgoal.Commands
+	wealthGoalQueries  *wealthgoal.Queries
 
 	portfolioCommands *portfolio.Commands
 	portfolioQueries  *portfolio.Queries
@@ -204,6 +209,7 @@ func buildApplication(
 	authStore := storage.NewSQLXAuthStore(db)
 	vendorStore := storage.NewSQLXVendorStore(db)
 	cashflowStore := storage.NewSQLXCashflowStore(db)
+	wealthGoalStore := storage.NewSQLXWealthGoalStore(db)
 	portfolioStore := storage.NewSQLXPortfolioStore(db)
 	assetsStore := storage.NewSQLXAssetsStore(db)
 	importerStore := storage.NewSQLXImporterStore(db)
@@ -229,6 +235,8 @@ func buildApplication(
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, accountQueries)
 	cashflowQueries := cashflow.NewQueries(cashflowStore)
+	wealthGoalCommands := wealthgoal.NewCommands(wealthGoalStore)
+	wealthGoalQueries := wealthgoal.NewQueries(wealthGoalStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
 	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
@@ -271,6 +279,9 @@ func buildApplication(
 
 		cashflowCommands: cashflowCommands,
 		cashflowQueries:  cashflowQueries,
+
+		wealthGoalCommands: wealthGoalCommands,
+		wealthGoalQueries:  wealthGoalQueries,
 
 		portfolioCommands: portfolioCommands,
 		portfolioQueries:  portfolioQueries,
@@ -394,6 +405,12 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/selection", cashflowhttp.IgnoreTransactionsBySelection(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/filter", cashflowhttp.IgnoreTransactionsByFilter(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/selection", cashflowhttp.MarkPurposeBySelection(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/filter", cashflowhttp.MarkPurposeByFilter(app.log, app.cashflowCommands))
+
+	protected("GET /wealth-goal", wealthgoalhttp.GetGoal(app.log, app.wealthGoalQueries))
+	protected("PUT /wealth-goal", wealthgoalhttp.SetGoal(app.log, app.wealthGoalCommands))
+	protected("GET /wealth-goal/standing", wealthgoalhttp.GetStanding(app.log, app.wealthGoalQueries))
 
 	protected("GET /portfolio/positions", portfoliohttp.GetPortfolioPositions(app.log, app.portfolioQueries))
 	protected("GET /portfolio/snapshots", portfoliohttp.GetPortfolioSnapshots(app.log, app.accountQueries, app.portfolioQueries))

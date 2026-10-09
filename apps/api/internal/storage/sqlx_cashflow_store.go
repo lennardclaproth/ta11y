@@ -45,11 +45,11 @@ func (s *SQLXCashflowStore) CreateTransactions(ctx context.Context, txs []*cashf
 		INSERT INTO %s (
 			id, account_id, description, note, source, amount_cents,
 			direction, date, checksum, created_at, updated_at, tag,
-			row_number, ignored, import_id, account_type
+			purpose, row_number, ignored, import_id, account_type
 		) VALUES (
 			:id, :account_id, :description, :note, :source, :amount_cents,
 			:direction, :date, :checksum, :created_at, :updated_at, :tag,
-			:row_number, :ignored, :import_id, :account_type
+			:purpose, :row_number, :ignored, :import_id, :account_type
 		)
 		ON CONFLICT (checksum) DO NOTHING
 	`, s.tableName)
@@ -178,6 +178,55 @@ func (s *SQLXCashflowStore) UpdateTagByFilter(ctx context.Context, filters cashf
 // UpdateIgnoredByFilter sets the ignored flag for transactions matching filters and returns the count updated.
 func (s *SQLXCashflowStore) UpdateIgnoredByFilter(ctx context.Context, filters cashflow.TransactionFilters, ignored bool) (int, error) {
 	return s.updateByFilter(ctx, "ignored", ignored, filters)
+}
+
+// UpdatePurposeByIDs sets what the given transactions count as towards the monthly goal,
+// skipping rows the purpose cannot apply to, and returns the count updated.
+func (s *SQLXCashflowStore) UpdatePurposeByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, purpose cashflow.Purpose) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	predicate, predicateArgs := purposeDirectionPredicate(purpose)
+	query := fmt.Sprintf(
+		`UPDATE %s SET purpose = ?, updated_at = ? WHERE account_id = ? AND id IN (?)%s`,
+		s.tableName,
+		predicate,
+	)
+	args := append([]any{string(purpose), time.Now().UTC(), accountID, ids}, predicateArgs...)
+	expanded, args, err := sqlx.In(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("cashflow store: expand ids: %w", err)
+	}
+	return s.exec(ctx, s.db.Rebind(expanded), args...)
+}
+
+// UpdatePurposeByFilter sets the purpose for transactions matching filters and returns the
+// count updated.
+func (s *SQLXCashflowStore) UpdatePurposeByFilter(ctx context.Context, filters cashflow.TransactionFilters, purpose cashflow.Purpose) (int, error) {
+	whereClause, whereArgs := buildCashflowWhereClause(cashflowQueryFromFilters(filters))
+	predicate, predicateArgs := purposeDirectionPredicate(purpose)
+	if whereClause == "" && predicate != "" {
+		predicate = " WHERE" + strings.TrimPrefix(predicate, " AND")
+	}
+	statement := s.db.Rebind(fmt.Sprintf(
+		`UPDATE %s SET purpose = ?, updated_at = ?%s%s`,
+		s.tableName,
+		whereClause,
+		predicate,
+	))
+	args := append([]any{string(purpose), time.Now().UTC()}, whereArgs...)
+	args = append(args, predicateArgs...)
+	return s.exec(ctx, statement, args...)
+}
+
+// purposeDirectionPredicate confines a purpose to the direction it can describe. Clearing a
+// purpose carries no predicate: a row marked by mistake must be clearable whatever it is.
+func purposeDirectionPredicate(purpose cashflow.Purpose) (string, []any) {
+	direction := purpose.RequiredDirection()
+	if direction == nil {
+		return "", nil
+	}
+	return " AND LOWER(direction) = ?", []any{string(*direction)}
 }
 
 // updateByIDs applies a column update to the given ids, confined to one account. The
@@ -322,6 +371,7 @@ type cashflowQuery struct {
 	Tags        []string
 	Untagged    bool
 	HideIgnored bool
+	Purposes    []cashflow.Purpose
 	From        *time.Time
 	To          *time.Time
 }
@@ -345,6 +395,7 @@ func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
 		Tags:        query.Tags,
 		Untagged:    query.Untagged,
 		HideIgnored: query.HideIgnored,
+		Purposes:    query.Purposes,
 		From:        query.From,
 		To:          query.To,
 	}
@@ -358,6 +409,7 @@ func cashflowQueryFromFilters(filters cashflow.TransactionFilters) cashflowQuery
 		Note:        filters.Note,
 		Source:      filters.Source,
 		Tags:        filters.Tags,
+		Purposes:    filters.Purposes,
 		From:        filters.From,
 		To:          filters.To,
 	}
@@ -426,6 +478,15 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 	if query.HideIgnored {
 		conditions = append(conditions, "ignored = ?")
 		args = append(args, false)
+	}
+
+	if len(query.Purposes) > 0 {
+		placeholders := make([]string, 0, len(query.Purposes))
+		for _, purpose := range query.Purposes {
+			placeholders = append(placeholders, "?")
+			args = append(args, string(purpose))
+		}
+		conditions = append(conditions, fmt.Sprintf("COALESCE(purpose, '') IN (%s)", strings.Join(placeholders, ", ")))
 	}
 
 	if query.From != nil {

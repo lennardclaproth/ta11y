@@ -14,6 +14,7 @@ var (
 	ErrManualCashflowDescriptionRequired = fmt.Errorf("description is required")
 	ErrManualCashflowNoteRequired        = fmt.Errorf("note is required")
 	ErrManualCashflowTagRequired         = fmt.Errorf("tag is required")
+	ErrInvalidPurpose                    = fmt.Errorf("purpose must be one of: income, wealth, none")
 )
 
 // Account Errors

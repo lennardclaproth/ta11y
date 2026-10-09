@@ -30,6 +30,78 @@ func ParseDirection(raw string) (*CashFlowDirection, error) {
 	}
 }
 
+// Purpose is what a transaction counts as towards the monthly wealth-growth goal: the
+// income the goal is a share of, the money put towards wealth, or nothing at all. It is
+// independent of the tag and of the ignored flag -- a transfer to a savings account is
+// usually ignored for the cashflow totals and is still a contribution.
+type Purpose string
+
+const (
+	// PurposeNone is the state of a transaction nobody has pointed at yet.
+	PurposeNone Purpose = ""
+	// PurposeIncome marks incoming money as part of the month's income.
+	PurposeIncome Purpose = "income"
+	// PurposeWealth marks outgoing money as a contribution towards wealth.
+	PurposeWealth Purpose = "wealth"
+)
+
+// RequiredDirection reports the direction a purpose can be applied to. Only incoming money
+// can be income and only outgoing money can be a contribution: a transfer between your own
+// accounts leaves both sides in the ledger, and counting them both would double the month.
+func (p Purpose) RequiredDirection() *CashFlowDirection {
+	switch p {
+	case PurposeIncome:
+		direction := CashIn
+		return &direction
+	case PurposeWealth:
+		direction := CashOut
+		return &direction
+	default:
+		return nil
+	}
+}
+
+// ParsePurpose reads a purpose from client input. "none" and the empty string both mean
+// "not assigned", which is also what clearing a purpose writes.
+func ParsePurpose(raw string) (Purpose, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "none":
+		return PurposeNone, nil
+	case string(PurposeIncome):
+		return PurposeIncome, nil
+	case string(PurposeWealth):
+		return PurposeWealth, nil
+	default:
+		return "", ErrInvalidPurpose
+	}
+}
+
+// SplitPurposes reads a comma-separated purpose filter, e.g. "income,none". An empty input
+// yields no filter rather than a filter on "not assigned".
+func SplitPurposes(raw string) ([]Purpose, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	out := make([]Purpose, 0, 3)
+	seen := make(map[Purpose]struct{}, 3)
+	for _, entry := range strings.Split(raw, ",") {
+		if strings.TrimSpace(entry) == "" {
+			continue
+		}
+		purpose, err := ParsePurpose(entry)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[purpose]; ok {
+			continue
+		}
+		seen[purpose] = struct{}{}
+		out = append(out, purpose)
+	}
+	return out, nil
+}
+
 func SplitTags(tags string) []string {
 	if strings.TrimSpace(tags) == "" {
 		return nil
@@ -89,6 +161,7 @@ type Transaction struct {
 	CreatedAt   time.Time         `db:"created_at"`
 	UpdatedAt   time.Time         `db:"updated_at"`
 	Tag         string            `db:"tag"`
+	Purpose     Purpose           `db:"purpose"`
 	RowNumber   int               `db:"row_number"`
 	Ignored     bool              `db:"ignored"`
 	ImportID    *uuid.UUID        `db:"import_id"`

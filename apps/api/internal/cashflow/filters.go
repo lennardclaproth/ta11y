@@ -18,6 +18,9 @@ type TransactionFilters struct {
 	Tags        []string
 	Untagged    *bool
 	HideIgnored *bool
+	// Purposes OR-matches the goal purpose; PurposeNone matches the rows nobody has
+	// pointed at yet. Empty means no filter on purpose at all.
+	Purposes []Purpose
 
 	From *time.Time
 	To   *time.Time
