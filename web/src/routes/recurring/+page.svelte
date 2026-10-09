@@ -89,9 +89,7 @@
 		{ value: 'ended', label: known ? `Ended (${overview!.ended.length})` : 'Ended' }
 	]);
 
-	const runningCount = $derived(
-		overview ? overview.expenses.length + overview.income.length : 0
-	);
+	const runningCount = $derived(overview ? overview.expenses.length + overview.income.length : 0);
 	const hasItems = $derived(
 		overview !== null &&
 			overview.expenses.length + overview.income.length + overview.ended.length > 0

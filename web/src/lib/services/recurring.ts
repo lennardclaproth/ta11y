@@ -51,7 +51,9 @@ export async function getRecurringOverview(
 			income: recurringIncome.filter((item) => matchesSearch(item, query.q)),
 			ended: recurringEnded.filter((item) => matchesSearch(item, query.q)),
 			// The totals describe the account, so a search does not shrink them.
-			monthlyExpenseCents: numberToScaled(recurringSeriesExpenses[recurringSeriesExpenses.length - 1]),
+			monthlyExpenseCents: numberToScaled(
+				recurringSeriesExpenses[recurringSeriesExpenses.length - 1]
+			),
 			monthlyIncomeCents: numberToScaled(recurringSeriesIncome[recurringSeriesIncome.length - 1]),
 			series: mockSeries()
 		});
@@ -128,10 +130,7 @@ export async function linkRecurringTransactions(
 }
 
 /** `DELETE /cashflow/recurring/{item_id}/transactions/{transaction_id}` */
-export async function unlinkRecurringTransaction(
-	id: string,
-	transactionId: string
-): Promise<void> {
+export async function unlinkRecurringTransaction(id: string, transactionId: string): Promise<void> {
 	if (useMocks) {
 		await delay();
 		return;

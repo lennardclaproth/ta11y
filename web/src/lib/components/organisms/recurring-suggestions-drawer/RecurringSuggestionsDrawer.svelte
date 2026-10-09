@@ -110,8 +110,8 @@
 								{suggestion.name}
 							</Heading>
 							<Text as="span" size="xs" tone="muted">
-								{recurringDirectionLabel(suggestion.direction)} · {suggestion.matches} transactions
-								since {formatDisplayDate(suggestion.since.slice(0, 10))}
+								{recurringDirectionLabel(suggestion.direction)} · {suggestion.matches} transactions since
+								{formatDisplayDate(suggestion.since.slice(0, 10))}
 							</Text>
 						</div>
 						<Badge intent="neutral" variant="outline" size="sm">

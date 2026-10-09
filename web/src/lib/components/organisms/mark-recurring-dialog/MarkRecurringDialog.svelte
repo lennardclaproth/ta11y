@@ -66,9 +66,7 @@
 	});
 
 	const canSubmit = $derived(
-		selection.length > 0 &&
-			(mode === 'existing' ? existing !== '' : name.trim() !== '') &&
-			!saving
+		selection.length > 0 && (mode === 'existing' ? existing !== '' : name.trim() !== '') && !saving
 	);
 
 	function submit() {

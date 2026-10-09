@@ -44,7 +44,9 @@
 <Story name="States" asChild>
 	<ul class="max-w-sm divide-y divide-slate-100 border-y border-slate-200 bg-white">
 		<li>
-			<RecurringItemRow item={item('Pixel Stream', 'monthly', [9, 10, 12], '2026-10-18T00:00:00Z')} />
+			<RecurringItemRow
+				item={item('Pixel Stream', 'monthly', [9, 10, 12], '2026-10-18T00:00:00Z')}
+			/>
 		</li>
 		<li>
 			<RecurringItemRow

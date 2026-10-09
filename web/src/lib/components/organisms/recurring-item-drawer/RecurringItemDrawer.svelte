@@ -95,7 +95,10 @@
 			<Skeleton width="40%" />
 		</div>
 	{:else if error}
-		<p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+		<p
+			class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+			role="alert"
+		>
 			{error}
 		</p>
 	{:else if item}
@@ -133,8 +136,8 @@
 
 		<AnalyticsCard title="Linked transactions" class="mt-5">
 			<Text size="sm" tone="muted" class="mb-2">
-				{item.transactions.length} transactions, newest first. Unlink one that does not belong — the
-				transaction itself stays in Cashflow.
+				{item.transactions.length} transactions, newest first. Unlink one that does not belong — the transaction
+				itself stays in Cashflow.
 			</Text>
 
 			{#if item.transactions.length === 0}
@@ -163,7 +166,11 @@
 									<Badge intent="neutral" size="sm">{originLabel(transaction)}</Badge>
 								</td>
 								<td class="py-2 pr-3 text-right">
-									<Money amount={scaledToNumber(transaction.amountCents)} currency="EUR" size="sm" />
+									<Money
+										amount={scaledToNumber(transaction.amountCents)}
+										currency="EUR"
+										size="sm"
+									/>
 								</td>
 								<td class="py-2 text-right">
 									<Button

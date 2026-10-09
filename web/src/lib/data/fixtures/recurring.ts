@@ -130,7 +130,16 @@ export const recurringExpenses: RecurringItem[] = [
 		'2026-12-01',
 		6
 	),
-	item('rc-008', 'Meridian Hosting', 'out', 'yearly', [100, 110, 120], '2026-03-12', '2027-03-12', 3)
+	item(
+		'rc-008',
+		'Meridian Hosting',
+		'out',
+		'yearly',
+		[100, 110, 120],
+		'2026-03-12',
+		'2027-03-12',
+		3
+	)
 ];
 
 export const recurringIncome: RecurringItem[] = [
