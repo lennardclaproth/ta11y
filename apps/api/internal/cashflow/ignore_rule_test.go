@@ -98,8 +98,9 @@ func TestNewIgnoreRuleDraftRefusesTooWideText(t *testing.T) {
 func TestNewIgnoreRuleDraftRefusesLikeWildcards(t *testing.T) {
 	// % and _ keep their LIKE meaning all the way into the query, so they walk past the
 	// minimum length: "a%z" is three characters and matches almost every statement. A
-	// saved rule then runs unseen on every later import.
-	for _, contains := range []string{"a%z", "NL_ABNA"} {
+	// backslash escapes on Postgres and does not on SQLite, so a rule carrying one would
+	// mean two different things. A saved rule then runs unseen on every later import.
+	for _, contains := range []string{"a%z", "NL_ABNA", `c:\dir`} {
 		if _, err := NewIgnoreRuleDraft("Wide", "description", contains, "", "", true); !errors.Is(err, ErrIgnoreRuleContainsWildcard) {
 			t.Fatalf("contains %q: expected ErrIgnoreRuleContainsWildcard, got %v", contains, err)
 		}

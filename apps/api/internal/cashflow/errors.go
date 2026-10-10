@@ -26,8 +26,10 @@ var (
 	ErrIgnoreRuleContainsTooLong   = fmt.Errorf("contains must be at most 255 characters")
 	// ErrIgnoreRuleContainsWildcard explains the refusal rather than silently bending
 	// the text: % and _ are LIKE wildcards, so "a%z" would pass the minimum length and
-	// still match nearly every statement.
-	ErrIgnoreRuleContainsWildcard = fmt.Errorf("contains must not use %% or _, which match any text")
+	// still match nearly every statement. A backslash is the LIKE escape character on
+	// Postgres but an ordinary character on SQLite, so the same rule would catch
+	// different rows per dialect.
+	ErrIgnoreRuleContainsWildcard = fmt.Errorf(`contains must not use %%, _ or \, which have their own meaning in a search`)
 	ErrIgnoreRuleNotFound         = fmt.Errorf("ignore rule not found")
 )
 
