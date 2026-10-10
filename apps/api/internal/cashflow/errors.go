@@ -26,7 +26,6 @@ var (
 	ErrRecurringItemEnded            = fmt.Errorf("an ended recurring item takes no new transactions")
 	ErrRecurringTransactionsRequired = fmt.Errorf("at least one transaction is required")
 	ErrRecurringTransactionNotFound  = fmt.Errorf("transaction not found in this account")
-	ErrRecurringTransactionLinked    = fmt.Errorf("transaction already belongs to a recurring item")
 	ErrRecurringSuggestionNotFound   = fmt.Errorf("no suggestion found for that pattern")
 )
 
