@@ -12,7 +12,7 @@
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CardRail from '$lib/components/molecules/card-rail/CardRail.svelte';
-	import { cardRailWidths } from '$lib/components/molecules/card-rail/card-rail.types';
+	import { cardRailWidths } from '$lib/components/molecules/card-rail/card-rail.variants';
 	import ActionMenu from '$lib/components/molecules/action-menu/ActionMenu.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
@@ -372,9 +372,14 @@
 		toast.success(`Marked ${updated} transactions as ${what}`);
 	}
 
+	// A mark is idempotent, so a double click corrupts nothing -- but it does fire a second
+	// mutation, a second toast and a second pair of reloads that race each other.
+	let marking = $state(false);
+
 	async function handleMarkSelection(purpose: TransactionPurpose) {
 		const ids = selectedIds;
-		if (ids.length === 0) return;
+		if (ids.length === 0 || marking) return;
+		marking = true;
 		try {
 			const result = await markCashflowPurposeBySelection({
 				purpose: purpose === '' ? 'none' : purpose,
@@ -386,10 +391,14 @@
 			void loadStanding();
 		} catch {
 			toast.error('Failed to mark transactions');
+		} finally {
+			marking = false;
 		}
 	}
 
 	async function handleMarkFilter(purpose: TransactionPurpose) {
+		if (marking) return;
+		marking = true;
 		try {
 			const result = await markCashflowPurposeByFilter({
 				purpose: purpose === '' ? 'none' : purpose,
@@ -409,6 +418,8 @@
 			void loadStanding();
 		} catch {
 			toast.error('Failed to mark transactions');
+		} finally {
+			marking = false;
 		}
 	}
 
@@ -569,15 +580,15 @@
 	// ledger header. Three of them beside Tag, Import and Add would crowd the rule, so the
 	// purposes themselves live in one menu.
 	const selectionMarkItems: MenuItem[] = $derived([
-		{ label: 'Mark as income', onSelect: () => handleMarkSelection('income') },
-		{ label: 'Mark as wealth', onSelect: () => handleMarkSelection('wealth') },
-		{ label: 'Clear purpose', onSelect: () => handleMarkSelection('') }
+		{ label: 'Mark as income', disabled: marking, onSelect: () => handleMarkSelection('income') },
+		{ label: 'Mark as wealth', disabled: marking, onSelect: () => handleMarkSelection('wealth') },
+		{ label: 'Clear purpose', disabled: marking, onSelect: () => handleMarkSelection('') }
 	]);
 
 	const filterMarkItems: MenuItem[] = $derived([
-		{ label: 'Mark as income', onSelect: () => handleMarkFilter('income') },
-		{ label: 'Mark as wealth', onSelect: () => handleMarkFilter('wealth') },
-		{ label: 'Clear purpose', onSelect: () => handleMarkFilter('') }
+		{ label: 'Mark as income', disabled: marking, onSelect: () => handleMarkFilter('income') },
+		{ label: 'Mark as wealth', disabled: marking, onSelect: () => handleMarkFilter('wealth') },
+		{ label: 'Clear purpose', disabled: marking, onSelect: () => handleMarkFilter('') }
 	]);
 </script>
 

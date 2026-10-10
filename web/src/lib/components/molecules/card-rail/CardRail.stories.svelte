@@ -2,7 +2,7 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import CardRail from './CardRail.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
-	import { cardRailWidths } from './card-rail.types';
+	import { cardRailWidths } from './card-rail.variants';
 
 	const { Story } = defineMeta({
 		title: 'Molecules/CardRail',
