@@ -48,6 +48,15 @@ func (s *recordingStore) GetRecurringItem(_ context.Context, _, _ uuid.UUID) (*c
 func (s *recordingStore) ListRecurringLinks(_ context.Context, _ uuid.UUID) ([]cashflow.RecurringLink, error) {
 	return s.links, nil
 }
+func (s *recordingStore) ListRecurringLinksForItem(_ context.Context, _, itemID uuid.UUID) ([]cashflow.RecurringLink, error) {
+	own := []cashflow.RecurringLink{}
+	for _, link := range s.links {
+		if link.ItemID == itemID {
+			own = append(own, link)
+		}
+	}
+	return own, nil
+}
 func (s *recordingStore) Do(ctx context.Context, fn func(txCtx context.Context) error) error {
 	return fn(ctx)
 }

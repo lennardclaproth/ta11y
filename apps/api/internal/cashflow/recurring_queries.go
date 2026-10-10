@@ -23,6 +23,7 @@ type RecurringQueryStore interface {
 	ListRecurringItems(ctx context.Context, accountID uuid.UUID) ([]*RecurringItem, error)
 	GetRecurringItem(ctx context.Context, accountID, id uuid.UUID) (*RecurringItem, error)
 	ListRecurringLinks(ctx context.Context, accountID uuid.UUID) ([]RecurringLink, error)
+	ListRecurringLinksForItem(ctx context.Context, accountID, itemID uuid.UUID) ([]RecurringLink, error)
 	ListUnlinkedTransactions(ctx context.Context, accountID uuid.UUID) ([]*Transaction, error)
 	ListDismissedSuggestions(ctx context.Context, accountID uuid.UUID) ([]DismissedSuggestion, error)
 	ListTransactionsByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID) ([]*Transaction, error)
@@ -158,16 +159,9 @@ func (q *RecurringQueries) Item(ctx context.Context, accountID, id uuid.UUID) (*
 		return nil, fmt.Errorf("recurring item: %w", ErrRecurringItemNotFound)
 	}
 
-	links, err := q.qs.ListRecurringLinks(ctx, accountID)
+	own, err := q.qs.ListRecurringLinksForItem(ctx, accountID, item.ID)
 	if err != nil {
 		return nil, fmt.Errorf("recurring item links: %w", err)
-	}
-
-	own := make([]RecurringLink, 0, len(links))
-	for _, link := range links {
-		if link.ItemID == item.ID {
-			own = append(own, link)
-		}
 	}
 	sort.Slice(own, func(i, j int) bool { return own[i].Date.After(own[j].Date) })
 

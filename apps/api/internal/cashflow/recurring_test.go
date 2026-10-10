@@ -22,8 +22,10 @@ type recurringStore struct {
 
 	linkedTo map[uuid.UUID][]uuid.UUID
 
-	// linkErr makes linking fail, so a test can see what survives a half-written item.
-	linkErr error
+	// linkErr makes linking fail, and broadLinksErr makes the account-wide link
+	// read fail, so a test can tell the two reads apart.
+	linkErr       error
+	broadLinksErr error
 }
 
 func newRecurringStore() *recurringStore {
@@ -106,7 +108,20 @@ func (s *recurringStore) GetRecurringItem(_ context.Context, _, id uuid.UUID) (*
 }
 
 func (s *recurringStore) ListRecurringLinks(_ context.Context, _ uuid.UUID) ([]RecurringLink, error) {
+	if s.broadLinksErr != nil {
+		return nil, s.broadLinksErr
+	}
 	return s.links, nil
+}
+
+func (s *recurringStore) ListRecurringLinksForItem(_ context.Context, _, itemID uuid.UUID) ([]RecurringLink, error) {
+	own := []RecurringLink{}
+	for _, link := range s.links {
+		if link.ItemID == itemID {
+			own = append(own, link)
+		}
+	}
+	return own, nil
 }
 
 func (s *recurringStore) ListUnlinkedTransactions(_ context.Context, _ uuid.UUID) ([]*Transaction, error) {
@@ -504,6 +519,29 @@ func TestCreatingAnItemLeavesNothingBehindWhenLinkingFails(t *testing.T) {
 			t.Fatalf("a failed link left %d items behind, want none", len(store.items))
 		}
 	})
+}
+
+func TestItemReadsOnlyItsOwnLinks(t *testing.T) {
+	accountID := uuid.New()
+	store := newRecurringStore()
+
+	item := &RecurringItem{ID: uuid.New(), AccountID: accountID, Name: "Pixel Stream", Direction: CashOut, Rhythm: RhythmMonthly}
+	other := &RecurringItem{ID: uuid.New(), AccountID: accountID, Name: "Fiber", Direction: CashOut, Rhythm: RhythmMonthly}
+	store.items = []*RecurringItem{item, other}
+	store.links = []RecurringLink{
+		{ItemID: item.ID, TransactionID: uuid.New(), Date: day(2026, 9, 18), AmountCents: 1200},
+		{ItemID: other.ID, TransactionID: uuid.New(), Date: day(2026, 9, 24), AmountCents: 4500},
+	}
+	// The drawer opens per item, so the whole account's links stay out of this read.
+	store.broadLinksErr = errors.New("the account-wide link read must stay out of the item detail")
+
+	detail, err := NewRecurringQueries(store).Item(context.Background(), accountID, item.ID)
+	if err != nil {
+		t.Fatalf("item: %v", err)
+	}
+	if len(detail.Transactions) != 1 || detail.Transactions[0].ItemID != item.ID {
+		t.Fatalf("item detail carries %+v, want only its own link", detail.Transactions)
+	}
 }
 
 func TestMonthlySeriesLooksBackwardsOnly(t *testing.T) {

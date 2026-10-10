@@ -192,6 +192,24 @@ func (s *SQLXRecurringStore) ListRecurringLinks(ctx context.Context, accountID u
 	return links, nil
 }
 
+// ListRecurringLinksForItem returns the links of one item, oldest first. The
+// account predicate runs through the item, so another account's links stay out.
+func (s *SQLXRecurringStore) ListRecurringLinksForItem(ctx context.Context, accountID, itemID uuid.UUID) ([]cashflow.RecurringLink, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT l.item_id, l.transaction_id, t.date, t.amount_cents, t.description, t.source
+		FROM %s l
+		JOIN %s i ON i.id = l.item_id
+		JOIN %s t ON t.id = l.transaction_id
+		WHERE i.account_id = ? AND l.item_id = ?
+		ORDER BY t.date ASC
+	`, s.linksTable, s.itemsTable, s.transactionTable))
+	links := []cashflow.RecurringLink{}
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &links, query, accountID, itemID); err != nil {
+		return nil, fmt.Errorf("recurring store: list item links: %w", err)
+	}
+	return links, nil
+}
+
 // ListUnlinkedTransactions returns the transactions suggestions may be drawn from:
 // an account's own rows that are neither ignored nor already linked to an item.
 func (s *SQLXRecurringStore) ListUnlinkedTransactions(ctx context.Context, accountID uuid.UUID) ([]*cashflow.Transaction, error) {
