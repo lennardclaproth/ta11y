@@ -6,7 +6,6 @@
 	 * Stacked bands share one hairline (`-mt-px`) so several notices read as one ruled block rather
 	 * than a pile of cards.
 	 */
-	import { browser } from '$app/environment';
 	import { slide } from 'svelte/transition';
 	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -17,19 +16,36 @@
 
 	let { class: className = '' }: Props = $props();
 
+	/**
+	 * How many notices are shown at once. A band sits in the flow, so every extra one pushes the page
+	 * down; beyond a few at a time the jump costs more than the notice is worth. The store keeps the
+	 * rest, with their timers, and the next one appears as soon as a band above it goes.
+	 */
+	const MAX_VISIBLE = 3;
+
+	const visible = $derived(toast.items.slice(0, MAX_VISIBLE));
+
 	// A band sits in the flow, so it opens and closes by height rather than flying in from a corner.
-	// Someone who asked for less motion gets the same band without the movement.
-	const reducedMotion = browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-	const slideDuration = reducedMotion ? 0 : 160;
+	// Someone who asked for less motion gets the same band without the movement. This region lives
+	// for the whole session, so the setting is followed while it is open, not only at startup.
+	let reducedMotion = $state(false);
+	$effect(() => {
+		const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+		reducedMotion = query.matches;
+		const onChange = (event: MediaQueryListEvent) => (reducedMotion = event.matches);
+		query.addEventListener('change', onChange);
+		return () => query.removeEventListener('change', onChange);
+	});
+	const slideDuration = $derived(reducedMotion ? 0 : 160);
 </script>
 
-{#if toast.items.length > 0}
+{#if visible.length > 0}
 	<div
 		class={['flex flex-col', className].filter(Boolean).join(' ')}
 		role="region"
 		aria-label="Notifications"
 	>
-		{#each toast.items as item, index (item.id)}
+		{#each visible as item, index (item.id)}
 			<div transition:slide={{ duration: slideDuration }}>
 				<NoticeBand
 					intent={item.intent}

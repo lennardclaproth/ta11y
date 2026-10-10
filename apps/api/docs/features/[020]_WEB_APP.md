@@ -20,7 +20,9 @@ components live in `src/routes/` instead.
 
 One molecule reports everything: `molecules/notice-band` (`NoticeBand`), a ruled band in normal
 document flow. `organisms/notice-band-region` renders the `toast` store as bands under the
-masthead — the store itself (API, timers, intents) is unchanged. A problem that stays is rendered
+masthead, at most three at a time — the store itself (API, timers, intents) is unchanged. A dialog
+or drawer covers that region with its own scrim, so an overlay that stays open reports its own
+outcomes in a band inside it (`ProviderCatalogueDrawer`). A problem that stays is rendered
 by the component that owns the content (`DataTable` on a failed load, with an optional `onRetry`);
 a refused save is rendered inside its dialog, drawer or form, and never also as a toast. Per-field
 errors stay in `FormField`, carrying the same icon as the band.

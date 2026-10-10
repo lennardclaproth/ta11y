@@ -38,7 +38,9 @@
 	</div>
 </Story>
 
-<Story name="Stacked" asChild>
+<!-- Four at once, three bands: the region shows at most three so the page below it does not jump by
+     an arbitrary height. The fourth waits in the store and appears as one above it goes. -->
+<Story name="Stacked (capped at three)" asChild>
 	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
 		<Button onclick={stack}>Trigger 4 notices</Button>
