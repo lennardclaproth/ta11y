@@ -179,7 +179,15 @@
 			meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
 		>
 			{#snippet actions()}
-				<Button shape="default" onclick={() => (createOpen = true)}>
+				<!-- Reset on opening, not on closing: Cancel sets `createOpen` itself, which never reaches
+				     the dialog's `onClose`, and a stale band would greet the next empty form. -->
+				<Button
+					shape="default"
+					onclick={() => {
+						createError = null;
+						createOpen = true;
+					}}
+				>
 					<Icon icon="heroicons:plus" />
 					Add asset class
 				</Button>
@@ -204,7 +212,7 @@
 
 <AssetClassDrawer bind:open={drawerOpen} {details} loading={detailsLoading} />
 
-<Dialog bind:open={createOpen} title="New asset class" size="sm" onClose={() => (createError = null)}>
+<Dialog bind:open={createOpen} title="New asset class" size="sm">
 	{#if createError}
 		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
 			{createError}
