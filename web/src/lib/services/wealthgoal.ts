@@ -9,6 +9,7 @@ import type {
 	MonthStanding,
 	SetWealthGoalRequest,
 	TransactionPurpose,
+	WealthGoal,
 	WealthGoalResponse,
 	WealthGoalStandingResponse
 } from '$lib/api/types';
@@ -16,14 +17,28 @@ import { cashflowTransactions } from '$lib/data/fixtures/cashflow';
 import { wealthGoal } from '$lib/data/fixtures/wealthgoal';
 import { clone, delay } from './_mock';
 
-/** The goal the mock branch hands out; `setWealthGoal` moves it for the session. */
-let mockGoal: WealthGoalResponse['goal'] = clone(wealthGoal);
+/**
+ * The goals the mock branch hands out, oldest first. A whole history rather than one value,
+ * because that is what the backend keeps: adjusting the goal writes a row for the month it
+ * is adjusted in, and a month that has been scored keeps the goal it was judged by.
+ */
+let mockGoals: WealthGoal[] = [clone(wealthGoal)];
+
+/** The goal in force in a month: the latest one that had started by then, as `goalAt` does. */
+function mockGoalAt(month: string): WealthGoal | null {
+	let found: WealthGoal | null = null;
+	for (const goal of mockGoals) {
+		if (goal.effective_from > month) break;
+		found = goal;
+	}
+	return found;
+}
 
 /** `GET /wealth-goal` */
 export async function getWealthGoal(): Promise<WealthGoalResponse> {
 	if (useMocks) {
 		await delay();
-		return { goal: clone(mockGoal) };
+		return { goal: clone(mockGoalAt(currentMockMonth())) };
 	}
 	return apiGet<WealthGoalResponse>('/wealth-goal');
 }
@@ -32,15 +47,12 @@ export async function getWealthGoal(): Promise<WealthGoalResponse> {
 export async function setWealthGoal(body: SetWealthGoalRequest): Promise<WealthGoalResponse> {
 	if (useMocks) {
 		await delay();
-		// Mirrors the backend: a new goal applies from the first of the current month.
-		const now = new Date();
-		mockGoal = {
-			share_percent: body.share_percent,
-			effective_from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-				.toISOString()
-				.slice(0, 10)
-		};
-		return { goal: clone(mockGoal) };
+		// Mirrors the backend: a new goal applies from the first of the current month, and
+		// adjusting it twice in one month replaces that month's row rather than adding one.
+		const current = currentMockMonth();
+		const goal: WealthGoal = { share_percent: body.share_percent, effective_from: current };
+		mockGoals = [...mockGoals.filter((g) => g.effective_from !== current), goal];
+		return { goal: clone(goal) };
 	}
 	return apiSend<WealthGoalResponse>('PUT', '/wealth-goal', body);
 }
@@ -167,7 +179,7 @@ function mockStanding(months: number): WealthGoalStandingResponse {
 			month,
 			income_cents: 0,
 			contributed_cents: 0,
-			goal_percent: mockGoal?.share_percent ?? 0,
+			goal_percent: mockGoalAt(month)?.share_percent ?? 0,
 			result: 'in_progress' as MonthResult,
 			unassigned_count: 0
 		};
@@ -178,12 +190,13 @@ function mockStanding(months: number): WealthGoalStandingResponse {
 	}
 
 	const current = currentMonth.toISOString().slice(0, 10);
-	if (mockGoal && !buckets.has(current)) {
+	const currentGoal = mockGoalAt(current);
+	if (currentGoal && !buckets.has(current)) {
 		buckets.set(current, {
 			month: current,
 			income_cents: 0,
 			contributed_cents: 0,
-			goal_percent: mockGoal.share_percent,
+			goal_percent: currentGoal.share_percent,
 			result: 'in_progress',
 			unassigned_count: 0
 		});
@@ -194,14 +207,14 @@ function mockStanding(months: number): WealthGoalStandingResponse {
 		.sort((a, b) => b.month.localeCompare(a.month));
 
 	return {
-		goal: clone(mockGoal),
+		goal: clone(currentGoal),
 		months: scored,
 		...mockStreaks(scored)
 	};
 }
 
 function mockResult(month: MonthStanding, currentMonth: string): MonthResult {
-	if (!mockGoal || month.month < mockGoal.effective_from) return 'not_scored';
+	if (!mockGoalAt(month.month)) return 'not_scored';
 	if (month.month >= currentMonth) return 'in_progress';
 	if (month.income_cents <= 0) return 'missed';
 	return month.contributed_cents * 100 >= month.income_cents * month.goal_percent
@@ -230,4 +243,9 @@ function mockStreaks(months: MonthStanding[]): { current_streak: number; best_st
 
 function startOfMonth(date: Date): Date {
 	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+/** The running month as a "YYYY-MM-DD" first-of-month. */
+function currentMockMonth(): string {
+	return startOfMonth(new Date()).toISOString().slice(0, 10);
 }
