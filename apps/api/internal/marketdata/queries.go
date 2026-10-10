@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 type QueryStore interface {
 	Get(ctx context.Context, id uuid.UUID) (*Listing, error)
 	GetBySymbol(ctx context.Context, symbol string) (*Listing, error)
+	GetByISIN(ctx context.Context, isin string) (*Listing, error)
 	List(ctx context.Context, limit, offset *int) ([]*Listing, error)
 	Search(ctx context.Context, q string, limit, offset *int) ([]*Listing, int, error)
 	ShouldAccumulate(ctx context.Context, lsID uuid.UUID, val bool) error
@@ -57,6 +59,29 @@ func (q *Queries) ListingBySymbol(ctx context.Context, symbol string) (*Listing,
 		return nil, fmt.Errorf("get listing by symbol: failed to execute query: %w", err)
 	}
 	return ls, nil
+}
+
+// ListingByIdentity resolves the one listing an instrument is, by exact identity:
+// the ISIN when the instrument has one, otherwise the symbol. A partial match is
+// worse than none here — a short symbol that also occurs inside a longer one would
+// silently attach a holding to somebody else's instrument — so there is no fallback
+// from a present-but-unknown ISIN to the symbol, and no match returns (nil, nil).
+func (q *Queries) ListingByIdentity(ctx context.Context, isin, symbol string) (*Listing, error) {
+	if isin = strings.TrimSpace(isin); isin != "" {
+		listing, err := q.qs.GetByISIN(ctx, isin)
+		if err != nil {
+			return nil, fmt.Errorf("listing by identity: failed to execute query: %w", err)
+		}
+		return listing, nil
+	}
+	if symbol = strings.TrimSpace(symbol); symbol == "" {
+		return nil, nil
+	}
+	listing, err := q.qs.GetBySymbol(ctx, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("listing by identity: failed to execute query: %w", err)
+	}
+	return listing, nil
 }
 
 // Provider returns the best provider candidate for the given provider name,

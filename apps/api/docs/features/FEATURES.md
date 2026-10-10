@@ -14,9 +14,16 @@ doc (e.g. all cashflow and all market-data features).
 Cashflow, assets, portfolio, and admin pages share ta11y's editorial shell: a ruled masthead,
 visible desktop navigation, a labeled mobile menu, serif headings, flat analytics sections,
 and square paper table surfaces. Narrow screens scroll through analytics to a dedicated table
-region; wide tables scroll horizontally without widening the page. Existing financial actions,
-filters, date selection, and account controls remain available. Cashflow, Portfolio and Assets
-place labeled creation actions with plus icons above the ledger, alongside its title or view tabs.
+region; wide tables scroll horizontally without widening the page.
+
+Every page arranges its controls the same way, so where a control sits says what it affects. The
+top bar is navigation only. To the right of it sits your overview: the signed-in account, net
+worth with its change over the selected period, one period choice, and sign out — open in the
+masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
+charts and the table of whichever page you are on and stays put when you change page; admin pages
+have no charts and no period. Actions that recompute a chart, such as rebuilding the portfolio,
+hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
+importing, acting on a selection — lives in the ledger header above the table.
 
 ### Authentication [030]
 People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow
@@ -56,7 +63,24 @@ and processed asynchronously. Three explicit import types are supported — cash
 portfolio, and end-of-day market data — with vendor-specific parsers (DeGiro, ING, N26
 for cashflow; DeGiro for portfolio; BrandNewDay for EOD).
 
+`GET /imports/{import_id}` reads one import back: its lifecycle state, its row counters,
+and a classified reason when the vendor's parser refused the file. The stored upload is
+removed once an import finishes, successfully or not.
+
 → Details: [CSV imports](%5B002%5D_CSV_IMPORTS.md)
+
+### Brokerage import [032]
+**Import CSV** on Cashflow and on Portfolio opens one import panel. A monthly broker
+account statement is uploaded once and fills both destinations, and the result reports
+per destination what was new, what was already imported and what failed, plus the
+products it brought in that no listing matches yet.
+
+Repeating the import is safe. Consecutive exports overlap, so a row is recognised by
+what it is — date, product, amount and quantity — and no
+longer by where it sits in the file; two identical rows inside one export still stay two
+transactions. Rows imported before this change are not converted.
+
+→ Details: [Brokerage import](%5B032%5D_BROKERAGE_IMPORT.md)
 
 ### Cashflow insights
 Users query bank/payment transactions with filtering, sorting, and pagination, and add
@@ -90,6 +114,12 @@ trades: holdings are rescaled on the split date, before any trade that day, whic
 already quoted in post-split shares. Cost basis, realized profit and income are untouched.
 The factors come from the end-of-day series the provider already returns, so no separate
 corporate-actions feed is fetched; manually imported price files report no splits.
+
+Every rebuild re-links positions to listings, so adding a listing and rebuilding links
+transactions imported earlier. The match is exact: the ISIN, or the symbol when the
+instrument has none. No match leaves the position unlinked — it still counts as a
+position, it just contributes no market value — rather than attaching it to a listing
+that merely looks similar.
 
 → Details: [Portfolio](%5B013%5D_PORTFOLIO.md)
 
@@ -249,8 +279,9 @@ generated API contract with an interactive UI at `/swagger/`.
 → Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
 
 ### Web app
-A SvelteKit (Svelte 5) frontend in `web/`; it is early-stage — currently an Atomic-Design
-component library built in Storybook, not yet consuming the API — and most application
-logic lives in the Go backend.
+A SvelteKit (Svelte 5) frontend in `web/`, built from an Atomic-Design component library
+catalogued in Storybook. It consumes the API over REST plus a per-account WebSocket, and runs
+standalone on fixtures when no API URL is configured. Most application logic still lives in the
+Go backend.
 
 → Details: [Web app](%5B020%5D_WEB_APP.md)

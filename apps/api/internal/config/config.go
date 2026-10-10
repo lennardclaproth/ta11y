@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -85,11 +86,20 @@ type Logging struct {
 
 type Server struct {
 	Environment string `yaml:"environment"`
-	Port        int    `yaml:"port"`
+	// Host is the interface the API listens on. Empty listens on every interface
+	// (the default); "127.0.0.1" keeps the server reachable from this machine only.
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 	// CORSAllowedOrigins lists the browser origins permitted to call the API
 	// cross-origin (e.g. the SvelteKit dev server). Empty falls back to the
 	// local dev origin; a single "*" entry allows any origin.
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"`
+}
+
+// Addr returns the listen address for the HTTP server: ":<port>" when no host is
+// configured, otherwise "<host>:<port>" (IPv6 hosts are bracketed).
+func (s Server) Addr() string {
+	return net.JoinHostPort(strings.TrimSpace(s.Host), strconv.Itoa(s.Port))
 }
 
 // AllowedOrigins returns the configured CORS origins, defaulting to the local
@@ -129,6 +139,9 @@ type ProviderConfig struct {
 func (c *Config) Validate() error {
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server port must be between 1 and 65535")
+	}
+	if host := strings.TrimSpace(c.Server.Host); host != "" && host != "localhost" && net.ParseIP(host) == nil {
+		return fmt.Errorf("server host must be empty, localhost or an IP address, got %q", host)
 	}
 	if c.Database.ConnStr == "" {
 		return fmt.Errorf("database connection string cannot be empty")

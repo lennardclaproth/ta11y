@@ -232,12 +232,12 @@ func (b *Builder) withSplitEvents(ctx context.Context, transactions []Transactio
 
 	var events []Transaction
 	for identity, inst := range instruments {
-		listings, _, err := b.mdq.SearchListings(ctx, identity, 1, 0)
-		if err != nil || len(listings) == 0 {
+		listing, err := b.mdq.ListingByIdentity(ctx, normalizedID(inst.isin), normalizedID(inst.symbol))
+		if err != nil || listing == nil {
 			// No listing means no price history and therefore no splits to replay.
 			continue
 		}
-		splits, err := b.mdq.SplitsForListing(ctx, listings[0].ID)
+		splits, err := b.mdq.SplitsForListing(ctx, listing.ID)
 		if err != nil {
 			return nil, fmt.Errorf("load splits for %s: %w", identity, err)
 		}
@@ -292,14 +292,16 @@ func (b *Builder) buildPositions(ctx context.Context, accID uuid.UUID) ([]*Posit
 			allPositions = append(allPositions, pos)
 		}
 	}
-	// Best-effort listing mapping: attach ListingID when possible, but never drop positions.
+	// Listing mapping runs on every rebuild, so a listing added after an import is
+	// picked up the next time Rebuild portfolio runs. The match is exact (ISIN, or the
+	// symbol when there is no ISIN): no match leaves the position unlinked rather than
+	// attaching it to a near-neighbour, and an unlinked position still counts as a
+	// position — it just contributes no market value.
 	posList := make([]*Position, 0, len(allPositions))
 	for _, pos := range allPositions {
-		id, err := pos.Identity()
-		if err == nil {
-			if listing, _, err := b.mdq.SearchListings(ctx, id, 1, 0); err == nil && len(listing) > 0 {
-				pos.ListingID = &listing[0].ID
-			}
+		listing, err := b.mdq.ListingByIdentity(ctx, normalizedID(pos.ISIN), normalizedID(pos.Symbol))
+		if err == nil && listing != nil {
+			pos.ListingID = &listing.ID
 		}
 		posList = append(posList, pos)
 	}

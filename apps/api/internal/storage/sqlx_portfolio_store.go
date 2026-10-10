@@ -221,6 +221,25 @@ func (s *SQLXPortfolioStore) TransactionsForAccount(ctx context.Context, accID u
 	return txs, nil
 }
 
+// ImportedProducts returns the distinct instruments one import contributed, with how
+// many of its rows mentioned each. Cash rows are excluded: they identify no
+// instrument, so they can never be missing a listing.
+func (s *SQLXPortfolioStore) ImportedProducts(ctx context.Context, accountID, importID uuid.UUID) ([]portfolio.ImportedProduct, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT MAX(description) AS name, isin, symbol, COUNT(1) AS transactions
+		FROM %s
+		WHERE account_id = ? AND import_id = ? AND type <> ?
+			AND (isin IS NOT NULL OR symbol IS NOT NULL)
+		GROUP BY isin, symbol
+		ORDER BY name ASC
+	`, s.transactionsTable))
+	products := make([]portfolio.ImportedProduct, 0)
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &products, query, accountID, importID, portfolio.TxCash); err != nil {
+		return nil, fmt.Errorf("portfolio store: imported products: %w", err)
+	}
+	return products, nil
+}
+
 // TransactionsForPosition returns a position's transactions on or after the optional
 // from date, ordered by occurrence.
 func (s *SQLXPortfolioStore) TransactionsForPosition(ctx context.Context, positionID uuid.UUID, from *time.Time) ([]portfolio.Transaction, error) {

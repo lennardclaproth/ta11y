@@ -89,3 +89,39 @@ func TestValidate_AcceptsValidConfig(t *testing.T) {
 		t.Fatalf("expected valid config to pass validation, got %v", err)
 	}
 }
+
+func TestServerAddr(t *testing.T) {
+	cases := []struct {
+		host string
+		want string
+	}{
+		{host: "", want: ":6060"},
+		{host: "  ", want: ":6060"},
+		{host: "127.0.0.1", want: "127.0.0.1:6060"},
+		{host: "localhost", want: "localhost:6060"},
+		{host: "::1", want: "[::1]:6060"},
+	}
+	for _, tc := range cases {
+		got := Server{Host: tc.host, Port: 6060}.Addr()
+		if got != tc.want {
+			t.Errorf("Addr() with host %q = %q, want %q", tc.host, got, tc.want)
+		}
+	}
+}
+
+func TestValidate_ServerHost(t *testing.T) {
+	for _, host := range []string{"", "127.0.0.1", "0.0.0.0", "::1", "localhost"} {
+		cfg := validConfigForValidation()
+		cfg.Server.Host = host
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("host %q: expected valid, got %v", host, err)
+		}
+	}
+	for _, host := range []string{"example.com", "127.0.0.1:6060", "not a host"} {
+		cfg := validConfigForValidation()
+		cfg.Server.Host = host
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("host %q: expected a validation error", host)
+		}
+	}
+}

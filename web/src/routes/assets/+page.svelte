@@ -13,6 +13,7 @@
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import {
@@ -23,6 +24,7 @@
 	} from '$lib/services/assets';
 	import { goto } from '$app/navigation';
 	import { accountStore } from '$lib/stores/account.svelte';
+	import { periodStore } from '$lib/stores/period.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { donutRamps } from '$lib/charts/theme';
@@ -37,8 +39,9 @@
 	let details = $state<AssetClassDetails | null>(null);
 	let detailsLoading = $state(false);
 
-	let from = $state('');
-	let to = $state('');
+	// One period for the whole app, chosen in the account overview.
+	const from = $derived(periodStore.from);
+	const to = $derived(periodStore.to);
 
 	let createOpen = $state(false);
 	let className = $state('');
@@ -153,19 +156,10 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Assets"
-			showDateRange
-			dateFrom={from || null}
-			dateTo={to || null}
-			onDateChange={(r) => {
-				from = r.from ?? '';
-				to = r.to ?? '';
-			}}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Assets">
 		{#snippet analytics()}
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
 				<AnalyticsCard title="Total worth" class="lg:col-span-2">
@@ -196,16 +190,23 @@
 			</div>
 		{/snippet}
 
+		<!-- The asset-class table has never had a search, and this change does not give it one. -->
 		<LedgerToolbar
 			title="Asset classes"
-			actionLabel="Add asset class"
-			onAdd={() => (createOpen = true)}
-		/>
+			meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
+		>
+			{#snippet actions()}
+				<Button shape="default" onclick={() => (createOpen = true)}>
+					<Icon icon="heroicons:plus" />
+					Add asset class
+				</Button>
+			{/snippet}
+		</LedgerToolbar>
 		<DataTable
 			rows={classes}
 			{loading}
 			{error}
-			emptyText="No asset classes"
+			emptyText="No asset classes yet. Add one to start tracking what you own."
 			onRowClick={openClass}
 			columns={[
 				{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
