@@ -20,14 +20,17 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/pressly/goose/v3"
 
 	"github.com/lennardclaproth/ta11y/internal/storage"
@@ -267,12 +270,97 @@ func newSQLiteDB(t *testing.T) *storage.DB {
 	return db
 }
 
+// postgresDSNEnv names the environment variable that points the harness at a
+// Postgres server. It takes the same URL DSN as the server's
+// database.connection_string (and the Makefile's DATABASE_URL); the database it
+// names only has to exist and allow CREATE DATABASE, because every test gets a
+// throwaway database of its own.
+const postgresDSNEnv = "TA11Y_TEST_POSTGRES_DSN"
+
+// postgresDBSeq keeps the throwaway database names apart within one run.
+var postgresDBSeq atomic.Uint64
+
+// newPostgresDB creates a throwaway database on the server dsn points at,
+// applies the real embedded Postgres migrations, and drops it again on cleanup.
+// It is the Postgres half of newSQLiteDB: same storage.NewDB constructor, same
+// embedded migration SQL, so a store sees the dialect it runs against in
+// production rather than a stand-in.
+func newPostgresDB(t *testing.T, dsn string) *storage.DB {
+	t.Helper()
+
+	// A database per test, not a shared one: the SQLite half hands every test an
+	// empty schema, and a store test that had to clean up after itself would be
+	// testing something else.
+	name := fmt.Sprintf("ta11y_test_%d_%d", os.Getpid(), postgresDBSeq.Add(1))
+
+	admin, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		t.Fatalf("connect to %s: %v", postgresDSNEnv, err)
+	}
+	if _, err := admin.Exec("CREATE DATABASE " + name); err != nil {
+		_ = admin.Close()
+		t.Fatalf("create test database %s: %v", name, err)
+	}
+	if err := admin.Close(); err != nil {
+		t.Fatalf("close admin connection: %v", err)
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse %s: %v", postgresDSNEnv, err)
+	}
+	u.Path = "/" + name
+	db := storage.NewDB(u.String(), storage.Postgres)
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close test db: %v", err)
+		}
+		dropTestDatabase(t, dsn, name)
+	})
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db.DB.DB, migrations.GetFS(storage.Postgres))
+	if err != nil {
+		t.Fatalf("create migration provider: %v", err)
+	}
+	if _, err := provider.Up(context.Background()); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	return db
+}
+
+func dropTestDatabase(t *testing.T, dsn, name string) {
+	t.Helper()
+
+	admin, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		t.Errorf("connect to drop test database %s: %v", name, err)
+		return
+	}
+	defer func() {
+		if err := admin.Close(); err != nil {
+			t.Errorf("close admin connection: %v", err)
+		}
+	}()
+	// FORCE because a connection the pool had not closed yet would otherwise
+	// leave the database behind for the next run to trip over.
+	if _, err := admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)"); err != nil {
+		t.Errorf("drop test database %s: %v", name, err)
+	}
+}
+
 // eachDialect runs fn as a subtest against every database dialect the
 // environment can provide. SQLite always runs (in-process, no infra). Postgres
-// is the planned second dialect (see docs/TESTING.md); when added, register a
-// t.Run("postgres", ...) here and these tests gain coverage with no change to
-// their bodies.
+// runs when TA11Y_TEST_POSTGRES_DSN points at a server, and skips loudly when it
+// does not, so a run that covered one dialect never reads as if it covered both
+// (see docs/TESTING.md).
 func eachDialect(t *testing.T, fn func(t *testing.T, db *storage.DB)) {
 	t.Helper()
 	t.Run("sqlite", func(t *testing.T) { fn(t, newSQLiteDB(t)) })
+	t.Run("postgres", func(t *testing.T) {
+		dsn := os.Getenv(postgresDSNEnv)
+		if dsn == "" {
+			t.Skipf("%s is not set; Postgres SQL is not covered by this run", postgresDSNEnv)
+		}
+		fn(t, newPostgresDB(t, dsn))
+	})
 }
