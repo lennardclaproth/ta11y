@@ -158,6 +158,127 @@ func TestApplyIgnoreRuleTouchesOnlyWhatItMay(t *testing.T) {
 	})
 }
 
+// Putting a row back by hand has to stick. The by-hand commands are what set
+// ignore_overridden, and skipping those rows is what makes a restore survive the next
+// import: if the flag ever stopped being written, nothing would fail — the rows would
+// just quietly leave the monthly totals again.
+func TestRestoringByHandKeepsTheRuleOffTheRow(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		accountID := seedCashflowAccount(t, db, "mine@example.com")
+		rule := seedIgnoreRule(t, db, accountID, "Credit card payment", "Credit card")
+		id := seedRuleTransaction(t, db, accountID, "Credit card payment", false, false, nil)
+
+		rules := storage.NewSQLXCashflowIgnoreRuleStore(db)
+		if ignored, err := rules.ApplyIgnoreRule(t.Context(), rule, nil); err != nil || ignored != 1 {
+			t.Fatalf("apply ignore rule: ignored=%d err=%v", ignored, err)
+		}
+
+		restored, err := storage.NewSQLXCashflowStore(db).UpdateIgnoredByIDs(t.Context(), accountID, []uuid.UUID{id}, false)
+		if err != nil {
+			t.Fatalf("restore by hand: %v", err)
+		}
+		if restored != 1 {
+			t.Fatalf("restored = %d, want 1", restored)
+		}
+
+		tx := fetchTransaction(t, db, accountID, id)
+		if tx.Ignored {
+			t.Fatal("the row is still ignored after being put back by hand")
+		}
+		if !tx.IgnoreOverridden {
+			t.Fatal("restoring by hand did not record that a person decided this")
+		}
+		// The attribution stays: the import review has to be able to say the rule caught
+		// the row and that it was put back.
+		if tx.IgnoredByRuleID == nil || *tx.IgnoredByRuleID != rule.ID {
+			t.Fatalf("restoring by hand lost the rule attribution, got %v", tx.IgnoredByRuleID)
+		}
+
+		again, err := rules.ApplyIgnoreRule(t.Context(), rule, nil)
+		if err != nil {
+			t.Fatalf("re-apply ignore rule: %v", err)
+		}
+		if again != 0 {
+			t.Fatalf("ignored = %d, want 0 -- the rule overruled a decision made by hand", again)
+		}
+		if fetchTransaction(t, db, accountID, id).Ignored {
+			t.Fatal("the rule ignored a row that was put back by hand")
+		}
+	})
+}
+
+// "Restore all" on the import review goes through the filter path rather than a list of
+// ids, so it has to record the same decision.
+func TestRestoringAWholeGroupByHandKeepsTheRuleOffItsRows(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		accountID := seedCashflowAccount(t, db, "mine@example.com")
+		rule := seedIgnoreRule(t, db, accountID, "Credit card payment", "Credit card")
+		importID := seedImport(t, db, accountID, "ING")
+
+		ids := make([]uuid.UUID, 0, 3)
+		for i := range 3 {
+			ids = append(ids, seedRuleTransaction(t, db, accountID, fmt.Sprintf("Credit card payment %d", i), false, false, &importID))
+		}
+
+		rules := storage.NewSQLXCashflowIgnoreRuleStore(db)
+		if ignored, err := rules.ApplyIgnoreRule(t.Context(), rule, &importID); err != nil || ignored != 3 {
+			t.Fatalf("apply ignore rule: ignored=%d err=%v", ignored, err)
+		}
+
+		restored, err := storage.NewSQLXCashflowStore(db).UpdateIgnoredByFilter(t.Context(), cashflow.TransactionFilters{
+			AccountID:       accountID,
+			ImportID:        &importID,
+			IgnoredByRuleID: &rule.ID,
+		}, false)
+		if err != nil {
+			t.Fatalf("restore the group by hand: %v", err)
+		}
+		if restored != 3 {
+			t.Fatalf("restored = %d, want the whole group", restored)
+		}
+		for _, id := range ids {
+			tx := fetchTransaction(t, db, accountID, id)
+			if tx.Ignored || !tx.IgnoreOverridden {
+				t.Fatalf("row %v: ignored=%v overridden=%v, want put back and recorded as decided by hand", id, tx.Ignored, tx.IgnoreOverridden)
+			}
+		}
+
+		again, err := rules.ApplyIgnoreRule(t.Context(), rule, &importID)
+		if err != nil {
+			t.Fatalf("re-apply ignore rule: %v", err)
+		}
+		if again != 0 {
+			t.Fatalf("ignored = %d, want 0 -- the rule ignored a group that was put back by hand", again)
+		}
+	})
+}
+
+// The mirror decision: ignoring a row yourself is yours, so the ledger stops crediting
+// the rule for it and no rule reconsiders it either.
+func TestIgnoringByHandTakesTheRuleOffTheRow(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		accountID := seedCashflowAccount(t, db, "mine@example.com")
+		rule := seedIgnoreRule(t, db, accountID, "Credit card payment", "Credit card")
+		id := seedRuleTransaction(t, db, accountID, "Credit card payment", false, false, nil)
+
+		rules := storage.NewSQLXCashflowIgnoreRuleStore(db)
+		if ignored, err := rules.ApplyIgnoreRule(t.Context(), rule, nil); err != nil || ignored != 1 {
+			t.Fatalf("apply ignore rule: ignored=%d err=%v", ignored, err)
+		}
+		if _, err := storage.NewSQLXCashflowStore(db).UpdateIgnoredByIDs(t.Context(), accountID, []uuid.UUID{id}, true); err != nil {
+			t.Fatalf("ignore by hand: %v", err)
+		}
+
+		tx := fetchTransaction(t, db, accountID, id)
+		if !tx.Ignored || !tx.IgnoreOverridden {
+			t.Fatalf("ignored=%v overridden=%v, want ignored and recorded as decided by hand", tx.Ignored, tx.IgnoreOverridden)
+		}
+		if tx.IgnoredByRuleID != nil {
+			t.Fatalf("the rule is still credited for a row a person ignored, got %v", tx.IgnoredByRuleID)
+		}
+	})
+}
+
 // CountIgnoreRuleTargets is the number the confirmation before "apply to existing" names,
 // so it has to agree with what applying actually does.
 func TestCountIgnoreRuleTargetsMatchesWhatApplyingDoes(t *testing.T) {
