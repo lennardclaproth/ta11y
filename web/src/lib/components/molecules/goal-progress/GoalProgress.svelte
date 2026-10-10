@@ -4,7 +4,7 @@
 	import ProgressBar from '$lib/components/atoms/progress-bar/ProgressBar.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import { sharePercent } from '$lib/api/wealthgoal';
-	import { goalProgressIntents, goalProgressScale } from './goal-progress.variants';
+	import { goalProgressIntents, goalProgressTrack } from './goal-progress.variants';
 	import type { ProgressBarSize } from '$lib/components/atoms/progress-bar/progress-bar.types';
 	import type { MonthStanding } from '$lib/api/types';
 
@@ -19,18 +19,18 @@
 	let { month, size = 'lg', caption = true, class: className = '' }: Props = $props();
 
 	const share = $derived(sharePercent(month));
-	// The track runs to half of your income, so the goal marker sits inside it and a month
-	// that overshot still reads as overshot.
-	const markerLeft = $derived(
-		`left: ${Math.min(100, (month.goal_percent / goalProgressScale) * 100)}%`
-	);
+	// The track grows with the goal, so the marker always sits inside it and a month that
+	// overshot still reads as overshot -- a fixed track would pin every goal above half of
+	// your income against the right edge, where missed and met look the same.
+	const track = $derived(goalProgressTrack(month.goal_percent));
+	const markerLeft = $derived(`left: ${(month.goal_percent / track) * 100}%`);
 </script>
 
 <div class={['min-w-0', className].filter(Boolean).join(' ')}>
 	<div class="relative">
 		<ProgressBar
-			value={Math.min(share, goalProgressScale)}
-			max={goalProgressScale}
+			value={Math.min(share, track)}
+			max={track}
 			{size}
 			intent={goalProgressIntents[month.result]}
 			ariaLabel="{share}% of marked income put towards wealth, goal {month.goal_percent}%"

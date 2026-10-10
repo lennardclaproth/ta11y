@@ -3,10 +3,19 @@ import type { ProgressBarIntent } from '$lib/components/atoms/progress-bar/progr
 import type { BadgeIntent } from '$lib/components/atoms/badge/badge.types';
 
 /**
- * The bar's track runs to half of your income rather than to 100%, so a goal of 30% sits
- * comfortably inside it and a month that put aside more than its goal still reads as such.
+ * The smallest track the bar uses: half of your income rather than 100%, so a goal of 30%
+ * sits comfortably inside it and a month that put aside more than its goal still reads as
+ * such. A larger goal grows the track instead — see `goalProgressTrack`.
  */
 export const goalProgressScale = 50;
+
+/**
+ * The track for a goal, half as long again as the goal itself so the marker keeps room to
+ * its right and an overshoot stays visible. Never past 100%: a share cannot exceed it.
+ */
+export function goalProgressTrack(goalPercent: number): number {
+	return Math.min(100, Math.max(goalProgressScale, Math.ceil(goalPercent * 1.5)));
+}
 
 /**
  * A missed month needs attention, but it is not a validation error, so it is amber rather

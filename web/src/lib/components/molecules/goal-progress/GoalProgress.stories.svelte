@@ -15,11 +15,15 @@
 		}
 	});
 
-	const month = (contributed: number, result: MonthStanding['result'] = 'met'): MonthStanding => ({
+	const month = (
+		contributed: number,
+		result: MonthStanding['result'] = 'met',
+		goalPercent = 30
+	): MonthStanding => ({
 		month: '2026-06-01',
 		income_cents: s(5000),
 		contributed_cents: s(contributed),
-		goal_percent: 30,
+		goal_percent: goalPercent,
 		result,
 		unassigned_count: 0
 	});
@@ -42,6 +46,15 @@
 <!-- The track runs to half of income, so a month that overshot still reads as overshot. -->
 <Story name="Overshot">
 	<GoalProgress month={month(2400)} />
+</Story>
+
+<!-- A goal past half of your income grows the track with it: these two must not look alike. -->
+<Story name="High goal, missed">
+	<GoalProgress month={month(2250, 'missed', 70)} />
+</Story>
+
+<Story name="High goal, met">
+	<GoalProgress month={month(3750, 'met', 70)} />
 </Story>
 
 <Story name="Compact, no caption">
