@@ -262,7 +262,9 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar />
+		<!-- No period picker: this page looks back over the whole history, so a period
+		     would be a control that visibly does nothing here. -->
+		<TopNavbar showPeriod={false} />
 	{/snippet}
 
 	<PageContentTemplate title="Recurring">

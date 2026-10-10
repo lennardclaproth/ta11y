@@ -21,7 +21,8 @@ top bar is navigation only. To the right of it sits your overview: the signed-in
 worth with its change over the selected period, one period choice, and sign out — open in the
 masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
 charts and the table of whichever page you are on and stays put when you change page; admin pages
-have no charts and no period. Actions that recompute a chart, such as rebuilding the portfolio,
+have no charts and no period, and Recurring looks back over your whole history, so it has none
+either. Actions that recompute a chart, such as rebuilding the portfolio,
 hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
 importing, acting on a selection — lives in the ledger header above the table.
 

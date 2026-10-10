@@ -149,6 +149,9 @@ All `protected` (session required; the account is never client-supplied).
   problem, not this one.
 - **Direction is not editable** after an item is created; it follows from the transactions
   that were linked. Renaming and changing the rhythm are.
+- **No period.** `GET /cashflow/recurring` takes no `from`/`to`: the amount history, the trend
+  and "next expected" are read over the whole history, so `/recurring` hides the masthead period
+  picker rather than showing one that does nothing.
 - **The overview is one read.** `GET /cashflow/recurring` returns every item of an account
   with every linked amount — fine for one account's ledger, not paginated.
 - **The duplicate detection at import is untouched.** An overlapping import can still add the
