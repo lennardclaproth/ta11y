@@ -62,8 +62,17 @@
 			isAdjusted ? draftName : suggestion.name,
 			isAdjusted ? (draftRhythm as RecurringRhythm) : suggestion.rhythm
 		);
-		adjusting = null;
 	}
+
+	// Confirming is asynchronous and can fail, and a failed suggestion stays in the
+	// list. Dropping the adjustment straight away would silently send the statement
+	// text the user just replaced on the next press, so it only clears once the
+	// suggestion is really gone.
+	$effect(() => {
+		if (adjusting && !suggestions.some((entry) => entry.match_key === adjusting)) {
+			adjusting = null;
+		}
+	});
 </script>
 
 <Drawer bind:open title="Suggestions from your history" width="max-w-lg">
