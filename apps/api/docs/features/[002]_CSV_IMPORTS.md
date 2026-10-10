@@ -134,7 +134,7 @@ erDiagram
         int total_rows
         int imported
         int failed
-        int auto_ignored "cashflow only - rows an ignore rule caught [033]"
+        int auto_ignored "cashflow only - rows an ignore rule caught [034]"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -289,7 +289,7 @@ processor returns `TotalRows = len(batch)` and `Failed = len(batch)` so the fail
 reflects the size.
 
 After its insert, the **cashflow** processor runs the account's enabled ignore rules
-([033]) against the rows *this* import inserted, and reports how many they caught as
+([034]) against the rows *this* import inserted, and reports how many they caught as
 `AutoIgnored`. Those rows are counted in `Imported` as well: they were imported, and then
 ignored. Nothing else about the lifecycle changes — the rules run before the import is
 marked completed, so `import.completed` already means the rules have run.

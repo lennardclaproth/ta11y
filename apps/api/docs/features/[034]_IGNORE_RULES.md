@@ -1,6 +1,6 @@
-# [033] Ignore rules
+# [034] Ignore rules
 
-> **Feature IDs:** 033 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 034 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/cashflow` · `transport/http/handlers/cashflow` · `internal/storage/sqlx_cashflow_ignore_rule_store.go` · `internal/importer/cashflow`
 >
@@ -125,7 +125,7 @@ erDiagram
 ```
 
 Physical names: Postgres `cashflow.ignore_rules`; SQLite `cashflow_ignore_rules`.
-Migration pair `20261010120000_cashflow_ignore_rules.sql`.
+Migration pair `20261010130000_cashflow_ignore_rules.sql`.
 
 **`ignore_overridden`** is the invariant the whole feature rests on: it records that a
 row's ignored state was decided by a person. Every by-hand ignore/restore sets it, and

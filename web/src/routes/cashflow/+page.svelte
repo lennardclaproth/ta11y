@@ -16,6 +16,7 @@
 	import { goto } from '$app/navigation';
 	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
+	import MarkRecurringDialog from '$lib/components/organisms/mark-recurring-dialog/MarkRecurringDialog.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
 		listCashflowTransactions,
@@ -28,6 +29,11 @@
 	} from '$lib/services/cashflow';
 	import { listIgnoreRules } from '$lib/services/ignoreRules';
 	import Switch from '$lib/components/atoms/switch/Switch.svelte';
+	import {
+		createRecurringItem,
+		getRecurringOverview,
+		linkRecurringTransactions
+	} from '$lib/services/recurring';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
@@ -51,9 +57,11 @@
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
 		IgnoreRule,
+		RecurringItem,
 		TagDistributionEntry,
 		Vendor
 	} from '$lib/api/types';
+	import type { MarkRecurringValue } from '$lib/components/organisms/mark-recurring-dialog/mark-recurring-dialog.types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 
 	const schema: QuerySchema = {
@@ -108,6 +116,11 @@
 	let createError = $state<string | null>(null);
 	let importOpen = $state(false);
 	let brokerageVendors = $state<Vendor[]>([]);
+
+	let markOpen = $state(false);
+	let marking = $state(false);
+	let markError = $state<string | null>(null);
+	let recurringItems = $state<RecurringItem[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -427,6 +440,66 @@
 		return trimmed.length >= 3 ? trimmed : values[0];
 	}
 
+	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
+
+	// The dialog offers "add to an existing item" first, so the items are read when it
+	// opens rather than on every page load: most visits never mark anything. They are read
+	// *before* opening, because the dialog picks its route once from the list it sees on
+	// opening — arriving late would point an account that already has items at "new".
+	async function openMark() {
+		markError = null;
+		try {
+			const overview = await getRecurringOverview();
+			recurringItems = [...overview.expenses, ...overview.income];
+		} catch {
+			// Starting a new item still works without the list, so this is not reported as a
+			// failure — the dialog simply offers only that route.
+			recurringItems = [];
+		}
+		markOpen = true;
+	}
+
+	async function handleMarkRecurring(value: MarkRecurringValue) {
+		const ids = selectedIds;
+		marking = true;
+		markError = null;
+		try {
+			if (value.mode === 'existing') {
+				await linkRecurringTransactions(value.itemId, { ids });
+			} else {
+				await createRecurringItem({
+					name: value.name,
+					direction: value.direction,
+					rhythm: value.rhythm,
+					ids
+				});
+			}
+			markOpen = false;
+			selectedIds = [];
+			toast.success(
+				value.mode === 'existing'
+					? `Linked ${ids.length} transactions`
+					: `${value.name} added, with ${ids.length} transactions`
+			);
+		} catch (err) {
+			markError = markRecurringMessage(err);
+		} finally {
+			marking = false;
+		}
+	}
+
+	// The refusals worth naming are the ones the reader can act on: a name already taken,
+	// or an item that was ended and no longer takes transactions.
+	function markRecurringMessage(err: unknown): string {
+		if (err instanceof ApiError && err.status === 409) {
+			return 'A recurring item with that name already exists. Pick another name, or add these to it.';
+		}
+		if (err instanceof ApiError && err.status === 422) {
+			return 'That item was ended, so it takes no new transactions.';
+		}
+		return 'Could not mark these as recurring. Try again.';
+	}
+
 	const tableMeta = $derived.by(() => {
 		if (loading) return 'Loading…';
 		if (error) return 'Could not load';
@@ -547,6 +620,10 @@
 						<Icon icon="heroicons:funnel" />
 						Make an ignore rule
 					</Button>
+					<Button variant="ruled" onclick={() => void openMark()}>
+						<Icon icon="heroicons:arrow-path-rounded-square" />
+						Mark as recurring
+					</Button>
 				{/if}
 				<Button variant="ruled" onclick={() => void openImport()}>
 					<Icon icon="heroicons:cloud-arrow-up" />
@@ -592,6 +669,15 @@
 	error={createError}
 />
 
+<MarkRecurringDialog
+	bind:open={markOpen}
+	selection={selectedRows}
+	items={recurringItems}
+	saving={marking}
+	error={markError}
+	onSubmit={handleMarkRecurring}
+/>
+
 <ImportDialog
 	bind:open={importOpen}
 	vendors={brokerageVendors}
@@ -603,6 +689,7 @@
 	onGoToPortfolio={() => void goto('/portfolio')}
 	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
 />
+
 {#snippet detailFields()}
 	{#if detailRow}
 		<div class="flex items-center justify-between gap-3 py-3">
