@@ -1,10 +1,19 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Panel from '$lib/components/atoms/panel/Panel.svelte';
+	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
+	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import { zClasses } from '$lib/styles/z-index';
 
 	type Props = {
+		/**
+		 * The page's own heading. It sits on the page rather than in the navigation bar, which
+		 * carries nothing but destinations.
+		 */
+		title?: string;
+		/** A short label beside the title, e.g. which kind of screen this is. */
+		titleMeta?: string;
 		/** Analytics section above the content (charts / KPIs); shrink-0. */
 		analytics?: Snippet;
 		/** Primary content; placed inside a flex-1 panel that owns its own scrolling. */
@@ -19,6 +28,8 @@
 	};
 
 	let {
+		title,
+		titleMeta,
 		analytics,
 		children,
 		showFab = false,
@@ -38,6 +49,15 @@
 		.filter(Boolean)
 		.join(' ')}
 >
+	{#if title}
+		<div class="flex shrink-0 flex-wrap items-baseline justify-between gap-2 pt-1">
+			<Heading level="h1" size="2xl" class="leading-none">{title}</Heading>
+			{#if titleMeta}
+				<Text as="span" size="xs" tone="muted" class="tracking-wide uppercase">{titleMeta}</Text>
+			{/if}
+		</div>
+	{/if}
+
 	{#if analytics}
 		<div class="shrink-0">{@render analytics()}</div>
 	{/if}

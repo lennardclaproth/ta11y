@@ -8,8 +8,9 @@
 	import ListingForm from '$lib/components/organisms/listing-form/ListingForm.svelte';
 	import ListingEditForm from '$lib/components/organisms/listing-form/ListingEditForm.svelte';
 	import ProviderCatalogueDrawer from '$lib/components/organisms/provider-catalogue-drawer/ProviderCatalogueDrawer.svelte';
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
-	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import {
 		listListings,
 		createListing as createListingService,
@@ -113,33 +114,33 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Listings" />
+		<TopNavbar showPeriod={false} />
 	{/snippet}
 
-	<PageContentTemplate>
-		<div
-			class="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-4"
+	<PageContentTemplate title="Listings" titleMeta="Reference data">
+		<LedgerToolbar
+			title="Market listings"
+			meta={loading
+				? 'Loading…'
+				: `${visibleListings.length} ${visibleListings.length === 1 ? 'listing' : 'listings'}`}
+			description="Manage instruments used in your portfolio and price history."
+			showSearch
+			searchValue={filter}
+			onSearch={(q) => (filter = q)}
+			searchPlaceholder="Search listings…"
+			searchAriaLabel="Search listings"
 		>
-			<div>
-				<h2 class="text-2xl">Market listings</h2>
-				<p class="mt-1 text-sm text-slate-600">
-					Manage instruments used in your portfolio and price history.
-				</p>
-			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<div class="w-56">
-					<SearchInput
-						bind:value={filter}
-						placeholder="Filter listings…"
-						ariaLabel="Filter listings"
-					/>
-				</div>
-				<Button variant="outline" intent="secondary" onclick={() => (catalogueOpen = true)}>
+			{#snippet actions()}
+				<Button variant="ruled" onclick={() => (catalogueOpen = true)}>
+					<Icon icon="heroicons:book-open" />
 					Browse catalogue
 				</Button>
-				<Button disabled={loading} onclick={() => (createOpen = true)}>Add listing</Button>
-			</div>
-		</div>
+				<Button shape="default" disabled={loading} onclick={() => (createOpen = true)}>
+					<Icon icon="heroicons:plus" />
+					Add listing
+				</Button>
+			{/snippet}
+		</LedgerToolbar>
 		{#if error}
 			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">
 				<p class="text-sm text-red-700">{error}. Check your connection and try again.</p>
@@ -152,7 +153,7 @@
 			emptyText={error
 				? 'Listings are unavailable. Retry loading above.'
 				: filter.trim()
-					? `No listings match "${filter.trim()}". Try Browse catalogue to add one.`
+					? `No listings match “${filter.trim()}”. Try Browse catalogue to add one.`
 					: 'No listings yet. Add your first listing to get started.'}
 			columns={[
 				{ key: 'symbol', header: 'Symbol', value: (r: Listing) => r.symbol },
