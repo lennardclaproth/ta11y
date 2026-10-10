@@ -196,12 +196,24 @@
 	}
 
 	/**
+	 * A search the user asked for. The outcome box reports one adopted batch, so it is dropped
+	 * here and not in `searchLocal`: `adoptSelection` calls that itself, right after filling the
+	 * box, to bring the adopted rows back marked as tracked.
+	 */
+	function startSearch() {
+		if (!query.trim()) return;
+		outcomes = [];
+		void searchLocal(0);
+	}
+
+	/**
 	 * Asks the provider directly, which costs one request. The local cache can never
 	 * be known to be complete for a query it has not seen, so this is a deliberate
 	 * action rather than an automatic fallback.
 	 */
 	async function askProvider() {
 		if (!query.trim()) return;
+		outcomes = [];
 		askingProvider = true;
 		error = null;
 		try {
@@ -356,10 +368,10 @@
 					bind:value={query}
 					placeholder="Symbol, name or ISIN…"
 					ariaLabel="Search the provider catalogue"
-					onSearch={() => searchLocal(0)}
+					onSearch={startSearch}
 				/>
 			</div>
-			<Button disabled={!query.trim() || loading} onclick={() => searchLocal(0)}>Search</Button>
+			<Button disabled={!query.trim() || loading} onclick={startSearch}>Search</Button>
 			<Button
 				variant="outline"
 				intent="secondary"
@@ -384,7 +396,8 @@
 				class="space-y-1 rounded-lg border border-slate-200 bg-taupe-50 p-3 text-sm"
 			>
 				<!-- The band above announces the adoption, but it can be dismissed and a later resync
-				     replaces it, so this box keeps the record of what the batch did. -->
+				     replaces it, so this box keeps the record of what the batch did — for as long as
+				     the rows it describes are the ones on screen. -->
 				{#if addedCount > 0}
 					<p class="text-slate-800">Added {addedCount} listing{addedCount === 1 ? '' : 's'}.</p>
 				{/if}
