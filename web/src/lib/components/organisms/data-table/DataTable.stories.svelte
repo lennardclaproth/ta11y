@@ -64,3 +64,15 @@
 		<DataTable rows={[]} {columns} error="Failed to load rows" />
 	</div>
 </Story>
+
+<!-- A failed load replaces the table: the recovery action sits in the band, and the column headers,
+     the empty line and the footer are all absent. -->
+<Story name="Error with retry" asChild>
+	<div class="h-80 rounded-2xl border border-slate-200 bg-white">
+		<DataTable rows={[]} {columns} error="Failed to load rows" onRetry={() => {}}>
+			{#snippet footer()}
+				<div class="px-3 py-2 text-sm">Footer that must not render</div>
+			{/snippet}
+		</DataTable>
+	</div>
+</Story>
