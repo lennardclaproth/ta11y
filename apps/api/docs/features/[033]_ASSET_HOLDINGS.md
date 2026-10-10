@@ -123,6 +123,14 @@ write side) and `assets.snapshots.rebuilt`.
 - **No costs, interest, staking income or realized profit**, and no price alerts.
 - **The derived rebuild is per account and whole-history.** It rewrites every derived mutation
   for the account on each request rather than updating the days that changed.
+- **Adoption is not atomic with the item.** `Quotes.Track` creates the listing before the
+  transaction that stores the item and its first purchase, so a failure inside that transaction
+  leaves an unreferenced listing behind. Listings are global and meant to be reused by the next
+  adopter, so the row is idle rather than wrong.
+- **First-time adoption of a symbol races.** `Track` reads the listing and creates it if absent
+  without a lock; two accounts adopting the same instrument at the same instant can both miss,
+  and the loser's `ErrListingAlreadyExists` surfaces as a 500 instead of re-reading the winner's
+  listing.
 - **Listing deletion is not guarded.** `items.listing_id` carries no foreign key (listings are
   global reference data, items are account data), so a deleted listing leaves holdings valued at
   what was paid, which the read side reports as a missing symbol rather than hiding.

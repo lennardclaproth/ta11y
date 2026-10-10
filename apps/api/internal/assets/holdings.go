@@ -173,6 +173,15 @@ func planHoldingMutations(
 		return plan
 	}
 
+	// The day range spans the whole account, because a class total has to be known for every
+	// day any item in it moved. An individual item's history still starts at its own first
+	// purchase: writing it from the account's earliest day would back-date a holding bought
+	// last week with years of zero-worth rows, and read back as a flat line before it existed.
+	firstDay := make(map[uuid.UUID]*time.Time, len(holdings))
+	for _, holding := range holdings {
+		firstDay[holding.ID] = earliestDay(map[uuid.UUID][]*Purchase{holding.ID: byAsset[holding.ID]})
+	}
+
 	manualTotals := manualTotalsByClassAndDay(manual)
 	manualCarried := make(map[uuid.UUID]money.Price, len(manualTotals))
 	lastPrice := make(map[uuid.UUID]money.Price, len(holdings))
@@ -204,6 +213,9 @@ func planHoldingMutations(
 		}
 
 		for _, holding := range holdings {
+			if start := firstDay[holding.ID]; start == nil || day.Before(*start) {
+				continue
+			}
 			worth := worthToday[holding.ID]
 			plan.mutations = append(plan.mutations, &Mutation{
 				ID:              uuid.New(),

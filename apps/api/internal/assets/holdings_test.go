@@ -94,6 +94,46 @@ func TestPlanHoldingMutationsCarriesManualItemsInTheClassTotal(t *testing.T) {
 	}
 }
 
+// TestPlanHoldingMutationsStartEachHoldingAtItsOwnFirstPurchase guards against a
+// holding bought later being back-dated to the account's earliest purchase: those
+// days are not zero worth, they are days the item did not exist.
+func TestPlanHoldingMutationsStartEachHoldingAtItsOwnFirstPurchase(t *testing.T) {
+	accID, classID := uuid.New(), uuid.New()
+	oldID, newID := uuid.New(), uuid.New()
+	listingID := uuid.New()
+	older := &Asset{ID: oldID, ClassID: classID, AccountID: accID, ListingID: &listingID}
+	newer := &Asset{ID: newID, ClassID: classID, AccountID: accID, ListingID: &listingID}
+
+	purchases := []*Purchase{
+		{AccountID: accID, AssetID: oldID, PurchasedOn: day(t, "2026-01-01"), Quantity: 1, UnitPrice: money.Price(10_00)},
+		{AccountID: accID, AssetID: newID, PurchasedOn: day(t, "2026-01-03"), Quantity: 1, UnitPrice: money.Price(50_00)},
+	}
+	prices := map[uuid.UUID]map[string]money.Price{
+		oldID: {"2026-01-01": money.Price(10_00)},
+		newID: {"2026-01-03": money.Price(50_00)},
+	}
+
+	plan := planHoldingMutations(accID, []*Asset{older, newer}, purchases, nil, prices, day(t, "2026-01-03"))
+
+	days := map[uuid.UUID][]string{}
+	for _, mutation := range plan.mutations {
+		days[mutation.AssetID] = append(days[mutation.AssetID], dayKey(mutation.EffectiveDate))
+	}
+	if got := len(days[oldID]); got != 3 {
+		t.Errorf("expected the older item to span all three days, got %d: %v", got, days[oldID])
+	}
+	if got := days[newID]; len(got) != 1 || got[0] != "2026-01-03" {
+		t.Errorf("expected the newer item to start on its own first purchase, got %v", got)
+	}
+
+	// The class total still has to account for both on the day they overlap.
+	for _, mutation := range plan.mutations {
+		if dayKey(mutation.EffectiveDate) == "2026-01-03" && mutation.ClassTotalWorth != money.Price(60_00) {
+			t.Errorf("expected a class total of 60.00 on the overlapping day, got %s", mutation.ClassTotalWorth)
+		}
+	}
+}
+
 // TestPlanHoldingMutationsWithoutPurchases verifies there is nothing to derive
 // before the first purchase, so an item linked today writes no history.
 func TestPlanHoldingMutationsWithoutPurchases(t *testing.T) {
