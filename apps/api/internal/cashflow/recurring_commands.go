@@ -13,8 +13,14 @@ import (
 
 // RecurringCommands exposes the write side of recurring items.
 type RecurringCommands struct {
-	cs RecurringCommandStore
-	qs RecurringQueryStore
+	cs  RecurringCommandStore
+	qs  RecurringQueryStore
+	uow RecurringUnitOfWork
+}
+
+// RecurringUnitOfWork runs a function within a single database transaction.
+type RecurringUnitOfWork interface {
+	Do(ctx context.Context, fn func(txCtx context.Context) error) error
 }
 
 // RecurringCommandStore persists recurring items, their links and dismissals.
@@ -28,8 +34,8 @@ type RecurringCommandStore interface {
 }
 
 // NewRecurringCommands creates the recurring write-side use cases.
-func NewRecurringCommands(cs RecurringCommandStore, qs RecurringQueryStore) *RecurringCommands {
-	return &RecurringCommands{cs: cs, qs: qs}
+func NewRecurringCommands(cs RecurringCommandStore, qs RecurringQueryStore, uow RecurringUnitOfWork) *RecurringCommands {
+	return &RecurringCommands{cs: cs, qs: qs, uow: uow}
 }
 
 // CreateRecurringInput starts a new recurring item from transactions the user pointed at.
@@ -61,13 +67,25 @@ func (c *RecurringCommands) Create(ctx context.Context, accountID uuid.UUID, inp
 	if err != nil {
 		return nil, fmt.Errorf("create recurring item: %w", err)
 	}
-	if err := c.cs.CreateRecurringItem(ctx, item); err != nil {
+	if err := c.createLinked(ctx, item, input.TransactionIDs); err != nil {
 		return nil, fmt.Errorf("create recurring item: %w", err)
 	}
-	if _, err := c.cs.LinkTransactions(ctx, item.ID, input.TransactionIDs); err != nil {
-		return nil, fmt.Errorf("create recurring item: link transactions: %w", err)
-	}
 	return item, nil
+}
+
+// createLinked writes an item and its first links together or not at all. An item
+// that lost its links can neither be removed nor linked to again, and it keeps its
+// counterparty from ever being suggested, so it must not outlive a failed link.
+func (c *RecurringCommands) createLinked(ctx context.Context, item *RecurringItem, transactionIDs []uuid.UUID) error {
+	return c.uow.Do(ctx, func(txCtx context.Context) error {
+		if err := c.cs.CreateRecurringItem(txCtx, item); err != nil {
+			return err
+		}
+		if _, err := c.cs.LinkTransactions(txCtx, item.ID, transactionIDs); err != nil {
+			return fmt.Errorf("link transactions: %w", err)
+		}
+		return nil
+	})
 }
 
 // UpdateRecurringInput renames a recurring item or changes how often it is expected.
@@ -216,11 +234,8 @@ func (c *RecurringCommands) ConfirmSuggestion(ctx context.Context, accountID uui
 	if err != nil {
 		return nil, fmt.Errorf("confirm recurring suggestion: %w", err)
 	}
-	if err := c.cs.CreateRecurringItem(ctx, item); err != nil {
+	if err := c.createLinked(ctx, item, ids); err != nil {
 		return nil, fmt.Errorf("confirm recurring suggestion: %w", err)
-	}
-	if _, err := c.cs.LinkTransactions(ctx, item.ID, ids); err != nil {
-		return nil, fmt.Errorf("confirm recurring suggestion: link transactions: %w", err)
 	}
 	return item, nil
 }

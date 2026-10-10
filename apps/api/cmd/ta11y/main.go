@@ -234,7 +234,7 @@ func buildApplication(
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, accountQueries)
 	cashflowQueries := cashflow.NewQueries(cashflowStore)
-	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore)
+	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore, recurringStore)
 	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)

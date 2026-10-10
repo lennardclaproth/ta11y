@@ -21,6 +21,9 @@ type recurringStore struct {
 	transactions map[uuid.UUID]*Transaction
 
 	linkedTo map[uuid.UUID][]uuid.UUID
+
+	// linkErr makes linking fail, so a test can see what survives a half-written item.
+	linkErr error
 }
 
 func newRecurringStore() *recurringStore {
@@ -56,8 +59,28 @@ func (s *recurringStore) EndRecurringItem(_ context.Context, _, id uuid.UUID, fr
 }
 
 func (s *recurringStore) LinkTransactions(_ context.Context, itemID uuid.UUID, ids []uuid.UUID) (int, error) {
+	if s.linkErr != nil {
+		return 0, s.linkErr
+	}
 	s.linkedTo[itemID] = append(s.linkedTo[itemID], ids...)
 	return len(ids), nil
+}
+
+// Do runs fn and undoes the items and links it wrote when it fails, which is the
+// part of a real transaction these use cases depend on.
+func (s *recurringStore) Do(ctx context.Context, fn func(txCtx context.Context) error) error {
+	items := append([]*RecurringItem(nil), s.items...)
+	linked := make(map[uuid.UUID][]uuid.UUID, len(s.linkedTo))
+	for id, ids := range s.linkedTo {
+		linked[id] = append([]uuid.UUID(nil), ids...)
+	}
+
+	if err := fn(ctx); err != nil {
+		s.items = items
+		s.linkedTo = linked
+		return err
+	}
+	return nil
 }
 
 func (s *recurringStore) UnlinkTransaction(_ context.Context, _, _, _ uuid.UUID) (int, error) {
@@ -288,7 +311,7 @@ func TestEndedItemIsNoLongerExpected(t *testing.T) {
 	store.items = []*RecurringItem{item}
 	store.links = []RecurringLink{{ItemID: item.ID, TransactionID: uuid.New(), Date: day(2026, 7, 14), AmountCents: 800}}
 
-	commands := NewRecurringCommands(store, store)
+	commands := NewRecurringCommands(store, store, store)
 	if _, err := commands.End(context.Background(), accountID, item.ID, "2026-08"); err != nil {
 		t.Fatalf("end: %v", err)
 	}
@@ -310,7 +333,7 @@ func TestEndRejectsAMonthItCannotRead(t *testing.T) {
 	item := &RecurringItem{ID: uuid.New(), Name: "Magazine", Direction: CashOut, Rhythm: RhythmMonthly}
 	store.items = []*RecurringItem{item}
 
-	_, err := NewRecurringCommands(store, store).End(context.Background(), uuid.New(), item.ID, "August")
+	_, err := NewRecurringCommands(store, store, store).End(context.Background(), uuid.New(), item.ID, "August")
 	if !errors.Is(err, ErrRecurringInvalidMonth) {
 		t.Fatalf("expected ErrRecurringInvalidMonth, got %v", err)
 	}
@@ -335,7 +358,7 @@ func TestLinkImportedAttachesMatchingRowsToConfirmedItems(t *testing.T) {
 	ignored.Ignored = true
 	store.imported = []*Transaction{match, otherAmount, otherParty, ignored}
 
-	linked, err := NewRecurringCommands(store, store).LinkImported(context.Background(), accountID, importID)
+	linked, err := NewRecurringCommands(store, store, store).LinkImported(context.Background(), accountID, importID)
 	if err != nil {
 		t.Fatalf("link imported: %v", err)
 	}
@@ -360,7 +383,7 @@ func TestLinkImportedLeavesEndedItemsAlone(t *testing.T) {
 	store.links = []RecurringLink{{ItemID: item.ID, TransactionID: uuid.New(), Date: day(2026, 9, 18), AmountCents: 1200}}
 	store.imported = []*Transaction{recurringTransaction("PIXEL STREAM MONTHLY 1018", CashOut, 1200, day(2026, 10, 18))}
 
-	linked, err := NewRecurringCommands(store, store).LinkImported(context.Background(), accountID, uuid.New())
+	linked, err := NewRecurringCommands(store, store, store).LinkImported(context.Background(), accountID, uuid.New())
 	if err != nil {
 		t.Fatalf("link imported: %v", err)
 	}
@@ -379,7 +402,7 @@ func TestConfirmSuggestionLinksEveryTransactionItWasFoundIn(t *testing.T) {
 		recurringTransaction("HARBOUR MARKET", CashOut, 6200, day(2026, 9, 7)),
 	}
 
-	item, err := NewRecurringCommands(store, store).ConfirmSuggestion(context.Background(), accountID, ConfirmSuggestionInput{
+	item, err := NewRecurringCommands(store, store, store).ConfirmSuggestion(context.Background(), accountID, ConfirmSuggestionInput{
 		MatchKey:  MatchKeyFor("CLOUDLOCKER*SUB 0306"),
 		Name:      "Cloud Locker",
 		Direction: CashOut,
@@ -399,7 +422,7 @@ func TestConfirmSuggestionLinksEveryTransactionItWasFoundIn(t *testing.T) {
 func TestCreateRefusesTransactionsTheAccountDoesNotHold(t *testing.T) {
 	store := newRecurringStore()
 
-	_, err := NewRecurringCommands(store, store).Create(context.Background(), uuid.New(), CreateRecurringInput{
+	_, err := NewRecurringCommands(store, store, store).Create(context.Background(), uuid.New(), CreateRecurringInput{
 		Name:           "Pixel Stream",
 		Direction:      CashOut,
 		Rhythm:         RhythmMonthly,
@@ -419,7 +442,7 @@ func TestCreateTakesItsFingerprintFromTheOldestTransaction(t *testing.T) {
 	store.transactions[older.ID] = older
 	store.transactions[newer.ID] = newer
 
-	item, err := NewRecurringCommands(store, store).Create(context.Background(), accountID, CreateRecurringInput{
+	item, err := NewRecurringCommands(store, store, store).Create(context.Background(), accountID, CreateRecurringInput{
 		Name:           "Pixel Stream",
 		Direction:      CashOut,
 		Rhythm:         RhythmMonthly,
@@ -434,6 +457,53 @@ func TestCreateTakesItsFingerprintFromTheOldestTransaction(t *testing.T) {
 	if got := store.linkedTo[item.ID]; len(got) != 2 {
 		t.Fatalf("linked %d transactions, want both", len(got))
 	}
+}
+
+func TestCreatingAnItemLeavesNothingBehindWhenLinkingFails(t *testing.T) {
+	accountID := uuid.New()
+	transaction := recurringTransaction("PIXEL STREAM MONTHLY 0818", CashOut, 1200, day(2026, 8, 18))
+
+	t.Run("marked", func(t *testing.T) {
+		store := newRecurringStore()
+		store.transactions[transaction.ID] = transaction
+		store.linkErr = errors.New("link failed")
+
+		_, err := NewRecurringCommands(store, store, store).Create(context.Background(), accountID, CreateRecurringInput{
+			Name:           "Pixel Stream",
+			Direction:      CashOut,
+			Rhythm:         RhythmMonthly,
+			TransactionIDs: []uuid.UUID{transaction.ID},
+		})
+		if err == nil {
+			t.Fatal("expected create to fail when linking fails")
+		}
+		// An item without links can be neither removed nor linked to again.
+		if len(store.items) != 0 {
+			t.Fatalf("a failed link left %d items behind, want none", len(store.items))
+		}
+	})
+
+	t.Run("confirmed from a suggestion", func(t *testing.T) {
+		store := newRecurringStore()
+		store.unlinked = []*Transaction{
+			recurringTransaction("CLOUDLOCKER*SUB 0306", CashOut, 400, day(2026, 7, 6)),
+			recurringTransaction("CLOUDLOCKER*SUB 0406", CashOut, 400, day(2026, 8, 6)),
+		}
+		store.linkErr = errors.New("link failed")
+
+		_, err := NewRecurringCommands(store, store, store).ConfirmSuggestion(context.Background(), accountID, ConfirmSuggestionInput{
+			MatchKey:  MatchKeyFor("CLOUDLOCKER*SUB 0306"),
+			Name:      "Cloud Locker",
+			Direction: CashOut,
+			Rhythm:    RhythmMonthly,
+		})
+		if err == nil {
+			t.Fatal("expected confirm to fail when linking fails")
+		}
+		if len(store.items) != 0 {
+			t.Fatalf("a failed link left %d items behind, want none", len(store.items))
+		}
+	})
 }
 
 func TestMonthlySeriesLooksBackwardsOnly(t *testing.T) {

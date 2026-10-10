@@ -27,6 +27,7 @@ type SQLXRecurringStore struct {
 var (
 	_ cashflow.RecurringCommandStore = (*SQLXRecurringStore)(nil)
 	_ cashflow.RecurringQueryStore   = (*SQLXRecurringStore)(nil)
+	_ cashflow.RecurringUnitOfWork   = (*SQLXRecurringStore)(nil)
 )
 
 // NewSQLXRecurringStore creates a recurring-item store backed by SQLX.
@@ -38,6 +39,11 @@ func NewSQLXRecurringStore(db *DB) *SQLXRecurringStore {
 		dismissalsTable:  qualifyTableAs(db, SchemaCashflow, TableRecurringDismissals, "cashflow_recurring_dismissals"),
 		transactionTable: qualifyTable(db, SchemaCashflow, TableTransactions),
 	}
+}
+
+// Do runs fn within a single database transaction.
+func (s *SQLXRecurringStore) Do(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return s.db.WithTx(ctx, fn)
 }
 
 // CreateRecurringItem inserts a recurring item, mapping a name already in use to

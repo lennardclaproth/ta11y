@@ -48,6 +48,9 @@ func (s *recordingStore) GetRecurringItem(_ context.Context, _, _ uuid.UUID) (*c
 func (s *recordingStore) ListRecurringLinks(_ context.Context, _ uuid.UUID) ([]cashflow.RecurringLink, error) {
 	return s.links, nil
 }
+func (s *recordingStore) Do(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return fn(ctx)
+}
 func (s *recordingStore) ListUnlinkedTransactions(_ context.Context, _ uuid.UUID) ([]*cashflow.Transaction, error) {
 	return nil, nil
 }
@@ -90,7 +93,7 @@ func storeWithOneItem() (*recordingStore, *cashflow.Transaction) {
 
 func TestImportCompletedLinksCashflowRowsToConfirmedItems(t *testing.T) {
 	store, match := storeWithOneItem()
-	handler := NewImportCompletedHandler(cashflow.NewRecurringCommands(store, store), nil)
+	handler := NewImportCompletedHandler(cashflow.NewRecurringCommands(store, store, store), nil)
 
 	accID := uuid.New()
 	err := handler.Handle(context.Background(), importer.Completed{
@@ -109,7 +112,7 @@ func TestImportCompletedLinksCashflowRowsToConfirmedItems(t *testing.T) {
 
 func TestImportCompletedIgnoresOtherImportTypes(t *testing.T) {
 	store, _ := storeWithOneItem()
-	handler := NewImportCompletedHandler(cashflow.NewRecurringCommands(store, store), nil)
+	handler := NewImportCompletedHandler(cashflow.NewRecurringCommands(store, store, store), nil)
 
 	accID := uuid.New()
 	err := handler.Handle(context.Background(), importer.Completed{
