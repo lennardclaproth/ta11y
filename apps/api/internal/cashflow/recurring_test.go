@@ -544,6 +544,29 @@ func TestItemReadsOnlyItsOwnLinks(t *testing.T) {
 	}
 }
 
+func TestAmountToleranceIsAQuarterOfTheLastAmount(t *testing.T) {
+	cases := []struct {
+		name      string
+		candidate money.Price
+		reference money.Price
+		want      bool
+	}{
+		{"exactly a quarter above", 1250, 1000, true},
+		{"exactly a quarter below", 750, 1000, true},
+		{"just outside", 1251, 1000, false},
+		{"an unrelated payment", 9900, 1200, false},
+		{"nothing observed yet", 1200, 0, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := amountWithinTolerance(tc.candidate, tc.reference); got != tc.want {
+				t.Fatalf("amountWithinTolerance(%d, %d) = %v, want %v", tc.candidate, tc.reference, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMonthlySeriesLooksBackwardsOnly(t *testing.T) {
 	item := &RecurringItem{ID: uuid.New(), Name: "Fiber", Direction: CashOut, Rhythm: RhythmMonthly}
 	views := []RecurringItemView{{

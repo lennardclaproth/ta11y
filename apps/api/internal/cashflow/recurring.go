@@ -128,7 +128,11 @@ const recurringMatchKeyTokens = 4
 // variable bills move between charges, so an exact match would link almost
 // nothing; a quarter is wide enough for those and narrow enough that an unrelated
 // payment to the same counterparty is left in Cashflow for the user to decide on.
-const recurringAmountTolerance = 0.25
+// It is a fraction rather than a float so amounts stay out of floating point.
+const (
+	recurringAmountToleranceNum = 1
+	recurringAmountToleranceDen = 4
+)
 
 // recurringDescriptionNoise are the labels Dutch bank statements wrap the actual
 // counterparty in. They repeat on every row, so leaving them in would make every
@@ -202,9 +206,9 @@ func amountWithinTolerance(candidate, reference money.Price) bool {
 	if reference == 0 {
 		return candidate == 0
 	}
-	diff := float64(candidate) - float64(reference)
+	diff := candidate - reference
 	if diff < 0 {
 		diff = -diff
 	}
-	return diff/float64(reference) <= recurringAmountTolerance
+	return int64(diff)*recurringAmountToleranceDen <= int64(reference)*recurringAmountToleranceNum
 }
