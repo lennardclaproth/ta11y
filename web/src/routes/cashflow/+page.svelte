@@ -10,11 +10,15 @@
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CardRail from '$lib/components/molecules/card-rail/CardRail.svelte';
 	import { cardRailWidths } from '$lib/components/molecules/card-rail/card-rail.types';
 	import ActionMenu from '$lib/components/molecules/action-menu/ActionMenu.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
+	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
+	import { goto } from '$app/navigation';
+	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import RunningMonthCard from '$lib/components/organisms/wealth-goal-cards/RunningMonthCard.svelte';
 	import StreakCard from '$lib/components/organisms/wealth-goal-cards/StreakCard.svelte';
@@ -42,6 +46,7 @@
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
+	import { periodStore, type PeriodPreset } from '$lib/stores/period.svelte';
 	import type { CashflowTransactionFormValue } from '$lib/components/organisms/transaction-form-modal/transaction-form-modal.types';
 	import {
 		parseQuery,
@@ -63,6 +68,7 @@
 		MonthStanding,
 		TagDistributionEntry,
 		TransactionPurpose,
+		Vendor,
 		WealthGoalStandingResponse
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
@@ -91,8 +97,12 @@
 	let sortDirection = $state(((initial.sort_order as string) || 'desc') as SortDirection);
 	let limit = $state((initial.limit as number) || 25);
 	let offset = $state((initial.offset as number) || 0);
-	let from = $state((initial.from as string) || '');
-	let to = $state((initial.to as string) || '');
+
+	// The period is the app's, not this page's: a link that carries one seeds it, but only
+	// while nothing has chosen a period yet, so returning here never undoes a later choice.
+	periodStore.seed((initial.from as string) || null, (initial.to as string) || null);
+	const from = $derived(periodStore.from);
+	const to = $derived(periodStore.to);
 
 	let rows = $state<CashflowTransaction[]>([]);
 	let total = $state(0);
@@ -113,12 +123,15 @@
 	let goalSaving = $state(false);
 	let goalError = $state<string | null>(null);
 	// The month the standing sent you to, shown on the ledger header so the jump is undoable
-	// by eye.
+	// by eye. The period is app-wide, so the jump also remembers the period it replaced.
 	let scopedMonth = $state<string | null>(null);
+	let periodBeforeScope: { from: string; to: string; preset: PeriodPreset } | null = null;
 
 	let createOpen = $state(false);
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
+	let importOpen = $state(false);
+	let brokerageVendors = $state<Vendor[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -135,20 +148,21 @@
 	);
 
 	// An empty ledger and an empty result set are different situations, so they read differently.
+	// The period is app-wide and always set, so it is not what makes this a filtered view.
 	const filtering = $derived(
 		Boolean(
-			descriptionFilter ||
-			tagFilter.length > 0 ||
-			directionFilter ||
-			purposeFilter.length > 0 ||
-			from ||
-			to
+			descriptionFilter.trim() ||
+				tagFilter.length > 0 ||
+				directionFilter ||
+				purposeFilter.length > 0
 		)
 	);
 	const emptyText = $derived(
-		filtering
-			? 'No transactions match your filters'
-			: 'No transactions yet. Add one to start your ledger.'
+		descriptionFilter.trim()
+			? `No transactions match “${descriptionFilter.trim()}”. Clear the search to see them all.`
+			: filtering
+				? 'No transactions match your filters'
+				: 'No transactions yet. Add one to start your ledger.'
 	);
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
@@ -186,17 +200,25 @@
 		};
 	}
 
+	// A period change invalidates the load effect and then resets `offset`, so two queries can be
+	// in flight at once. Only the newest may write the table, or a slow response for the page you
+	// just left can land last and show rows the URL and the pagination control disagree with.
+	let requestId = 0;
+
 	async function load(query: CashflowTransactionsQuery) {
+		const id = ++requestId;
 		loading = true;
 		error = null;
 		try {
 			const result = await listCashflowTransactions(query);
+			if (id !== requestId) return;
 			rows = result.data;
 			total = result.pagination.total;
 		} catch {
+			if (id !== requestId) return;
 			error = 'Failed to load transactions';
 		} finally {
-			loading = false;
+			if (id === requestId) loading = false;
 		}
 	}
 
@@ -236,6 +258,21 @@
 		void from;
 		void to;
 		void loadAnalytics();
+	});
+
+	// Keep the URL in step with the period after it is changed elsewhere (the overview, or a
+	// drag on the chart). The first run is the page's own initial state, which the URL already
+	// holds -- rewriting it there would discard a deep-linked page offset.
+	let periodSynced = false;
+	$effect(() => {
+		void periodStore.from;
+		void periodStore.to;
+		if (!periodSynced) {
+			periodSynced = true;
+			return;
+		}
+		offset = 0;
+		syncUrl();
 	});
 
 	// The standing scores whole calendar months, so it deliberately ignores the page's date
@@ -284,11 +321,16 @@
 	}
 
 	// The standing sends you to exactly the transactions that keep a month incomplete: the
-	// month as the date range, and the Purpose filter on "not assigned".
+	// month as the period, and the Purpose filter on "not assigned". The period it replaces is
+	// remembered so "Show all transactions" puts it back.
 	function openUnassigned(month: MonthStanding) {
 		const range = monthRange(month.month);
-		from = range.from;
-		to = range.to;
+		periodBeforeScope = {
+			from: periodStore.from,
+			to: periodStore.to,
+			preset: periodStore.preset
+		};
+		periodStore.set({ from: range.from, to: range.to });
 		purposeFilter = ['none'];
 		scopedMonth = month.month;
 		selectedIds = [];
@@ -299,8 +341,10 @@
 	function clearScope() {
 		scopedMonth = null;
 		purposeFilter = [];
-		from = '';
-		to = '';
+		if (periodBeforeScope) {
+			periodStore.set(periodBeforeScope);
+			periodBeforeScope = null;
+		}
 		offset = 0;
 		syncUrl();
 	}
@@ -405,11 +449,9 @@
 		syncUrl();
 	}
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
-		from = rangeFrom;
-		to = rangeTo;
+		// Dragging the chart picks a period like any other, so it goes through the same store.
 		scopedMonth = null;
-		offset = 0;
-		syncUrl();
+		periodStore.set({ from: rangeFrom, to: rangeTo });
 		toast.info(`Filtered to ${rangeFrom} – ${rangeTo}`);
 	}
 
@@ -498,48 +540,53 @@
 		}
 	}
 
-	const navActions: MenuItem[] = [{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up' }];
+	const tableMeta = $derived.by(() => {
+		if (loading) return 'Loading…';
+		if (error) return 'Could not load';
+		const selected = selectedIds.length > 0 ? ` · ${selectedIds.length} selected` : '';
+		return `${total} ${total === 1 ? 'row' : 'rows'}${selected}`;
+	});
+
+	// Imports need a brokerage vendor, which the cashflow page does not otherwise load,
+	// so the list is fetched when the dialog is first opened rather than on every visit.
+	async function openImport() {
+		if (brokerageVendors.length === 0) {
+			try {
+				brokerageVendors = (await listVendors()).filter((v) => v.active && v.type === 'portfolio');
+			} catch {
+				// Leave the list empty; the dialog says there is no brokerage account.
+			}
+		}
+		importOpen = true;
+	}
 
 	const cardGroups = [
 		{ id: 'cashflow', label: 'Cashflow overview' },
 		{ id: 'goal', label: 'Wealth goal' }
 	];
 
-	// Below `sm` three bulk actions do not fit beside "n selected" in the footer, so the same
-	// actions live in one menu rather than wrapping off-screen.
-	const bulkMarkItems: MenuItem[] = $derived([
+	// Marking a purpose is an action on these rows, so it sits with the other row actions on the
+	// ledger header. Three of them beside Tag, Import and Add would crowd the rule, so the
+	// purposes themselves live in one menu.
+	const selectionMarkItems: MenuItem[] = $derived([
 		{ label: 'Mark as income', onSelect: () => handleMarkSelection('income') },
 		{ label: 'Mark as wealth', onSelect: () => handleMarkSelection('wealth') },
-		{ label: 'Clear purpose', onSelect: () => handleMarkSelection('') },
-		{ label: 'Tag', divider: true, onSelect: () => handleBulkTag() }
+		{ label: 'Clear purpose', onSelect: () => handleMarkSelection('') }
+	]);
+
+	const filterMarkItems: MenuItem[] = $derived([
+		{ label: 'Mark as income', onSelect: () => handleMarkFilter('income') },
+		{ label: 'Mark as wealth', onSelect: () => handleMarkFilter('wealth') },
+		{ label: 'Clear purpose', onSelect: () => handleMarkFilter('') }
 	]);
 </script>
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Cashflow"
-			showSearch
-			searchValue={descriptionFilter}
-			searchPlaceholder="Search description…"
-			onSearch={(q) => {
-				descriptionFilter = q;
-				onFilterChange();
-			}}
-			showDateRange
-			dateFrom={from || null}
-			dateTo={to || null}
-			onDateChange={(r) => {
-				from = r.from ?? '';
-				to = r.to ?? '';
-				offset = 0;
-				syncUrl();
-			}}
-			actions={navActions}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Cashflow">
 		{#snippet analytics()}
 			<!-- The band is one scrolling rail in two groups: the cashflow charts, and the wealth
 			     goal. The ledger underneath never changes, so you mark transactions and read the
@@ -649,28 +696,49 @@
 			</CardRail>
 		{/snippet}
 
+		<!-- Everything that acts on these rows lives here: searching, tagging or marking a
+		     selection, importing a statement and adding one. -->
 		<LedgerToolbar
 			title="Transactions"
-			actionLabel="Add transaction"
-			onAdd={() => (createOpen = true)}
+			meta={tableMeta}
+			showSearch
+			searchValue={descriptionFilter}
+			searchPlaceholder="Search description…"
+			searchAriaLabel="Search transactions by description"
+			onSearch={(q) => {
+				descriptionFilter = q;
+				onFilterChange();
+			}}
 		>
-			{#if scopedMonth}
-				<Badge intent="info" variant="soft" size="sm">{monthLabel(scopedMonth)}</Badge>
-				<Button size="sm" variant="ghost" intent="secondary" onclick={clearScope}>
-					Show all transactions
+			{#snippet before()}
+				{#if scopedMonth}
+					<Badge intent="info" variant="soft" size="sm">{monthLabel(scopedMonth)}</Badge>
+					<Button size="sm" variant="ghost" intent="secondary" onclick={clearScope}>
+						Show all transactions
+					</Button>
+				{/if}
+			{/snippet}
+			{#snippet actions()}
+				{#if selectedIds.length > 0}
+					<Button variant="ruled" onclick={handleBulkTag}>
+						<Icon icon="heroicons:tag" />
+						Tag {selectedIds.length} selected
+					</Button>
+					<ActionMenu label="Mark {selectedIds.length} selected…" items={selectionMarkItems} />
+				{/if}
+				<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
+				{#if !loading && !error && filtering && total > 0}
+					<ActionMenu label="Mark all {total} matches…" items={filterMarkItems} />
+				{/if}
+				<Button variant="ruled" onclick={() => void openImport()}>
+					<Icon icon="heroicons:cloud-arrow-up" />
+					Import CSV
 				</Button>
-			{/if}
-			<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
-			{#if !loading && !error && filtering && total > 0}
-				<ActionMenu
-					label="Mark all {total} matches…"
-					items={[
-						{ label: 'Mark as income', onSelect: () => handleMarkFilter('income') },
-						{ label: 'Mark as wealth', onSelect: () => handleMarkFilter('wealth') },
-						{ label: 'Clear purpose', onSelect: () => handleMarkFilter('') }
-					]}
-				/>
-			{/if}
+				<Button shape="default" onclick={() => (createOpen = true)}>
+					<Icon icon="heroicons:plus" />
+					Add transaction
+				</Button>
+			{/snippet}
 		</LedgerToolbar>
 		<CashflowTransactionsTable
 			{rows}
@@ -693,34 +761,7 @@
 			{onLimitChange}
 			{onFilterChange}
 			onRowClick={openDetail}
-		>
-			{#snippet bulkActions()}
-				<!-- The wrapper carries the breakpoint: `hidden` on the Button itself loses to the
-				     atom's own `inline-flex`, which Tailwind emits later in the sheet. -->
-				<span class="hidden items-center gap-2 sm:flex">
-					<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="success"
-						onclick={() => handleMarkSelection('income')}
-					>
-						Mark as income
-					</Button>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="info"
-						onclick={() => handleMarkSelection('wealth')}
-					>
-						Mark as wealth
-					</Button>
-				</span>
-				<span class="sm:hidden">
-					<ActionMenu items={bulkMarkItems} label="Mark…" placement="top-start" />
-				</span>
-			{/snippet}
-		</CashflowTransactionsTable>
+		/>
 	</PageContentTemplate>
 </AppShellTemplate>
 
@@ -741,6 +782,16 @@
 	onSave={handleSaveGoal}
 />
 
+<ImportDialog
+	bind:open={importOpen}
+	vendors={brokerageVendors}
+	onFinished={() => {
+		void load(currentQuery());
+		void loadAnalytics();
+		void loadStanding();
+	}}
+	onGoToPortfolio={() => void goto('/portfolio')}
+/>
 {#snippet detailFields()}
 	{#if detailRow}
 		<div class="flex items-center justify-between gap-3 py-3">

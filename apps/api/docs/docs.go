@@ -1869,6 +1869,62 @@ const docTemplate = `{
                 }
             }
         },
+        "/imports/{import_id}": {
+            "get": {
+                "description": "Returns an import's lifecycle state, row counters, and — once a portfolio import has completed — the products it brought in that no listing matches.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "imports"
+                ],
+                "summary": "Get import result",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Import UUID",
+                        "name": "import_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/importer.ImportResultResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/marketdata/catalogue/search": {
             "post": {
                 "description": "Run one metered provider ticker search, cache the results locally, and return the matching rows. Costs one provider request.",
@@ -4236,6 +4292,65 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "importer.ImportResultResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "duplicates": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "import_id": {
+                    "type": "string"
+                },
+                "imported": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_rows": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "unlinked_products": {
+                    "description": "UnlinkedProducts is empty until a portfolio import has completed.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/importer.UnlinkedProductResponse"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "importer.UnlinkedProductResponse": {
+            "type": "object",
+            "properties": {
+                "isin": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "integer"
                 }
             }
         },

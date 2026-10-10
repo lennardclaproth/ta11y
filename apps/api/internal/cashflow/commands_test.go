@@ -74,7 +74,7 @@ func manualTransaction(t *testing.T, accID uuid.UUID, source string, day time.Ti
 	if err != nil {
 		t.Fatalf("new price: %v", err)
 	}
-	tx, err := NewTransaction("Bike repair", "Entered late", source, "household", CashOut, amount, day, 7, nil, nil, accID)
+	tx, err := NewTransaction("Bike repair", "Entered late", source, "household", CashOut, amount, day, 7, 7, nil, nil, accID)
 	if err != nil {
 		t.Fatalf("new transaction: %v", err)
 	}

@@ -59,9 +59,15 @@ type TransactionData struct {
 	Date        time.Time
 	AccountType *AccountType
 	Tag         string
-	// RowNumber is the source row number (e.g. CSV line) and feeds the dedup
-	// checksum. Manual entries leave it zero and receive a generated row number.
+	// RowNumber is the source row number (e.g. CSV line). It records where the row
+	// came from; it deliberately no longer feeds the dedup checksum, because an
+	// overlapping export moves every row to a different line. Manual entries leave it
+	// zero and receive a generated row number.
 	RowNumber int
+	// DedupSeq distinguishes rows with identical content inside one import file and
+	// feeds the dedup checksum in RowNumber's place. Importers set it from
+	// importer.DedupSequencer; manual entries leave it zero.
+	DedupSeq int
 }
 
 // NewTransactionData validates and maps manual cashflow input into transaction data.
@@ -183,8 +189,9 @@ type CreateManyResult struct {
 // CreateMany validates a batch of cashflow transactions and persists them with a single
 // bulk insert, skipping and counting rows that already exist. It serves both manual
 // entry and CSV imports: manual callers pass a nil import ID and are capped at
-// manualCashflowBatchMaxSize; import callers pass the import ID and set RowNumber on
-// each TransactionData. Rows without a row number fall back to a generated manual one.
+// manualCashflowBatchMaxSize; import callers pass the import ID and set RowNumber and
+// DedupSeq on each TransactionData. Rows without a row number fall back to a generated
+// manual one, and rows without a sequence fall back to that row number.
 func (c *Commands) CreateMany(ctx context.Context, accID uuid.UUID, impID *uuid.UUID, transactions []TransactionData) (CreateManyResult, error) {
 	if len(transactions) == 0 {
 		return CreateManyResult{}, fmt.Errorf("create many: %w", ErrTransactionsRequired)
@@ -207,6 +214,12 @@ func (c *Commands) CreateMany(ctx context.Context, accID uuid.UUID, impID *uuid.
 		if rowNumber == 0 {
 			rowNumber = manualCashflowRowNumber(i)
 		}
+		// Manual entries carry no sequence; their row number kept rows apart before
+		// and still does, so nothing about manual deduplication changes.
+		dedupSeq := row.DedupSeq
+		if dedupSeq == 0 {
+			dedupSeq = rowNumber
+		}
 		tx, err := NewTransaction(
 			row.Description,
 			row.Note,
@@ -216,6 +229,7 @@ func (c *Commands) CreateMany(ctx context.Context, accID uuid.UUID, impID *uuid.
 			row.Amount,
 			row.Date,
 			rowNumber,
+			dedupSeq,
 			impID,
 			row.AccountType,
 			accID,

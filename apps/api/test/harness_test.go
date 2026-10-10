@@ -185,8 +185,11 @@ func freePort(t *testing.T) int {
 
 func writeConfig(t *testing.T, dir string, port int, dbPath, dataDir string) {
 	t.Helper()
+	// host 127.0.0.1: listen on loopback only, which is all the tests use. Listening on
+	// every interface makes Windows Firewall prompt for each freshly built binary.
 	const tmpl = `server:
   environment: test
+  host: 127.0.0.1
   port: %d
 database:
   type: sqlite3

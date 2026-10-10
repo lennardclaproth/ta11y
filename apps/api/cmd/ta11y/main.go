@@ -86,6 +86,7 @@ type application struct {
 	assetsSyncer   *assets.Syncer
 
 	importerCommands   *importer.Commands
+	importerQueries    *importer.Queries
 	marketDataCommands *marketdata.Commands
 	marketDataQueries  *marketdata.Queries
 	marketDataCatalog  *marketdata.Catalogue
@@ -167,7 +168,7 @@ func run() error {
 	router := apphttp.NewRouter()
 	registerRoutes(router, app)
 
-	server := apphttp.NewServer(fmt.Sprintf(":%d", cfg.Server.Port), router, log, cfg.Server.AllowedOrigins())
+	server := apphttp.NewServer(cfg.Server.Addr(), router, log, cfg.Server.AllowedOrigins())
 	return server.Run(ctx)
 }
 
@@ -237,7 +238,7 @@ func buildApplication(
 	cashflowQueries := cashflow.NewQueries(cashflowStore)
 	wealthGoalCommands := wealthgoal.NewCommands(wealthGoalStore)
 	wealthGoalQueries := wealthgoal.NewQueries(wealthGoalStore)
-	portfolioQueries := portfolio.NewQueries(portfolioStore)
+	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
 	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
 	assetsQueries := assets.NewQueries(assetsStore)
@@ -259,6 +260,7 @@ func buildApplication(
 		bus,
 		importer.WithProcessors(cashflowProcessor, portfolioProcessor, eodProcessor),
 	)
+	importerQueries := importer.NewQueries(importerStore, portfolioQueries)
 
 	return &application{
 		log: log,
@@ -294,6 +296,7 @@ func buildApplication(
 		assetsSyncer:   assetsSyncer,
 
 		importerCommands:   importerCommands,
+		importerQueries:    importerQueries,
 		marketDataCommands: marketDataCommands,
 		marketDataQueries:  marketDataQueries,
 		marketDataCatalog:  marketDataCatalog,
@@ -379,6 +382,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /imports/cashflow", importerhttp.ImportCashflow(app.log, app.importerCommands))
 	protected("POST /imports/portfolio", importerhttp.ImportPortfolio(app.log, app.importerCommands))
 	adminOnly("POST /imports/eod", importerhttp.ImportEOD(app.log, app.importerCommands))
+	protected("GET /imports/{import_id}", importerhttp.GetImport(app.log, app.importerQueries))
 
 	// Market data is shared reference data rather than account data: everyone reads it,
 	// only administrators curate it.
