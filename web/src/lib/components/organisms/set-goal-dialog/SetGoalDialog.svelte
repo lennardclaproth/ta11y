@@ -3,7 +3,6 @@
 	// and the same number in euros so the choice is readable in money as well as in percent.
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Slider from '$lib/components/atoms/slider/Slider.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
@@ -55,17 +54,19 @@
 			deposit or an asset purchase?
 		</Text>
 
-		{#if error}
-			<Alert intent="error">{error}</Alert>
-		{/if}
-
-		<FormField label="Share of income" id="goal-share" hint="A whole percentage between 0 and 100.">
+		<FormField
+			label="Share of income"
+			id="goal-share"
+			hint="A whole percentage between 0 and 100."
+			error={error ?? undefined}
+		>
 			{#snippet children(field)}
 				<div class="flex items-center gap-3">
 					<Input
 						id={field.id}
 						type="number"
 						{value}
+						intent={field.invalid ? 'error' : 'default'}
 						ariaDescribedby={field.describedby}
 						class="w-24"
 						oninput={(e) => setPercent(Number((e.currentTarget as HTMLInputElement).value))}
