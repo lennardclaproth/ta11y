@@ -82,6 +82,11 @@
 	let txPickerOpen = $state(false);
 	let txDescription = $state('');
 	let txError = $state<string | null>(null);
+	/**
+	 * Only a refusal by the server gets the heading: it states that a save was attempted and failed.
+	 * A validation message is said on its own, because nothing was sent yet.
+	 */
+	let txErrorTitle = $state<string | undefined>(undefined);
 	let creatingTx = $state(false);
 	let rebuilding = $state(false);
 	let importOpen = $state(false);
@@ -255,6 +260,7 @@
 		txPickerOpen = false;
 		txDescription = '';
 		txError = null;
+		txErrorTitle = undefined;
 		txOpen = true;
 		await loadVendors();
 	}
@@ -278,6 +284,8 @@
 
 	async function submitTx() {
 		// The dialog is open, so what is missing is said in the dialog rather than on a toast behind it.
+		// Nothing has been sent at this point, so these carry no "was not saved" heading.
+		txErrorTitle = undefined;
 		if (!vendorId || txAmount.trim() === '') {
 			txError = 'Vendor and amount are required';
 			return;
@@ -310,6 +318,7 @@
 		} catch (err) {
 			// The dialog stays open with the entry, so the refusal belongs in it, not on a toast as well.
 			txError = createMessage(err, txDate);
+			txErrorTitle = 'This transaction was not saved';
 		} finally {
 			creatingTx = false;
 		}
@@ -607,7 +616,7 @@
 			intent="error"
 			surface="inset"
 			gutter="dialog"
-			title="This transaction was not saved"
+			title={txErrorTitle}
 			class="-mx-5 -mt-4 mb-4"
 		>
 			{txError}
