@@ -35,6 +35,7 @@ func (fakeAssetsStore) CreateClass(_ context.Context, _ *assets.Class) error    
 func (fakeAssetsStore) UpdateClass(_ context.Context, _ *assets.Class) error       { return nil }
 func (fakeAssetsStore) CreateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
 func (fakeAssetsStore) DeleteClass(_ context.Context, _ uuid.UUID) error           { return nil }
+func (fakeAssetsStore) CreatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
 
 // TestCreateClassPublishesSnapshotsRebuildRequested verifies the constructor
 // wires the bus and that a mutation publishes the rebuild-requested event.
@@ -54,7 +55,7 @@ func TestCreateClassPublishesSnapshotsRebuildRequested(t *testing.T) {
 
 	// account.Queries is held by value on Commands; deref the constructed pointer.
 	aq := account.NewQueries(fakeAccountStore{exists: true})
-	commands := assets.NewCommands(fakeAssetsStore{}, nil, *aq, nil, nil, bus)
+	commands := assets.NewCommands(fakeAssetsStore{}, nil, *aq, nil, nil, nil, bus)
 
 	accID := uuid.New()
 	if _, err := commands.CreateClass(context.Background(), accID, "Savings"); err != nil {

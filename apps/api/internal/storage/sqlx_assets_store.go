@@ -30,6 +30,7 @@ type SQLXAssetsStore struct {
 	itemsTable     string
 	mutationsTable string
 	snapshotsTable string
+	purchasesTable string
 }
 
 var (
@@ -40,12 +41,20 @@ var (
 	_ assets.QueryStore      = (*SQLXAssetsStore)(nil)
 	_ assets.BuilderStore    = (*SQLXAssetsStore)(nil)
 	_ assets.SyncStore       = (*SQLXAssetsStore)(nil)
+	_ assets.HoldingsStore   = (*SQLXAssetsStore)(nil)
 )
 
 // assetMutationSelectColumns aliases item_id to the domain's asset_id db tag.
 const assetMutationSelectColumns = `
 	id, account_id, class_id, item_id AS asset_id, change_type, direction,
 	amount, previous_worth, new_worth, class_total_worth, effective_date, note, created_at
+`
+
+// assetMutationSelectColumnsM is assetMutationSelectColumns qualified for a query
+// that joins the mutations table in as m.
+const assetMutationSelectColumnsM = `
+	m.id, m.account_id, m.class_id, m.item_id AS asset_id, m.change_type, m.direction,
+	m.amount, m.previous_worth, m.new_worth, m.class_total_worth, m.effective_date, m.note, m.created_at
 `
 
 // NewSQLXAssetsStore creates an assets store backed by SQLX.
@@ -57,6 +66,7 @@ func NewSQLXAssetsStore(db *DB) *SQLXAssetsStore {
 		itemsTable:     qualifyTableAs(db, SchemaAssets, TableAssetItems, "asset_items"),
 		mutationsTable: qualifyTableAs(db, SchemaAssets, TableAssetMutations, "asset_mutations"),
 		snapshotsTable: qualifyTableAs(db, SchemaAssets, TableAssetSnapshot, "asset_snapshots"),
+		purchasesTable: qualifyTableAs(db, SchemaAssets, TableAssetPurchases, "asset_purchases"),
 	}
 }
 
@@ -240,8 +250,8 @@ func (s *SQLXAssetsStore) AggregateValue(ctx context.Context, accID, classID uui
 // CreateAsset inserts one asset item.
 func (s *SQLXAssetsStore) CreateAsset(ctx context.Context, asset *assets.Asset) error {
 	query := fmt.Sprintf(`
-		INSERT INTO %s (id, class_id, account_id, name, current_worth, archived, created_at, updated_at)
-		VALUES (:id, :class_id, :account_id, :name, :current_worth, :archived, :created_at, :updated_at)
+		INSERT INTO %s (id, class_id, account_id, name, current_worth, archived, listing_id, created_at, updated_at)
+		VALUES (:id, :class_id, :account_id, :name, :current_worth, :archived, :listing_id, :created_at, :updated_at)
 	`, s.itemsTable)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, asset); err != nil {
 		return fmt.Errorf("assets store: create asset: %w", err)
@@ -360,6 +370,110 @@ func (s *SQLXAssetsStore) Mutations(ctx context.Context, accID uuid.UUID, sort *
 		return nil, fmt.Errorf("assets store: mutations: %w", err)
 	}
 	return muts, nil
+}
+
+// MutationsForAsset returns one item's mutations oldest first.
+func (s *SQLXAssetsStore) MutationsForAsset(ctx context.Context, assetID uuid.UUID) ([]*assets.Mutation, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT %s FROM %s WHERE item_id = ? ORDER BY effective_date ASC, created_at ASC
+	`, assetMutationSelectColumns, s.mutationsTable))
+	var muts []*assets.Mutation
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &muts, query, assetID); err != nil {
+		return nil, fmt.Errorf("assets store: mutations for asset: %w", err)
+	}
+	return muts, nil
+}
+
+// ManualMutations returns the account's mutations for items that are not linked to
+// a listing, oldest first.
+func (s *SQLXAssetsStore) ManualMutations(ctx context.Context, accID uuid.UUID) ([]*assets.Mutation, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT %s FROM %s m
+		WHERE m.account_id = ?
+		  AND EXISTS (SELECT 1 FROM %s i WHERE i.id = m.item_id AND i.listing_id IS NULL)
+		ORDER BY m.effective_date ASC, m.created_at ASC
+	`, assetMutationSelectColumnsM, s.mutationsTable, s.itemsTable))
+	var muts []*assets.Mutation
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &muts, query, accID); err != nil {
+		return nil, fmt.Errorf("assets store: manual mutations: %w", err)
+	}
+	return muts, nil
+}
+
+// DeleteDerivedMutations removes every mutation of a daily-priced item, which the
+// holdings rebuild rewrites from purchases and prices.
+func (s *SQLXAssetsStore) DeleteDerivedMutations(ctx context.Context, accID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(`
+		DELETE FROM %s
+		WHERE account_id = ?
+		  AND item_id IN (SELECT id FROM %s WHERE account_id = ? AND listing_id IS NOT NULL)
+	`, s.mutationsTable, s.itemsTable))
+	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, accID, accID); err != nil {
+		return fmt.Errorf("assets store: delete derived mutations: %w", err)
+	}
+	return nil
+}
+
+// --- Purchases --------------------------------------------------------------
+
+// DailyPricedAssets returns the account's items that are linked to a listing.
+func (s *SQLXAssetsStore) DailyPricedAssets(ctx context.Context, accID uuid.UUID) ([]*assets.Asset, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE account_id = ? AND listing_id IS NOT NULL ORDER BY name ASC, created_at ASC
+	`, s.itemsTable))
+	var items []*assets.Asset
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &items, query, accID); err != nil {
+		return nil, fmt.Errorf("assets store: daily-priced assets: %w", err)
+	}
+	return items, nil
+}
+
+// CreatePurchase inserts one recorded purchase of a daily-priced item.
+func (s *SQLXAssetsStore) CreatePurchase(ctx context.Context, purchase *assets.Purchase) error {
+	query := fmt.Sprintf(`
+		INSERT INTO %s (id, account_id, item_id, purchased_on, quantity, unit_price, created_at)
+		VALUES (:id, :account_id, :item_id, :purchased_on, :quantity, :unit_price, :created_at)
+	`, s.purchasesTable)
+	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, purchase); err != nil {
+		return fmt.Errorf("assets store: create purchase: %w", err)
+	}
+	return nil
+}
+
+// PurchasesForAccount returns every purchase in the account, oldest first.
+func (s *SQLXAssetsStore) PurchasesForAccount(ctx context.Context, accID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE account_id = ? ORDER BY purchased_on ASC, created_at ASC
+	`, s.purchasesTable))
+	return s.selectPurchases(ctx, query, accID)
+}
+
+// PurchasesForClass returns the purchases of every daily-priced item in a class,
+// oldest first.
+func (s *SQLXAssetsStore) PurchasesForClass(ctx context.Context, classID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT p.* FROM %s p
+		JOIN %s i ON i.id = p.item_id
+		WHERE i.class_id = ?
+		ORDER BY p.purchased_on ASC, p.created_at ASC
+	`, s.purchasesTable, s.itemsTable))
+	return s.selectPurchases(ctx, query, classID)
+}
+
+// PurchasesForAsset returns one item's purchases, oldest first.
+func (s *SQLXAssetsStore) PurchasesForAsset(ctx context.Context, assetID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE item_id = ? ORDER BY purchased_on ASC, created_at ASC
+	`, s.purchasesTable))
+	return s.selectPurchases(ctx, query, assetID)
+}
+
+func (s *SQLXAssetsStore) selectPurchases(ctx context.Context, query string, arg any) ([]*assets.Purchase, error) {
+	rows := make([]*assets.Purchase, 0)
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &rows, query, arg); err != nil {
+		return nil, fmt.Errorf("assets store: select purchases: %w", err)
+	}
+	return rows, nil
 }
 
 // --- Snapshots --------------------------------------------------------------

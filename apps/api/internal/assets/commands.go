@@ -8,12 +8,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/account"
 	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 // TODO: fix interfaces
 
-// CommandStore persists assets, classes, accounts, and mutations.
+// CommandStore persists assets, classes, accounts, mutations, and purchases.
 type CommandStore interface {
 	CreateAsset(ctx context.Context, asset *Asset) error
 	CreateAccount(ctx context.Context, account *Account) error
@@ -22,6 +23,13 @@ type CommandStore interface {
 	UpdateClass(ctx context.Context, class *Class) error
 	CreateMutation(ctx context.Context, mut *Mutation) error
 	DeleteClass(ctx context.Context, classID uuid.UUID) error
+	CreatePurchase(ctx context.Context, purchase *Purchase) error
+}
+
+// QuoteTracker turns a chosen daily-priced instrument into the market-data listing
+// its prices are read from, creating that listing the first time it is adopted.
+type QuoteTracker interface {
+	Track(ctx context.Context, symbol string) (*marketdata.Listing, error)
 }
 
 // CommandGetter reads a single class/asset aggregate for command validation.
@@ -46,17 +54,20 @@ type Commands struct {
 	aq  account.Queries
 	uow UnitOfWork
 	ca  ClassAggregator
+	qt  QuoteTracker
 	bus eventbus.Bus
 }
 
 // NewCommands constructs the assets write-side use cases. The bus may be nil,
-// in which case snapshot rebuild events are not published.
+// in which case snapshot rebuild events are not published; the quote tracker may
+// be nil, in which case daily-priced items cannot be created.
 func NewCommands(
 	cs CommandStore,
 	cg CommandGetter,
 	aq account.Queries,
 	uow UnitOfWork,
 	ca ClassAggregator,
+	qt QuoteTracker,
 	bus eventbus.Bus,
 ) *Commands {
 	return &Commands{
@@ -65,6 +76,7 @@ func NewCommands(
 		aq:  aq,
 		uow: uow,
 		ca:  ca,
+		qt:  qt,
 		bus: bus,
 	}
 }
@@ -125,6 +137,114 @@ func (c *Commands) CreateAsset(
 	}
 	c.publishSnapshotsRebuildRequested(ctx, accID)
 	return asset, nil
+}
+
+// PurchaseInput is one recorded acquisition as the write side receives it.
+type PurchaseInput struct {
+	Date      time.Time
+	Quantity  float64
+	UnitPrice money.Price
+}
+
+// CreateDailyPricedAsset adds an item whose worth follows a listing's daily price,
+// together with the purchase that started it.
+//
+// The item is created with a zero worth and no opening mutation: unlike a manual
+// item its history is not entered, it is derived. The rebuild that follows the
+// published event writes one mutation per day from this purchase onwards, which is
+// also what gives the item its worth.
+func (c *Commands) CreateDailyPricedAsset(
+	ctx context.Context,
+	accID, classID uuid.UUID,
+	name, symbol string,
+	first PurchaseInput,
+) (*Asset, error) {
+	if c.qt == nil {
+		return nil, fmt.Errorf("create daily-priced asset: no quote tracker configured")
+	}
+	exists, err := c.aq.Exists(ctx, accID)
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: account existence checker failed: %w", err)
+	}
+	if !exists {
+		return nil, ErrAccountNotFound
+	}
+	class, err := c.cg.Class(ctx, classID)
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: get class failed: %w", err)
+	}
+	if class == nil {
+		return nil, ErrClassNotFound
+	}
+	if class.AccountID != accID {
+		return nil, ErrClassAccountMismatch
+	}
+	if class.Source != ClassSourceManual {
+		return nil, ErrClassNotManual
+	}
+
+	listing, err := c.qt.Track(ctx, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: failed to track quote: %w", err)
+	}
+
+	asset, err := NewAsset(accID, classID, name, 0, "")
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: failed to create new asset: %w", err)
+	}
+	asset.ListingID = &listing.ID
+
+	purchase, err := NewPurchase(accID, asset.ID, first.Date, first.Quantity, first.UnitPrice)
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: %w", err)
+	}
+
+	err = c.uow.Do(ctx, func(txCtx context.Context) error {
+		if err := c.cs.CreateAsset(txCtx, asset); err != nil {
+			return fmt.Errorf("create daily-priced asset: failed to store asset: %w", err)
+		}
+		if err := c.cs.CreatePurchase(txCtx, purchase); err != nil {
+			return fmt.Errorf("create daily-priced asset: failed to store purchase: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create daily-priced asset: failed to execute transaction: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, accID)
+	return asset, nil
+}
+
+// AddPurchase records another acquisition of a daily-priced item. The item's worth
+// and its whole history follow from the rebuild the published event triggers.
+func (c *Commands) AddPurchase(
+	ctx context.Context,
+	accID, assetID uuid.UUID,
+	input PurchaseInput,
+) (*Purchase, error) {
+	asset, err := c.cg.Asset(ctx, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("add purchase: failed to get asset: %w", err)
+	}
+	if asset == nil {
+		return nil, ErrAssetNotFound
+	}
+	if asset.AccountID != accID {
+		return nil, ErrClassAccountMismatch
+	}
+	if !asset.IsDailyPriced() {
+		return nil, ErrAssetNotDailyPriced
+	}
+
+	purchase, err := NewPurchase(accID, asset.ID, input.Date, input.Quantity, input.UnitPrice)
+	if err != nil {
+		return nil, fmt.Errorf("add purchase: %w", err)
+	}
+	if err := c.cs.CreatePurchase(ctx, purchase); err != nil {
+		return nil, fmt.Errorf("add purchase: failed to store purchase: %w", err)
+	}
+	c.publishSnapshotsRebuildRequested(ctx, accID)
+	return purchase, nil
 }
 
 // CreateClass creates a manual class for an account.
@@ -214,6 +334,11 @@ func (c *Commands) UpdateAssetWorth(
 		}
 		if asset.Class.Source == ClassSourcePortfolio {
 			return fmt.Errorf("update asset worth: %w", ErrClassReserved)
+		}
+		// A daily-priced item's history is rebuilt from its purchases and prices, so
+		// a hand-set worth would be silently overwritten on the next rebuild.
+		if asset.IsDailyPriced() {
+			return fmt.Errorf("update asset worth: %w", ErrAssetDailyPriced)
 		}
 		previousWorth := asset.CurrentWorth
 		classTotal, err := c.ca.AggregateValue(txCtx, accID, asset.ClassID)

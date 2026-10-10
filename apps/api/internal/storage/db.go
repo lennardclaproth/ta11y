@@ -49,6 +49,7 @@ const (
 	TableAssetClasses    = "classes"
 	TableAssetItems      = "items"
 	TableAssetMutations  = "mutations"
+	TableAssetPurchases  = "purchases"
 	TableAssetSnapshot   = "snapshots"
 )
 
