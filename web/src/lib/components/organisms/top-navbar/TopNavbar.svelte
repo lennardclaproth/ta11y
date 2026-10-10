@@ -63,6 +63,11 @@
 	// then refused, so the navigation only ever offers reachable pages.
 	const primaryItems: (NavItem & { href: Pathname })[] = [
 		{ label: 'Cashflow', href: '/cashflow' as Pathname, icon: 'heroicons:banknotes' },
+		{
+			label: 'Recurring',
+			href: '/recurring' as Pathname,
+			icon: 'heroicons:arrow-path-rounded-square'
+		},
 		{ label: 'Assets', href: '/assets' as Pathname, icon: 'heroicons:building-library' },
 		{ label: 'Portfolio', href: '/portfolio' as Pathname, icon: 'heroicons:chart-pie' }
 	];

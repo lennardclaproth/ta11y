@@ -952,6 +952,628 @@
                 }
             }
         },
+        "/cashflow/recurring": {
+            "get": {
+                "description": "Returns running recurring expenses, running recurring income and ended items, with monthly-equivalent totals and a per-month trend.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Get recurring items",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Narrow the groups by item name",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringOverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Create a recurring item",
+                "parameters": [
+                    {
+                        "description": "Create recurring item request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.CreateRecurringItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/suggestions": {
+            "get": {
+                "description": "Returns patterns found in transactions that are neither ignored nor already linked, leaving out dismissed patterns and patterns that already belong to an item.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Get recurring suggestions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringSuggestionsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/suggestions/confirm": {
+            "post": {
+                "description": "Creates the recurring item a suggestion proposed and links every transaction it was found in. A suggestion counts for nothing until this is called.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Confirm a recurring suggestion",
+                "parameters": [
+                    {
+                        "description": "Confirm suggestion request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ConfirmRecurringSuggestionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/suggestions/dismiss": {
+            "post": {
+                "description": "Refuses a suggested pattern. A dismissed suggestion is not offered again.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Dismiss a recurring suggestion",
+                "parameters": [
+                    {
+                        "description": "Dismiss suggestion request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.DismissRecurringSuggestionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/{item_id}": {
+            "get": {
+                "description": "Returns a recurring item with its observed amounts over time and the transactions linked to it, newest first.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Get one recurring item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Recurring item id",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringItemDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Renames a recurring item and sets its rhythm. The direction follows from the linked transactions and is not editable.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Update a recurring item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Recurring item id",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update recurring item request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.UpdateRecurringItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/{item_id}/end": {
+            "post": {
+                "description": "Stops a recurring item from the first day of the given month (\"YYYY-MM\"). Transactions linked before it stay linked; nothing after it is linked automatically.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "End a recurring item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Recurring item id",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "End recurring item request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.EndRecurringItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/{item_id}/transactions": {
+            "post": {
+                "description": "Links cashflow transactions to an existing recurring item. An ended item takes no new transactions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Link transactions to a recurring item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Recurring item id",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Link transactions request",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.LinkRecurringTransactionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.RecurringMutationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/recurring/{item_id}/transactions/{transaction_id}": {
+            "delete": {
+                "description": "Removes one transaction from a recurring item. The transaction itself stays in Cashflow.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recurring"
+                ],
+                "summary": "Unlink a transaction from a recurring item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Recurring item id",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cashflow transaction id",
+                        "name": "transaction_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/cashflow/transactions": {
             "get": {
                 "description": "Filter cashflow transactions with explicit field filters and optional fuzzy search over description, note, and tag.",
@@ -3389,6 +4011,23 @@
                 }
             }
         },
+        "cashflow.ConfirmRecurringSuggestionRequest": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string"
+                },
+                "match_key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "type": "string"
+                }
+            }
+        },
         "cashflow.CreateManualCashflowTransactionRequest": {
             "type": "object",
             "properties": {
@@ -3411,6 +4050,26 @@
                     "type": "string"
                 },
                 "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.CreateRecurringItemRequest": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rhythm": {
                     "type": "string"
                 }
             }
@@ -3458,6 +4117,25 @@
                 }
             }
         },
+        "cashflow.DismissRecurringSuggestionRequest": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string"
+                },
+                "match_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.EndRecurringItemRequest": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                }
+            }
+        },
         "cashflow.IgnoreTransactionsByFilterRequest": {
             "type": "object",
             "properties": {
@@ -3494,6 +4172,17 @@
                 }
             }
         },
+        "cashflow.LinkRecurringTransactionsRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "cashflow.MonthlyAnalyticsPointResponse": {
             "type": "object",
             "properties": {
@@ -3508,6 +4197,217 @@
                 },
                 "outgoing_cents": {
                     "type": "integer"
+                }
+            }
+        },
+        "cashflow.RecurringAmountPointResponse": {
+            "type": "object",
+            "properties": {
+                "amountCents": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.RecurringItemDetailResponse": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string"
+                },
+                "ended_from": {
+                    "type": "string"
+                },
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringAmountPointResponse"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lastAmountCents": {
+                    "type": "integer"
+                },
+                "last_seen": {
+                    "type": "string"
+                },
+                "linked_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "next_expected": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringTransactionResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.RecurringItemResponse": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string"
+                },
+                "ended_from": {
+                    "type": "string"
+                },
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringAmountPointResponse"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lastAmountCents": {
+                    "type": "integer"
+                },
+                "last_seen": {
+                    "type": "string"
+                },
+                "linked_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "next_expected": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.RecurringMonthPointResponse": {
+            "type": "object",
+            "properties": {
+                "expenseCents": {
+                    "type": "integer"
+                },
+                "incomeCents": {
+                    "type": "integer"
+                },
+                "month": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.RecurringMutationResponse": {
+            "type": "object",
+            "properties": {
+                "linked_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cashflow.RecurringOverviewResponse": {
+            "type": "object",
+            "properties": {
+                "ended": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                    }
+                },
+                "expenses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                    }
+                },
+                "income": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringItemResponse"
+                    }
+                },
+                "monthlyExpenseCents": {
+                    "description": "Monthly totals spread a quarterly amount over three months and a yearly one\nover twelve; the page says so where it shows them.",
+                    "type": "integer"
+                },
+                "monthlyIncomeCents": {
+                    "type": "integer"
+                },
+                "series": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringMonthPointResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.RecurringSuggestionResponse": {
+            "type": "object",
+            "properties": {
+                "amountCents": {
+                    "type": "integer"
+                },
+                "direction": {
+                    "type": "string"
+                },
+                "match_key": {
+                    "type": "string"
+                },
+                "matches": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "type": "string"
+                },
+                "sample": {
+                    "type": "string"
+                },
+                "since": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.RecurringSuggestionsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.RecurringSuggestionResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.RecurringTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "amountCents": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
                 }
             }
         },
@@ -3603,6 +4503,17 @@
                     "items": {
                         "$ref": "#/definitions/cashflow.CreateTransactionResponse"
                     }
+                }
+            }
+        },
+        "cashflow.UpdateRecurringItemRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "type": "string"
                 }
             }
         },
