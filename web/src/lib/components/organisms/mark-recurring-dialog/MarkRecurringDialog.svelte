@@ -2,6 +2,7 @@
 	// The entry point from Cashflow: point a transaction (or a selection) at a recurring
 	// item. Two routes, one dialog — adding to something that exists is the common one,
 	// so it comes first. Marking changes no tag, no ignored status and no monthly total.
+	import { untrack } from 'svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
@@ -56,13 +57,18 @@
 	// Opening the dialog seeds the form from the selection: the description is where the
 	// counterparty hides, and the direction is already known from the transactions.
 	// An account with no items yet has only one route, so it opens on "new".
+	// Only opening seeds it: the items arrive after the dialog is already up, and a
+	// realtime refresh replaces the selection, so following those would wipe the form
+	// under the user's hands.
 	$effect(() => {
 		if (!open) return;
-		const first = selection[0];
-		name = first?.description ?? '';
-		direction = first?.direction ?? 'out';
-		existing = items[0]?.id ?? '';
-		mode = items.length > 0 ? 'existing' : 'new';
+		untrack(() => {
+			const first = selection[0];
+			name = first?.description ?? '';
+			direction = first?.direction ?? 'out';
+			existing = items[0]?.id ?? '';
+			mode = items.length > 0 ? 'existing' : 'new';
+		});
 	});
 
 	const canSubmit = $derived(
