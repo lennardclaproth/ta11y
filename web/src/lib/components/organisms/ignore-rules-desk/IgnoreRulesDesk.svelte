@@ -36,6 +36,12 @@
 		preview?: IgnoreRulePreview | null;
 		previewLoading?: boolean;
 		previewError?: string | null;
+		/**
+		 * Whether the draft still differs from the saved rule. Applying runs the saved
+		 * rule, so while the two disagree the preview's count is about a different rule
+		 * and must not be acted on.
+		 */
+		dirty?: boolean;
 		/** Banks a rule can be limited to, from the sources the ledger actually holds. */
 		bankOptions?: { value: string; label: string }[];
 		loading?: boolean;
@@ -63,6 +69,7 @@
 		preview = null,
 		previewLoading = false,
 		previewError = null,
+		dirty = false,
 		bankOptions = [],
 		loading = false,
 		error = null,
@@ -83,6 +90,17 @@
 	const sourceOptions = $derived([{ value: '', label: 'All banks' }, ...bankOptions]);
 	const notYetIgnored = $derived(preview?.not_yet_ignored ?? 0);
 	const isNew = $derived(draft?.id === null);
+
+	/**
+	 * Applying is only honest once the count on the button is the count the server will
+	 * act on: the saved rule, checked and not still being checked.
+	 */
+	const canApply = $derived(!saving && !isNew && !dirty && !previewLoading && notYetIgnored > 0);
+	const applyNote = $derived(
+		dirty
+			? 'Save your changes first — applying runs the saved rule.'
+			: 'Saving only affects imports from now on.'
+	);
 
 	/** Reports the edited draft upward; the page re-checks the preview from it. */
 	function edit(changes: Partial<IgnoreRuleDraft>) {
@@ -330,7 +348,7 @@
 				<div
 					class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 lg:px-6"
 				>
-					<Text as="span" size="sm" tone="muted">Saving only affects imports from now on.</Text>
+					<Text as="span" size="sm" tone="muted">{applyNote}</Text>
 					<div class="flex flex-wrap items-center gap-2">
 						{#if !isNew}
 							<Button
@@ -347,8 +365,8 @@
 							variant="outline"
 							intent="secondary"
 							shape="default"
-							disabled={saving || isNew || notYetIgnored === 0}
-							onclick={() => draft && onApply?.(draft)}
+							disabled={!canApply}
+							onclick={() => canApply && draft && onApply?.(draft)}
 						>
 							Apply to existing ({notYetIgnored})
 						</Button>

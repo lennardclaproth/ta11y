@@ -24,6 +24,7 @@
 		previewIgnoreRule,
 		updateIgnoreRule
 	} from '$lib/services/ignoreRules';
+	import { ruleToRequest } from '$lib/api/ignoreRules';
 	import { listVendors } from '$lib/services/vendors';
 	import { toast } from '$lib/stores/toast.svelte';
 	import {
@@ -245,6 +246,19 @@
 	}
 
 	const notYetIgnored = $derived(preview?.not_yet_ignored ?? 0);
+
+	/**
+	 * Whether the open draft still says what the saved rule says. The preview runs on the
+	 * draft, but applying runs the *saved* rule on the server — so an unsaved edit would
+	 * make the button and the confirmation name a count belonging to a different rule.
+	 * Applying waits until the two agree.
+	 */
+	const dirty = $derived.by(() => {
+		if (!draft?.id) return false;
+		const saved = rules.find((rule) => rule.id === draft?.id);
+		if (!saved) return false;
+		return JSON.stringify(toRequest(draft)) !== JSON.stringify(ruleToRequest(saved));
+	});
 </script>
 
 <AppShellTemplate>
@@ -265,6 +279,7 @@
 			{preview}
 			{previewLoading}
 			{previewError}
+			{dirty}
 			{bankOptions}
 			{loading}
 			{error}

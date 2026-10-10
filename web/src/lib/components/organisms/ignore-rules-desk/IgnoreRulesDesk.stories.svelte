@@ -75,6 +75,20 @@
 	}}
 />
 
+<!-- An edit that is not saved yet: the preview counts the draft, but applying would run
+     the saved rule, so the button waits and says why. -->
+<Story
+	name="Unsaved changes"
+	args={{
+		rules: ignoreRules,
+		draft: { ...open, contains: 'Card settlement' },
+		preview,
+		dirty: true,
+		bankOptions: banks,
+		pane: 'detail'
+	}}
+/>
+
 <Story
 	name="New rule"
 	args={{
