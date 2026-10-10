@@ -182,6 +182,7 @@ No dark theme is currently defined. A future dark theme requires explicit role m
 - Convert API fixed-point integers using the helpers in [money.ts](web/src/lib/api/money.ts) before display: these values use a scale of 1,000,000, including fields misleadingly named `amountCents`. Decimal-string endpoints follow their own contract.
 - Align comparable amounts to the right and keep precision consistent within a column. Name the currency and time period where context could be ambiguous.
 - Keep zero, unavailable data, and loading visibly distinct. Never substitute a displayed zero for an unknown amount in a new flow.
+- A count is not money. Use CountStat for figures like rows imported or transactions a rule matched: tabular and labelled, but never given a currency and never coloured by sign. Money and StatCard are for amounts.
 - Use direct sentence-case labels: “Add transaction”, “Save changes”, “Try again”. Error copy should explain what failed and what the person can do next. Avoid blame or judgment about spending.
 
 ## Layout
@@ -252,6 +253,7 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Surface | Panel | Choose background, padding, border, shape, and shadow deliberately |
 | Navigation/filtering | NavMenu, Tabs, filter molecules | Show current state and preserve the query/selection context |
 | Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning |
+| Counts | CountStat | Tabular and labelled; no currency, no colour by sign; a placeholder, not a zero, while unknown |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
 | Feedback | Alert, ToastHost, Skeleton, Spinner | Persistent issues belong near the affected content; transient feedback uses the single shell toast host |

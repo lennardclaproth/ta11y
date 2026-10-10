@@ -20,7 +20,8 @@ ignored:
 - **[011] Tagging** — tag a single transaction, a selection of IDs, or everything matching a
   filter.
 - **[012] Ignore** — mark a selection or a filter match as ignored / not-ignored; ignored
-  rows drop out of analytics totals.
+  rows drop out of analytics totals. Both paths are by-hand paths, so they also set
+  `ignore_overridden`, which keeps an ignore rule ([033]) from undoing the decision later.
 - **[023] Manual create** — bulk-create up to 100 manual transactions for an account, on any
   day up to and including today.
 - **[032] Change date** — move one manually entered transaction to another day, today or
@@ -109,6 +110,7 @@ erDiagram
         uuid id PK
         uuid account_id FK
         uuid import_id FK "nullable (manual rows = NULL)"
+        uuid ignored_by_rule_id FK "nullable - the rule that ignored it [033]"
         string description
         string source
         bigint amount_cents
@@ -117,6 +119,7 @@ erDiagram
         string tag "default ''"
         string account_type "CHECK checking|savings|credit|brokerage, nullable"
         bool ignored "default false"
+        bool ignore_overridden "default false - decided by hand [033]"
         int row_number
         string checksum UK "unique - dedup key"
     }
@@ -147,13 +150,14 @@ stateDiagram-v2
         Tagged --> Untagged : clear tag
         --
         [*] --> Active
-        Active --> Ignored : ignore (selection / filter)
+        Active --> Ignored : ignore (selection / filter / rule [033])
         Ignored --> Active : un-ignore
     }
 ```
 
 Ignored transactions are excluded from analytics totals unless the request sets
-`include_ignored`.
+`include_ignored`. Which rows are ignored is also decided by ignore rules ([033]); how
+ignored rows count is unchanged.
 
 ## Filter-based tagging flow
 
@@ -226,8 +230,9 @@ rows updated).
   rows keep their statement date: moving one would change the identity the next import of the
   same file compares against, so it would insert the old row again.
 - **Filtering.** `description`/`note`/`source` use case-insensitive `LIKE %v%`; `direction`
-  exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`; `from`/`to`
-  bound `date`; `q` fuzzy-matches description/note/tag. Conditions are AND-joined.
+  exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`;
+  `import_id` / `ignored_by_rule` exact ([033]); `from`/`to` bound `date`; `q` fuzzy-matches
+  description/note/tag. Conditions are AND-joined.
 - **Sorting/pagination.** Uses `internal/sorting`; sortable fields are `date` (default, DESC),
   `description`, `note`, `tag`, `source`, `amount`. Offset pagination with default limit 100.
 - **Analytics.** Monthly buckets by month (`DATE_TRUNC` / `STRFTIME`) summing in/out and
