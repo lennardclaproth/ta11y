@@ -288,6 +288,7 @@
 		return { intent: 'neutral' as const, label: 'Available' };
 	}
 
+	const addedCount = $derived(outcomes.filter((outcome) => outcome.status === 'added').length);
 	const failedOutcomes = $derived(outcomes.filter((outcome) => outcome.status === 'failed'));
 	const existingCount = $derived(outcomes.filter((outcome) => outcome.status === 'exists').length);
 </script>
@@ -334,7 +335,16 @@
 				</Button>
 			</div>
 			{#if notice}
-				<NoticeBand intent={notice.intent} surface="inset" gutter="dialog" class="-mx-5">
+				<!-- The band has no timer, so it is dismissible: a confirmation that outlived the search
+				     it belonged to can be put away without waiting for the drawer to close. -->
+				<NoticeBand
+					intent={notice.intent}
+					surface="inset"
+					gutter="dialog"
+					class="-mx-5"
+					dismissible
+					onDismiss={() => (notice = null)}
+				>
 					{notice.message}
 				</NoticeBand>
 			{/if}
@@ -373,8 +383,11 @@
 				role="status"
 				class="space-y-1 rounded-lg border border-slate-200 bg-taupe-50 p-3 text-sm"
 			>
-				<!-- The added count is stated once, in the band above; this box carries what the band
-				     does not say. -->
+				<!-- The band above announces the adoption, but it can be dismissed and a later resync
+				     replaces it, so this box keeps the record of what the batch did. -->
+				{#if addedCount > 0}
+					<p class="text-slate-800">Added {addedCount} listing{addedCount === 1 ? '' : 's'}.</p>
+				{/if}
 				{#if existingCount > 0}
 					<p class="text-slate-600">
 						{existingCount} already existed and {existingCount === 1 ? 'was' : 'were'} left unchanged.
