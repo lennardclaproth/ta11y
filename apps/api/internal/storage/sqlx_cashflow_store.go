@@ -165,9 +165,33 @@ func (s *SQLXCashflowStore) UpdateTagByIDs(ctx context.Context, accountID uuid.U
 	return s.updateByIDs(ctx, "tag", tag, accountID, ids)
 }
 
-// UpdateIgnoredByIDs sets the ignored flag for the given transaction IDs and returns the count updated.
+// UpdateIgnoredByIDs sets the ignored flag for the given transaction IDs and returns
+// the count updated. The rows are also marked as decided by hand, which is what keeps
+// an ignore rule from undoing the decision on the next import.
 func (s *SQLXCashflowStore) UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error) {
-	return s.updateByIDs(ctx, "ignored", ignored, accountID, ids)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	query := fmt.Sprintf(
+		`UPDATE %s SET ignored = ?, ignore_overridden = ?, %s updated_at = ? WHERE account_id = ? AND id IN (?)`,
+		s.tableName, ignoredByHandAttribution(ignored),
+	)
+	expanded, args, err := sqlx.In(query, ignored, true, time.Now().UTC(), accountID, ids)
+	if err != nil {
+		return 0, fmt.Errorf("cashflow store: expand ids: %w", err)
+	}
+	return s.exec(ctx, s.db.Rebind(expanded), args...)
+}
+
+// ignoredByHandAttribution clears the rule a row was ignored by when a person ignores
+// it themselves, so the ledger does not keep crediting a rule for a decision it did
+// not make. Restoring by hand leaves the attribution in place: the import review has
+// to be able to say that the rule caught the row and that it was put back.
+func ignoredByHandAttribution(ignored bool) string {
+	if ignored {
+		return "ignored_by_rule_id = NULL,"
+	}
+	return ""
 }
 
 // UpdateTagByFilter sets the tag for transactions matching filters and returns the count updated.
@@ -175,9 +199,17 @@ func (s *SQLXCashflowStore) UpdateTagByFilter(ctx context.Context, filters cashf
 	return s.updateByFilter(ctx, "tag", tag, filters)
 }
 
-// UpdateIgnoredByFilter sets the ignored flag for transactions matching filters and returns the count updated.
+// UpdateIgnoredByFilter sets the ignored flag for transactions matching filters and
+// returns the count updated. Like the selection path it marks the rows as decided by
+// hand, so an ignore rule leaves them alone from then on.
 func (s *SQLXCashflowStore) UpdateIgnoredByFilter(ctx context.Context, filters cashflow.TransactionFilters, ignored bool) (int, error) {
-	return s.updateByFilter(ctx, "ignored", ignored, filters)
+	whereClause, whereArgs := buildCashflowWhereClause(cashflowQueryFromFilters(filters))
+	query := s.db.Rebind(fmt.Sprintf(
+		`UPDATE %s SET ignored = ?, ignore_overridden = ?, %s updated_at = ?%s`,
+		s.tableName, ignoredByHandAttribution(ignored), whereClause,
+	))
+	args := append([]any{ignored, true, time.Now().UTC()}, whereArgs...)
+	return s.exec(ctx, query, args...)
 }
 
 // updateByIDs applies a column update to the given ids, confined to one account. The
@@ -309,21 +341,24 @@ func (s *SQLXCashflowStore) GetTagDistribution(ctx context.Context, filter cashf
 // cashflowQuery is the storage-internal filter/sort/paginate shape shared by the
 // list and bulk-update paths.
 type cashflowQuery struct {
-	AccountID   uuid.UUID
-	Limit       int
-	Offset      int
-	SortBy      string
-	SortOrder   string
-	Q           string
-	Description string
-	Note        string
-	Source      string
-	Direction   string
-	Tags        []string
-	Untagged    bool
-	HideIgnored bool
-	From        *time.Time
-	To          *time.Time
+	AccountID       uuid.UUID
+	Limit           int
+	Offset          int
+	SortBy          string
+	SortOrder       string
+	Q               string
+	Description     string
+	Note            string
+	Source          string
+	SourceExact     string
+	Direction       string
+	Tags            []string
+	Untagged        bool
+	HideIgnored     bool
+	ImportID        *uuid.UUID
+	IgnoredByRuleID *uuid.UUID
+	From            *time.Time
+	To              *time.Time
 }
 
 func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
@@ -332,34 +367,40 @@ func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
 		direction = string(*query.Direction)
 	}
 	return cashflowQuery{
-		AccountID:   query.AccountID,
-		Limit:       query.Limit,
-		Offset:      query.Offset,
-		SortBy:      string(query.Sort.Field),
-		SortOrder:   strings.ToLower(query.Sort.Direction.SQL()),
-		Q:           query.Q,
-		Description: query.Description,
-		Note:        query.Note,
-		Source:      query.Source,
-		Direction:   direction,
-		Tags:        query.Tags,
-		Untagged:    query.Untagged,
-		HideIgnored: query.HideIgnored,
-		From:        query.From,
-		To:          query.To,
+		AccountID:       query.AccountID,
+		Limit:           query.Limit,
+		Offset:          query.Offset,
+		SortBy:          string(query.Sort.Field),
+		SortOrder:       strings.ToLower(query.Sort.Direction.SQL()),
+		Q:               query.Q,
+		Description:     query.Description,
+		Note:            query.Note,
+		Source:          query.Source,
+		SourceExact:     query.SourceExact,
+		Direction:       direction,
+		Tags:            query.Tags,
+		Untagged:        query.Untagged,
+		HideIgnored:     query.HideIgnored,
+		ImportID:        query.ImportID,
+		IgnoredByRuleID: query.IgnoredByRuleID,
+		From:            query.From,
+		To:              query.To,
 	}
 }
 
 func cashflowQueryFromFilters(filters cashflow.TransactionFilters) cashflowQuery {
 	query := cashflowQuery{
-		AccountID:   filters.AccountID,
-		Q:           filters.Query,
-		Description: filters.Description,
-		Note:        filters.Note,
-		Source:      filters.Source,
-		Tags:        filters.Tags,
-		From:        filters.From,
-		To:          filters.To,
+		AccountID:       filters.AccountID,
+		Q:               filters.Query,
+		Description:     filters.Description,
+		Note:            filters.Note,
+		Source:          filters.Source,
+		SourceExact:     filters.SourceExact,
+		Tags:            filters.Tags,
+		ImportID:        filters.ImportID,
+		IgnoredByRuleID: filters.IgnoredByRuleID,
+		From:            filters.From,
+		To:              filters.To,
 	}
 	if filters.Direction != nil {
 		query.Direction = string(*filters.Direction)
@@ -399,6 +440,13 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 	appendContains("note", query.Note)
 	appendContains("source", query.Source)
 
+	// A chosen bank is the whole name, not text inside it: an ignore rule scoped to one
+	// bank must not reach a second one whose name happens to contain the first.
+	if source := strings.TrimSpace(query.SourceExact); source != "" {
+		conditions = append(conditions, "LOWER(source) = ?")
+		args = append(args, strings.ToLower(source))
+	}
+
 	if direction := strings.TrimSpace(strings.ToLower(query.Direction)); direction != "" {
 		conditions = append(conditions, "LOWER(direction) = ?")
 		args = append(args, direction)
@@ -426,6 +474,16 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 	if query.HideIgnored {
 		conditions = append(conditions, "ignored = ?")
 		args = append(args, false)
+	}
+
+	if query.ImportID != nil {
+		conditions = append(conditions, "import_id = ?")
+		args = append(args, *query.ImportID)
+	}
+
+	if query.IgnoredByRuleID != nil {
+		conditions = append(conditions, "ignored_by_rule_id = ?")
+		args = append(args, *query.IgnoredByRuleID)
 	}
 
 	if query.From != nil {

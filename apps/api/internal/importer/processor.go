@@ -25,6 +25,9 @@ type ProcessResult struct {
 	Imported   int
 	Duplicates int
 	Failed     int
+	// AutoIgnored is how many of the newly imported rows an ignore rule recognised.
+	// They are counted in Imported as well: they were imported, and then ignored.
+	AutoIgnored int
 }
 
 // Processor handles the type-specific parsing and persistence for an import.

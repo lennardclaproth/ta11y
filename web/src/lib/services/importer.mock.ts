@@ -8,6 +8,7 @@
 
 import type { ImportResult, ImportType, UnlinkedProduct } from '$lib/api/types';
 import { listings } from '$lib/data/fixtures/marketdata';
+import { countMockAutoIgnored } from './ignoreRules';
 
 /** The headers both DEGIRO parsers require before they will read a single row. */
 const requiredHeaders = ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change'];
@@ -44,6 +45,7 @@ function emptyResult(importId: string, type: ImportType): ImportResult {
 		imported: 0,
 		duplicates: 0,
 		failed: 0,
+		auto_ignored: 0,
 		created_at: now,
 		updated_at: now,
 		unlinked_products: []
@@ -103,6 +105,8 @@ export async function registerMockImport(
 
 	const seen = importedRows[type];
 	const rows: Record<string, string>[] = [];
+	/** The subset this upload actually inserted, which is all an ignore rule may see. */
+	const newRows: Record<string, string>[] = [];
 	// Two identical rows inside one file are two transactions, so the occurrence count
 	// is part of the key — exactly what DedupSequencer does on the server.
 	const occurrences = new Map<string, number>();
@@ -126,12 +130,20 @@ export async function registerMockImport(
 			continue;
 		}
 		seen.add(key);
+		newRows.push(row);
 		result.imported += 1;
 	}
 
 	result.status = 'completed';
 	if (type === 'portfolio') {
 		result.unlinked_products = collectUnlinkedProducts(rows);
+	}
+	if (type === 'cashflow') {
+		// Only rows this upload actually brought in are offered to the rules, the same as
+		// on the server: a duplicate keeps the import it first arrived with.
+		result.auto_ignored = countMockAutoIgnored(
+			newRows.map((row) => ({ description: row['Description'] ?? '', note: row['Product'] ?? '' }))
+		);
 	}
 }
 

@@ -58,6 +58,11 @@ export interface ImportResult {
 	imported: number;
 	duplicates: number;
 	failed: number;
+	/**
+	 * How many of the imported rows an ignore rule recognised. They are counted in
+	 * `imported` too: they were imported, and then ignored.
+	 */
+	auto_ignored: number;
 	created_at: string;
 	updated_at: string;
 	/** Empty until a portfolio import has completed. */

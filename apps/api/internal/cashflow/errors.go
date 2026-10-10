@@ -16,6 +16,23 @@ var (
 	ErrManualCashflowTagRequired         = fmt.Errorf("tag is required")
 )
 
+// Ignore rule Errors
+var (
+	ErrIgnoreRuleNameRequired      = fmt.Errorf("name is required")
+	ErrIgnoreRuleNameTooLong       = fmt.Errorf("name must be at most 120 characters")
+	ErrIgnoreRuleInvalidMatchField = fmt.Errorf("match_field must be either description or note")
+	ErrIgnoreRuleInvalidDirection  = fmt.Errorf("direction must be empty, in, or out")
+	ErrIgnoreRuleContainsTooShort  = fmt.Errorf("contains must be at least 3 characters")
+	ErrIgnoreRuleContainsTooLong   = fmt.Errorf("contains must be at most 255 characters")
+	// ErrIgnoreRuleContainsWildcard explains the refusal rather than silently bending
+	// the text: % and _ are LIKE wildcards, so "a%z" would pass the minimum length and
+	// still match nearly every statement. A backslash is the LIKE escape character on
+	// Postgres but an ordinary character on SQLite, so the same rule would catch
+	// different rows per dialect.
+	ErrIgnoreRuleContainsWildcard = fmt.Errorf(`contains must not use %%, _ or \, which have their own meaning in a search`)
+	ErrIgnoreRuleNotFound         = fmt.Errorf("ignore rule not found")
+)
+
 // Recurring item Errors
 var (
 	ErrRecurringNameRequired         = fmt.Errorf("name is required")

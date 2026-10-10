@@ -12,9 +12,11 @@ import (
 )
 
 type Commands struct {
-	cs  CommandStore
-	qs  QueryStore
-	aec accountExistenceChecker
+	cs   CommandStore
+	qs   QueryStore
+	irs  IgnoreRuleCommandStore
+	irqs IgnoreRuleQueryStore
+	aec  accountExistenceChecker
 }
 
 type accountExistenceChecker interface {
@@ -27,6 +29,9 @@ type CommandStore interface {
 	UpdateDate(ctx context.Context, accountID, id uuid.UUID, date time.Time, checksum string) (int, error)
 	UpdateTagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error)
 	UpdateTagByFilter(ctx context.Context, filters TransactionFilters, tag string) (int, error)
+	// UpdateIgnoredByIDs and UpdateIgnoredByFilter are the by-hand paths, so they also
+	// record that the rows' ignored state was decided by a person. Ignore rules leave
+	// those rows alone from then on.
 	UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error)
 	UpdateIgnoredByFilter(ctx context.Context, filters TransactionFilters, ignored bool) (int, error)
 }
@@ -39,12 +44,16 @@ const (
 func NewCommands(
 	cStore CommandStore,
 	qStore QueryStore,
+	ruleStore IgnoreRuleCommandStore,
+	ruleQueryStore IgnoreRuleQueryStore,
 	aec accountExistenceChecker,
 ) *Commands {
 	return &Commands{
-		cs:  cStore,
-		qs:  qStore,
-		aec: aec,
+		cs:   cStore,
+		qs:   qStore,
+		irs:  ruleStore,
+		irqs: ruleQueryStore,
+		aec:  aec,
 	}
 }
 

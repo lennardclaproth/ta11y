@@ -18,6 +18,15 @@ export interface CashflowTransaction {
 	date: string;
 	tag: string;
 	ignored: boolean;
+	/**
+	 * The ignore rule that ignored this row, null when nobody's rule did. The rule's
+	 * name is resolved from the account's rules rather than repeated on every row.
+	 */
+	ignored_by_rule_id?: string | null;
+	/** The ignored state was decided by hand, so no rule will change it again. */
+	ignore_overridden?: boolean;
+	/** The import this row arrived with, null for a manual entry. */
+	import_id?: string | null;
 }
 
 /** `GET /cashflow/transactions` — mirrors `cashflow.GetTransactionsResponse`. */
@@ -103,8 +112,81 @@ export interface CashflowTransactionFilters {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Only the rows one import brought in. */
+	import_id?: string;
+	/** Only the rows one ignore rule ignored. */
+	ignored_by_rule?: string;
 	from?: string;
 	to?: string;
+}
+
+/** Which transaction field an ignore rule reads. */
+export type IgnoreRuleMatchField = 'description' | 'note';
+
+/**
+ * One ignore rule. It recognises transactions that should arrive ignored: text in the
+ * description or note, optionally narrowed to a direction and to the bank a row was
+ * imported from. Mirrors `cashflow.IgnoreRuleResponse`.
+ */
+export interface IgnoreRule {
+	id: string;
+	name: string;
+	match_field: IgnoreRuleMatchField;
+	contains: string;
+	/** Empty for a rule that matches both directions. */
+	direction: '' | CashflowDirection;
+	/** The bank the rule is limited to, empty for every bank. */
+	source: string;
+	enabled: boolean;
+	/** How many transactions this rule has ignored since it was made. */
+	ignored_total: number;
+	last_applied_at: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+/** `GET /cashflow/ignore-rules` — mirrors `cashflow.IgnoreRulesResponse`. */
+export interface IgnoreRulesResponse {
+	data: IgnoreRule[];
+}
+
+/** Body of a create, update, or preview of an ignore rule. */
+export interface IgnoreRuleRequest {
+	name: string;
+	match_field: IgnoreRuleMatchField;
+	contains: string;
+	direction?: '' | CashflowDirection;
+	source?: string;
+	enabled?: boolean;
+}
+
+/** `POST /cashflow/ignore-rules/preview` — mirrors `cashflow.IgnoreRulePreviewResponse`. */
+export interface IgnoreRulePreview {
+	/** Every transaction in the ledger the rule matches. */
+	matching: number;
+	/** What applying it would ignore: matching, not ignored yet, not decided by hand. */
+	not_yet_ignored: number;
+	/** The size of the ledger the rule was held against. */
+	scanned: number;
+	sample: CashflowTransaction[];
+}
+
+/** `POST /cashflow/ignore-rules/{rule_id}/apply` — mirrors `cashflow.ApplyIgnoreRuleResponse`. */
+export interface ApplyIgnoreRuleResponse {
+	ignored_count: number;
+	status: string;
+}
+
+/** The harvest of one rule within one import. Mirrors `cashflow.IgnoredRuleGroupResponse`. */
+export interface IgnoredRuleGroup {
+	rule: IgnoreRule;
+	total: number;
+	transactions: CashflowTransaction[];
+}
+
+/** `GET /cashflow/imports/{import_id}/ignored` — mirrors `cashflow.ImportIgnoredResponse`. */
+export interface ImportIgnoredResponse {
+	data: IgnoredRuleGroup[];
 }
 
 /** `POST /cashflow/transactions/tag` request (single). */
@@ -159,6 +241,10 @@ export interface CashflowTransactionsQuery {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Only the rows one import brought in. */
+	import_id?: string;
+	/** Only the rows one ignore rule ignored. */
+	ignored_by_rule?: string;
 	from?: string;
 	to?: string;
 }

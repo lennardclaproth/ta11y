@@ -194,7 +194,7 @@ func (c *Commands) Process(ctx context.Context, importID uuid.UUID) error {
 		return c.markFailed(ctx, imp, result, err)
 	}
 
-	imp.MarkCompleted(result.Duplicates, result.TotalRows, result.Imported, result.Failed)
+	imp.MarkCompleted(result)
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err
 	}
@@ -320,10 +320,7 @@ func (c *Commands) processorFor(importType ImportType) Processor {
 }
 
 func (c *Commands) markFailed(ctx context.Context, imp *Import, result ProcessResult, reason error) error {
-	imp.Duplicates = result.Duplicates
-	imp.TotalRows = result.TotalRows
-	imp.Imported = result.Imported
-	imp.Failed = result.Failed
+	imp.applyCounters(result)
 	imp.MarkFailed(reason.Error())
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err

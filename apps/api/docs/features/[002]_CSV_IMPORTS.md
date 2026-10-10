@@ -134,6 +134,7 @@ erDiagram
         int total_rows
         int imported
         int failed
+        int auto_ignored "cashflow only - rows an ignore rule caught [034]"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -283,8 +284,15 @@ the user to upload a different file would send them the wrong way.
   `marketdata.EODInput` and calls `marketdata.Commands.CreateEODs`.
 
 Result counters (`ProcessResult`) flow back into the import record: `TotalRows`,
-`Imported`, `Duplicates`, `Failed`. On a downstream persistence error a processor returns
-`TotalRows = len(batch)` and `Failed = len(batch)` so the failed record reflects the size.
+`Imported`, `Duplicates`, `Failed`, `AutoIgnored`. On a downstream persistence error a
+processor returns `TotalRows = len(batch)` and `Failed = len(batch)` so the failed record
+reflects the size.
+
+After its insert, the **cashflow** processor runs the account's enabled ignore rules
+([034]) against the rows *this* import inserted, and reports how many they caught as
+`AutoIgnored`. Those rows are counted in `Imported` as well: they were imported, and then
+ignored. Nothing else about the lifecycle changes — the rules run before the import is
+marked completed, so `import.completed` already means the rules have run.
 
 ## Validation & error mapping
 

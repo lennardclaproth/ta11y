@@ -24,8 +24,11 @@
 		getCashflowTagDistribution,
 		createCashflowTransactions,
 		changeCashflowTransactionDate,
+		ignoreCashflowTransactionsBySelection,
 		tagCashflowTransactionsBySelection
 	} from '$lib/services/cashflow';
+	import { listIgnoreRules } from '$lib/services/ignoreRules';
+	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import {
 		createRecurringItem,
 		getRecurringOverview,
@@ -53,6 +56,7 @@
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
+		IgnoreRule,
 		RecurringItem,
 		TagDistributionEntry,
 		Vendor
@@ -93,6 +97,14 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedIds = $state<string[]>([]);
+
+	/**
+	 * Ignored rows are out of the ledger by default — that is what ignoring them is for.
+	 * Switching them back on is how you check what a rule did and put something back.
+	 */
+	let showIgnored = $state(false);
+	/** Named on every ignored row, so the rule that did it is visible rather than implied. */
+	let ignoreRules = $state<IgnoreRule[]>([]);
 
 	let monthly = $state<CashflowMonthlyPoint[]>([]);
 	let incoming = $state<TagDistributionEntry[]>([]);
@@ -152,7 +164,7 @@
 			offset,
 			from: from || undefined,
 			to: to || undefined,
-			hide_ignored: true
+			hide_ignored: !showIgnored
 		};
 	}
 
@@ -245,7 +257,19 @@
 		syncUrl();
 	});
 
+	// The rules are read once and only to name the rule on an ignored row; the ledger does
+	// not otherwise depend on them, so a failure leaves the rows reading "By hand" rather
+	// than taking the page down with it.
+	async function loadIgnoreRules() {
+		try {
+			ignoreRules = await listIgnoreRules();
+		} catch {
+			ignoreRules = [];
+		}
+	}
+
 	onMount(() => {
+		void loadIgnoreRules();
 		let realtime: { disconnect: () => void } | null = null;
 		void accountStore.ensureLoaded().then(() => {
 			if (!accountStore.hasAccount) return;
@@ -366,6 +390,54 @@
 		} catch {
 			toast.error('Failed to tag transactions');
 		}
+	}
+
+	/**
+	 * Puts ignored rows back in the ledger. The API records that the decision was made by
+	 * hand, so no rule ignores them again — which is the whole point of restoring one.
+	 */
+	async function restore(ids: string[]) {
+		if (ids.length === 0) return;
+		try {
+			await ignoreCashflowTransactionsBySelection({ ignored: false, ids });
+			selectedIds = selectedIds.filter((id) => !ids.includes(id));
+			toast.success(
+				ids.length === 1
+					? 'Put back in your ledger. Rules leave it alone from now on.'
+					: `Put ${ids.length} transactions back in your ledger`
+			);
+			void load(currentQuery());
+			void loadAnalytics();
+		} catch {
+			toast.error('Could not restore the transactions');
+		}
+	}
+
+	/**
+	 * Hands the selection to the rules page as a draft. The rule is still written and
+	 * previewed in the one place that owns rules, rather than guessed at from here: the
+	 * shared text of the selected descriptions is a starting point, not a decision.
+	 */
+	function makeRuleFromSelection() {
+		const selected = rows.filter((row) => selectedIds.includes(row.id));
+		if (selected.length === 0) return;
+		const contains = sharedPrefix(selected.map((row) => row.description));
+		void goto(`/cashflow/ignore-rules?contains=${encodeURIComponent(contains)}`);
+	}
+
+	/** The longest leading text every selected description shares, trimmed at a word. */
+	function sharedPrefix(values: string[]): string {
+		if (values.length === 0) return '';
+		let prefix = values[0];
+		for (const value of values.slice(1)) {
+			while (prefix && !value.toLowerCase().startsWith(prefix.toLowerCase())) {
+				prefix = prefix.slice(0, -1);
+			}
+		}
+		const trimmed = prefix.trim();
+		// A prefix that stops mid-word would make a rule nobody can read, so fall back to
+		// the first description in full and let the preview show what it catches.
+		return trimmed.length >= 3 ? trimmed : values[0];
 	}
 
 	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
@@ -510,11 +582,43 @@
 				onFilterChange();
 			}}
 		>
+			<!-- What is in the list is a filter over these rows, so the ignored switch and the
+			     page that owns the rules sit with the filters rather than with the actions. -->
+			{#snippet filters()}
+				<div class="flex items-center gap-2 text-sm text-slate-700">
+					<Switch
+						checked={showIgnored}
+						aria-label="Show ignored rows"
+						onchange={(event) => {
+							showIgnored = (event.currentTarget as HTMLInputElement).checked;
+							offset = 0;
+							selectedIds = [];
+						}}
+					/>
+					<span>Show ignored rows</span>
+				</div>
+				<a
+					href="/cashflow/ignore-rules"
+					class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+				>
+					<Icon icon="heroicons:funnel" size="sm" />Ignore rules
+				</a>
+			{/snippet}
 			{#snippet actions()}
 				{#if selectedIds.length > 0}
 					<Button variant="ruled" onclick={handleBulkTag}>
 						<Icon icon="heroicons:tag" />
 						Tag {selectedIds.length} selected
+					</Button>
+					{#if showIgnored}
+						<Button variant="ruled" onclick={() => void restore(selectedIds)}>
+							<Icon icon="heroicons:arrow-uturn-left" />
+							Restore
+						</Button>
+					{/if}
+					<Button variant="ruled" onclick={makeRuleFromSelection}>
+						<Icon icon="heroicons:funnel" />
+						Make an ignore rule
 					</Button>
 					<Button variant="ruled" onclick={() => void openMark()}>
 						<Icon icon="heroicons:arrow-path-rounded-square" />
@@ -536,6 +640,9 @@
 			{loading}
 			{error}
 			{total}
+			{showIgnored}
+			{ignoreRules}
+			onRestore={(row) => void restore([row.id])}
 			bind:limit
 			bind:offset
 			bind:selectedIds
@@ -577,8 +684,10 @@
 	onFinished={() => {
 		void load(currentQuery());
 		void loadAnalytics();
+		void loadIgnoreRules();
 	}}
 	onGoToPortfolio={() => void goto('/portfolio')}
+	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
 />
 
 {#snippet detailFields()}

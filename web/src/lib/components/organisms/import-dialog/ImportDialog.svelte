@@ -38,9 +38,17 @@
 		onFinished?: () => void;
 		/** Called when the user leaves for the portfolio from the result. */
 		onGoToPortfolio?: () => void;
+		/** Called with the cashflow import id when the user goes to review what it ignored. */
+		onReviewIgnored?: (importId: string) => void;
 	};
 
-	let { open = $bindable(false), vendors = [], onFinished, onGoToPortfolio }: Props = $props();
+	let {
+		open = $bindable(false),
+		vendors = [],
+		onFinished,
+		onGoToPortfolio,
+		onReviewIgnored
+	}: Props = $props();
 
 	/** How often an import in flight is re-read. Processing is detached, so it only arrives by asking. */
 	const POLL_MS = 1000;
@@ -115,6 +123,7 @@
 	}
 
 	const unlinkedProducts = $derived(portfolioResult?.unlinked_products ?? []);
+	const autoIgnored = $derived(cashflowResult?.auto_ignored ?? 0);
 
 	function trailState(result: ImportResult | null): TrailState {
 		if (phase === 'form') return 'pending';
@@ -370,6 +379,28 @@
 				<Alert intent="info" title="No new transactions">
 					Every row in this export was already imported earlier. Nothing was added, and nothing was
 					duplicated.
+				</Alert>
+			{/if}
+
+			<!-- Rows an ignore rule caught are out of the totals without anybody reading
+			     them, so the review that shows which rule did it is offered right here. -->
+			{#if autoIgnored > 0}
+				<Alert intent="info" title="{autoIgnored} rows were ignored automatically">
+					Your ignore rules recognised them, so they are out of your monthly totals.
+					<Button
+						size="sm"
+						variant="outline"
+						intent="secondary"
+						shape="default"
+						class="mt-2"
+						onclick={() => {
+							const id = cashflowResult?.import_id;
+							close();
+							if (id) onReviewIgnored?.(id);
+						}}
+					>
+						Review what was ignored
+					</Button>
 				</Alert>
 			{/if}
 

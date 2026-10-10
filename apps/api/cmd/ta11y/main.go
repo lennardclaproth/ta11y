@@ -208,6 +208,7 @@ func buildApplication(
 	authStore := storage.NewSQLXAuthStore(db)
 	vendorStore := storage.NewSQLXVendorStore(db)
 	cashflowStore := storage.NewSQLXCashflowStore(db)
+	ignoreRuleStore := storage.NewSQLXCashflowIgnoreRuleStore(db)
 	recurringStore := storage.NewSQLXRecurringStore(db)
 	portfolioStore := storage.NewSQLXPortfolioStore(db)
 	assetsStore := storage.NewSQLXAssetsStore(db)
@@ -232,8 +233,8 @@ func buildApplication(
 	authQueries := auth.NewQueries(authStore, accountQueries)
 	vendorCommands := vendor.NewCommands(vendorStore)
 	vendorQueries := vendor.NewQueries(vendorStore)
-	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, accountQueries)
-	cashflowQueries := cashflow.NewQueries(cashflowStore)
+	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, ignoreRuleStore, ignoreRuleStore, accountQueries)
+	cashflowQueries := cashflow.NewQueries(cashflowStore, ignoreRuleStore)
 	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore, recurringStore)
 	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
@@ -409,6 +410,13 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/selection", cashflowhttp.IgnoreTransactionsBySelection(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/filter", cashflowhttp.IgnoreTransactionsByFilter(app.log, app.cashflowCommands))
+	protected("GET /cashflow/ignore-rules", cashflowhttp.GetIgnoreRules(app.log, app.cashflowQueries))
+	protected("POST /cashflow/ignore-rules", cashflowhttp.CreateIgnoreRule(app.log, app.cashflowCommands))
+	protected("POST /cashflow/ignore-rules/preview", cashflowhttp.PreviewIgnoreRule(app.log, app.cashflowQueries))
+	protected("PUT /cashflow/ignore-rules/{rule_id}", cashflowhttp.UpdateIgnoreRule(app.log, app.cashflowCommands))
+	protected("DELETE /cashflow/ignore-rules/{rule_id}", cashflowhttp.DeleteIgnoreRule(app.log, app.cashflowCommands))
+	protected("POST /cashflow/ignore-rules/{rule_id}/apply", cashflowhttp.ApplyIgnoreRule(app.log, app.cashflowCommands))
+	protected("GET /cashflow/imports/{import_id}/ignored", cashflowhttp.GetImportIgnored(app.log, app.cashflowQueries))
 
 	// Recurring items are cashflow data for one account, so they sit in the same
 	// tier as the transactions they are built from.

@@ -93,6 +93,14 @@ type Transaction struct {
 	Ignored     bool              `db:"ignored"`
 	ImportID    *uuid.UUID        `db:"import_id"`
 	AccountType *AccountType      `db:"account_type"` // Allow nullable account type.
+	// IgnoredByRuleID names the ignore rule that ignored this transaction, nil when
+	// nobody's rule did. It is what makes a rule that is too wide visible per row
+	// rather than only as a total.
+	IgnoredByRuleID *uuid.UUID `db:"ignored_by_rule_id"`
+	// IgnoreOverridden records that the ignored state was decided by hand. Ignore
+	// rules leave those rows alone, so a transaction put back by hand stays back
+	// through later imports and later applications of the same rule.
+	IgnoreOverridden bool `db:"ignore_overridden"`
 }
 
 var (

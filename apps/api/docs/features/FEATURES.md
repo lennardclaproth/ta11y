@@ -97,6 +97,24 @@ import of the same file add the old row alongside it.
 
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
+### Ignore rules [034]
+Around a third of an imported statement is transfers between the owner's own accounts and
+credit-card settlements. They say nothing about income or spending, so users write **ignore
+rules** that recognise them: text in the description or the note, optionally narrowed to a
+direction and to one bank. Matching rows arrive from an import already ignored, and the
+import reports how many — alongside what was new and what was a duplicate — with the rows
+grouped under the rule that caught each one.
+
+A rule is the same shape as a ledger filter, so what it would catch is shown before it is
+saved and nothing is inferred; there is no learning, and the two sides of a transfer are
+never matched against each other. A rule only ever touches rows the import it ran for
+inserted, unless it is explicitly applied to the ledger, which names its count and asks
+first. Nothing is deleted: ignored rows are shown on Cashflow with the rule that ignored
+them and put back one by one — and a row put back by hand stays back, because rules leave
+anything you decided yourself alone.
+
+→ Details: [Ignore rules](%5B034%5D_IGNORE_RULES.md)
+
 ### Recurring items [033]
 Users see their subscriptions, fixed costs and recurring income in one place: to or from
 whom, how often (monthly, quarterly or yearly), how the amount moved over time, and when the

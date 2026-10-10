@@ -53,6 +53,9 @@ type Import struct {
 	TotalRows  int          `db:"total_rows"`
 	Imported   int          `db:"imported"`
 	Failed     int          `db:"failed"`
+	// AutoIgnored is how many of the imported rows an ignore rule recognised and
+	// ignored on arrival. Cashflow imports are the only ones that have rules.
+	AutoIgnored int `db:"auto_ignored"`
 }
 
 // ImportFileWriter persists an uploaded CSV payload and returns its stored path.
@@ -160,13 +163,18 @@ func (imp *Import) MarkProcessing() {
 }
 
 // MarkCompleted transitions the import to completed state and stores result counters.
-func (imp *Import) MarkCompleted(duplicates, totalRows, imported, failed int) {
+func (imp *Import) MarkCompleted(result ProcessResult) {
 	imp.Status = ImportStatusCompleted
 	imp.UpdatedAt = time.Now().UTC()
-	imp.Duplicates = duplicates
-	imp.TotalRows = totalRows
-	imp.Imported = imported
-	imp.Failed = failed
+	imp.applyCounters(result)
+}
+
+func (imp *Import) applyCounters(result ProcessResult) {
+	imp.Duplicates = result.Duplicates
+	imp.TotalRows = result.TotalRows
+	imp.Imported = result.Imported
+	imp.Failed = result.Failed
+	imp.AutoIgnored = result.AutoIgnored
 }
 
 // MarkFailed transitions the import to failed state and stores the failure message.
