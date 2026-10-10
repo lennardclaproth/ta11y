@@ -141,15 +141,7 @@
 	</fieldset>
 
 	{#if failure}
-		<NoticeBand
-			intent="error"
-			surface="inset"
-			gutter="dialog"
-			title="This listing was not saved"
-			class="-mx-5"
-		>
-			{failure}
-		</NoticeBand>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{failure}</NoticeBand>
 	{/if}
 
 	<div class="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">

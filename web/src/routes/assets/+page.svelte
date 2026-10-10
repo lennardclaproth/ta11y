@@ -205,13 +205,7 @@
 
 <Dialog bind:open={createOpen} title="New asset class" size="sm" onClose={() => (createError = null)}>
 	{#if createError}
-		<NoticeBand
-			intent="error"
-			surface="inset"
-			gutter="dialog"
-			title="This asset class was not saved"
-			class="-mx-5 -mt-4 mb-4"
-		>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
 			{createError}
 		</NoticeBand>
 	{/if}

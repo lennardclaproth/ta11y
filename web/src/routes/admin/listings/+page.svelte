@@ -211,13 +211,7 @@
 	{#if confirmingDelete}
 		{@const target = confirmingDelete}
 		{#if deleteError}
-			<NoticeBand
-				intent="error"
-				surface="inset"
-				gutter="dialog"
-				title="This listing was not deleted"
-				class="-mx-5 -mt-4 mb-4"
-			>
+			<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
 				{deleteError}
 			</NoticeBand>
 		{/if}

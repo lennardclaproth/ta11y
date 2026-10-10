@@ -229,13 +229,7 @@
 	{#if editing}
 		{@const provider = editing}
 		{#if formError}
-			<NoticeBand
-				intent="error"
-				surface="inset"
-				gutter="dialog"
-				title="These credentials were not saved"
-				class="-mx-5 -mt-4 mb-4"
-			>
+			<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
 				{formError}
 			</NoticeBand>
 		{/if}
