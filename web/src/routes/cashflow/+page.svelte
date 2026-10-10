@@ -371,10 +371,11 @@
 	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
 
 	// The dialog offers "add to an existing item" first, so the items are read when it
-	// opens rather than on every page load: most visits never mark anything.
+	// opens rather than on every page load: most visits never mark anything. They are read
+	// *before* opening, because the dialog picks its route once from the list it sees on
+	// opening — arriving late would point an account that already has items at "new".
 	async function openMark() {
 		markError = null;
-		markOpen = true;
 		try {
 			const overview = await getRecurringOverview();
 			recurringItems = [...overview.expenses, ...overview.income];
@@ -383,6 +384,7 @@
 			// failure — the dialog simply offers only that route.
 			recurringItems = [];
 		}
+		markOpen = true;
 	}
 
 	async function handleMarkRecurring(value: MarkRecurringValue) {
