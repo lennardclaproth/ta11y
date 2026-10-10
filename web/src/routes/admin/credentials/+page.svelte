@@ -8,6 +8,7 @@
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
@@ -142,20 +143,13 @@
 			<Button variant="outline" disabled={loading} onclick={load}>Refresh</Button>
 		</div>
 
-		{#if error}
-			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">
-				<p class="text-sm text-red-700">{error}. Check your connection and try again.</p>
-				<Button variant="outline" onclick={load}>Retry loading</Button>
-			</div>
-		{/if}
-
 		<DataTable
 			rows={providers}
 			{loading}
+			error={error ? `${error}. Check your connection and try again.` : null}
+			onRetry={load}
 			getRowId={(row: ProviderCredential) => row.id}
-			emptyText={error
-				? 'Provider credentials are unavailable. Retry loading above.'
-				: 'No providers are configured yet.'}
+			emptyText="No providers are configured yet."
 			columns={[
 				{ key: 'name', header: 'Provider', width: 'w-40', cell: nameCell },
 				{ key: 'base_uri', header: 'Base URL', cell: baseUriCell },
@@ -234,6 +228,17 @@
 >
 	{#if editing}
 		{@const provider = editing}
+		{#if formError}
+			<NoticeBand
+				intent="error"
+				surface="inset"
+				gutter="dialog"
+				title="These credentials were not saved"
+				class="-mx-5 -mt-4 mb-4"
+			>
+				{formError}
+			</NoticeBand>
+		{/if}
 		<form
 			class="space-y-4"
 			novalidate
@@ -276,7 +281,6 @@
 					{/snippet}
 				</FormField>
 			</fieldset>
-			{#if formError}<p role="alert" class="text-sm text-red-700">{formError}</p>{/if}
 			<div class="flex justify-end gap-2 border-t border-slate-200 pt-4">
 				<Button variant="ghost" intent="secondary" disabled={saving} onclick={closeEditor}>
 					Cancel

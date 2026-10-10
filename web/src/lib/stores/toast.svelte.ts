@@ -1,13 +1,13 @@
-import type { AlertIntent } from '$lib/components/molecules/alert/alert.types';
+import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 
 /**
- * The single toast system (DESIGN_PLAN §5.3). One store, consumed by exactly one `ToastHost` organism
- * that renders the `alert` molecule. The reference re-implemented toasts on every page; here pages just
- * call `toast.success(...)` etc.
+ * The single toast system (DESIGN_PLAN §5.3). One store, consumed by exactly one `NoticeBandRegion`
+ * organism that renders the `notice-band` molecule. The reference re-implemented toasts on every page;
+ * here pages just call `toast.success(...)` etc.
  */
 export interface Toast {
 	id: number;
-	intent: AlertIntent;
+	intent: NoticeIntent;
 	title?: string;
 	message: string;
 	dismissible: boolean;
@@ -37,7 +37,7 @@ function dismiss(id: number): void {
 	items = items.filter((toastItem) => toastItem.id !== id);
 }
 
-function push(intent: AlertIntent, message: string, options: ToastOptions = {}): number {
+function push(intent: NoticeIntent, message: string, options: ToastOptions = {}): number {
 	const id = (nextId += 1);
 	const duration = options.duration ?? DEFAULT_DURATION;
 	const next: Toast = {
@@ -72,7 +72,7 @@ const BACKGROUND_HINTS = ['schedul', 'queue', 'pending', 'process', 'background'
  */
 function fromStatus(status: string, message: string, options: ToastOptions = {}): number {
 	const normalized = status.toLowerCase();
-	let intent: AlertIntent = 'info';
+	let intent: NoticeIntent = 'info';
 	if (BACKGROUND_HINTS.some((hint) => normalized.includes(hint))) intent = 'info';
 	else if (normalized.includes('fail') || normalized.includes('error')) intent = 'error';
 	else if (

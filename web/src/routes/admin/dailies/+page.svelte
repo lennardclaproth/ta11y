@@ -139,6 +139,9 @@
 					{error}
 					getRowId={(r: EOD) => r.ID}
 					emptyText="No daily data for this listing"
+					onRetry={() => {
+						if (selected) void selectListing(selected);
+					}}
 					columns={[
 						{
 							key: 'date',

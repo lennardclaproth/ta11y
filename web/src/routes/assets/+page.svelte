@@ -10,6 +10,7 @@
 	import AssetClassDrawer from '$lib/components/organisms/asset-class-drawer/AssetClassDrawer.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
@@ -41,6 +42,7 @@
 	let createOpen = $state(false);
 	let className = $state('');
 	let creatingClass = $state(false);
+	let createError = $state<string | null>(null);
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
 	const monthShort = (iso: string) =>
@@ -89,6 +91,7 @@
 	async function createClass() {
 		if (className.trim() === '') return;
 		creatingClass = true;
+		createError = null;
 		try {
 			await accountStore.ensureLoaded();
 			await createAssetClass({ name: className.trim() });
@@ -97,7 +100,8 @@
 			toast.success('Asset class created');
 			void loadAll();
 		} catch {
-			toast.error('Failed to create asset class');
+			// The dialog stays open with the entry, so the refusal is stated in it, not behind it.
+			createError = 'Failed to create asset class';
 		} finally {
 			creatingClass = false;
 		}
@@ -186,6 +190,7 @@
 			{error}
 			emptyText="No asset classes"
 			onRowClick={openClass}
+			onRetry={() => void loadAll()}
 			columns={[
 				{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
 				{ key: 'source', header: 'Source', value: (r: AssetClass) => r.source },
@@ -198,7 +203,18 @@
 
 <AssetClassDrawer bind:open={drawerOpen} {details} loading={detailsLoading} />
 
-<Dialog bind:open={createOpen} title="New asset class" size="sm">
+<Dialog bind:open={createOpen} title="New asset class" size="sm" onClose={() => (createError = null)}>
+	{#if createError}
+		<NoticeBand
+			intent="error"
+			surface="inset"
+			gutter="dialog"
+			title="This asset class was not saved"
+			class="-mx-5 -mt-4 mb-4"
+		>
+			{createError}
+		</NoticeBand>
+	{/if}
 	<FormField label="Name" id="class-name">
 		{#snippet children(ctx)}
 			<Input id={ctx.id} bind:value={className} placeholder="e.g. Real estate" />

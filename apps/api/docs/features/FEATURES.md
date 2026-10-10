@@ -17,6 +17,10 @@ and square paper table surfaces. Narrow screens scroll through analytics to a de
 region; wide tables scroll horizontally without widening the page. Existing financial actions,
 filters, date selection, and account controls remain available. Cashflow, Portfolio and Assets
 place labeled creation actions with plus icons above the ledger, alongside its title or view tabs.
+Every notification uses one shape: a ruled band in the page flow. Feedback after an action appears
+in the single notice region under the masthead; a problem that stays sits at the content it
+concerns with its recovery action; a refused save stays in the modal or form that caused it, with
+the entry preserved and no second notice on top of it.
 
 ### Authentication [030]
 People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow

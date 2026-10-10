@@ -1,10 +1,10 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import ToastHost from './ToastHost.svelte';
+	import NoticeBandRegion from './NoticeBandRegion.svelte';
 
 	const { Story } = defineMeta({
-		title: 'Organisms/ToastHost',
-		component: ToastHost,
+		title: 'Organisms/NoticeBandRegion',
+		component: NoticeBandRegion,
 		tags: ['autodocs']
 	});
 </script>
@@ -29,24 +29,25 @@
 </script>
 
 <Story name="Tones" asChild>
+	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
 		<Button intent="info" onclick={() => toast.info('Heads up — something happened.')}>Info</Button>
 		<Button intent="success" onclick={() => toast.success('Saved successfully.')}>Success</Button>
 		<Button intent="warning" onclick={() => toast.warning('Double-check this.')}>Warning</Button>
 		<Button intent="error" onclick={() => toast.error('That did not work.')}>Error</Button>
 	</div>
-	<ToastHost />
 </Story>
 
 <Story name="Stacked" asChild>
+	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
-		<Button onclick={stack}>Trigger 4 toasts</Button>
+		<Button onclick={stack}>Trigger 4 notices</Button>
 		<Button variant="ghost" intent="secondary" onclick={() => toast.clear()}>Clear all</Button>
 	</div>
-	<ToastHost />
 </Story>
 
 <Story name="Auto-dismiss vs sticky" asChild>
+	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
 		<Button onclick={() => toast.success('Auto-dismisses in 4.5s')}>Auto-dismiss</Button>
 		<Button
@@ -56,10 +57,10 @@
 			Sticky (duration 0)
 		</Button>
 	</div>
-	<ToastHost />
 </Story>
 
 <Story name="With title + message" asChild>
+	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
 		<Button
 			intent="info"
@@ -71,5 +72,4 @@
 			From status
 		</Button>
 	</div>
-	<ToastHost />
 </Story>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
@@ -89,15 +89,22 @@
 	closeOnBackdrop={!submitting}
 	{onClose}
 >
+	<!-- A refused save stays in the modal, directly under its header and full-bleed, with the entry
+	     untouched behind it. The band carries role="alert", so it is announced and not just coloured. -->
+	{#if error}
+		<NoticeBand
+			intent="error"
+			surface="inset"
+			gutter="dialog"
+			title="This transaction was not saved"
+			class="-mx-5 -mt-4 mb-4"
+		>
+			{error}
+		</NoticeBand>
+	{/if}
+
 	<div class="space-y-3">
 		<TransactionDateHeader bind:value={date} bind:open={pickerOpen} {today} disabled={submitting} />
-
-		{#if error}
-			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
-			<div role="alert">
-				<Alert intent="error" title="This transaction was not saved">{error}</Alert>
-			</div>
-		{/if}
 
 		<FormField label="Type" id="tx-type">
 			{#snippet children(ctx)}

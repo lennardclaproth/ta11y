@@ -16,7 +16,7 @@
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
@@ -237,16 +237,17 @@
 	}
 
 	async function submitTx() {
+		// The dialog is open, so what is missing is said in the dialog rather than on a toast behind it.
 		if (!vendorId || txAmount.trim() === '') {
-			toast.error('Vendor and amount are required');
+			txError = 'Vendor and amount are required';
 			return;
 		}
 		if (needsListing && !txListing) {
-			toast.error('Select a listing');
+			txError = 'Select a listing';
 			return;
 		}
 		if (needsQuantity && txQuantity.trim() === '') {
-			toast.error('Quantity is required');
+			txError = 'Quantity is required';
 			return;
 		}
 		creatingTx = true;
@@ -267,8 +268,8 @@
 			noteRebuild(created.rebuild, txDate);
 			void loadAll();
 		} catch (err) {
+			// The dialog stays open with the entry, so the refusal belongs in it, not on a toast as well.
 			txError = createMessage(err, txDate);
-			toast.error('Failed to add transaction');
 		} finally {
 			creatingTx = false;
 		}
@@ -358,6 +359,19 @@
 	}
 </script>
 
+{#snippet rebuildAction()}
+	<Button
+		size="sm"
+		variant="outline"
+		intent="secondary"
+		shape="default"
+		loading={rebuilding}
+		onclick={() => void handleRebuild()}
+	>
+		Rebuild portfolio
+	</Button>
+{/snippet}
+
 {#snippet marketValueCell(row: PortfolioPosition)}
 	{#if row.market_value !== null && row.market_value !== undefined}
 		<Money amount={scaledToNumber(row.market_value)} currency="EUR" size="sm" />
@@ -437,27 +451,13 @@
 		{/snippet}
 
 		{#if stale}
-			<Alert intent="warning" title="Portfolio not updated yet">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<span>
-						The transaction was saved on {formatDisplayDate(stale.date)}, but
-						{stale.outcome === 'in_progress'
-							? 'a rebuild was already running'
-							: 'the rebuild did not finish'}. Positions, performance and net worth still show the
-						previous result.
-					</span>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						shape="default"
-						loading={rebuilding}
-						onclick={() => void handleRebuild()}
-					>
-						Rebuild portfolio
-					</Button>
-				</div>
-			</Alert>
+			<NoticeBand intent="warning" gutter="panel" title="Portfolio not updated yet" action={rebuildAction}>
+				The transaction was saved on {formatDisplayDate(stale.date)}, but
+				{stale.outcome === 'in_progress'
+					? 'a rebuild was already running'
+					: 'the rebuild did not finish'}. Positions, performance and net worth still show the
+				previous result.
+			</NoticeBand>
 		{/if}
 
 		<div class="flex min-h-0 flex-1 flex-col">
@@ -477,6 +477,7 @@
 					{loading}
 					{error}
 					emptyText="No positions"
+					onRetry={() => void loadAll()}
 					columns={[
 						{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
 						{ key: 'name', header: 'Name', value: (r: PortfolioPosition) => r.name ?? '—' },
@@ -497,6 +498,7 @@
 					{error}
 					emptyText="No transactions"
 					onRowClick={openDetail}
+					onRetry={() => void loadAll()}
 					columns={[
 						{
 							key: 'date',
@@ -538,6 +540,20 @@
 	closeOnEscape={!creatingTx}
 	closeOnBackdrop={!creatingTx}
 >
+	<!-- A refused save stays in the dialog, directly under its header and full-bleed, with the entry
+	     untouched behind it. The band carries role="alert", so it is announced and not just coloured. -->
+	{#if txError}
+		<NoticeBand
+			intent="error"
+			surface="inset"
+			gutter="dialog"
+			title="This transaction was not saved"
+			class="-mx-5 -mt-4 mb-4"
+		>
+			{txError}
+		</NoticeBand>
+	{/if}
+
 	<div class="space-y-3">
 		<TransactionDateHeader
 			bind:value={txDate}
@@ -545,13 +561,6 @@
 			today={txToday}
 			disabled={creatingTx}
 		/>
-
-		{#if txError}
-			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
-			<div role="alert">
-				<Alert intent="error" title="This transaction was not saved">{txError}</Alert>
-			</div>
-		{/if}
 
 		<FormField label="Type" id="ptx-type">
 			{#snippet children(ctx)}

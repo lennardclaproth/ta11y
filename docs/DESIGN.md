@@ -217,7 +217,7 @@ shadow to distinguish it from content.
 | Sticky table header | 20 |
 | Popover / table footer | 30 |
 | Floating action button / expanded scrim | 40 |
-| Modal scrim / toast host | 50 |
+| Modal scrim | 50 |
 | Portaled filter popover | 60 |
 | Async search dropdown | 70 |
 
@@ -254,7 +254,27 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
-| Feedback | Alert, ToastHost, Skeleton, Spinner | Persistent issues belong near the affected content; transient feedback uses the single shell toast host |
+| Feedback | NoticeBand, NoticeBandRegion, Skeleton, Spinner | Every notification is a NoticeBand; persistent issues belong near the affected content, transient feedback goes through the single shell notice region |
+
+#### Notifications
+
+One shape reports everything: a full-width band with a hairline rule above and below, always in
+normal document flow. Nothing floats, so a notice never covers the navigation, a page action or a
+table row.
+
+- **After an action** — `NoticeBandRegion` renders the toast store directly under the masthead.
+  Stacked bands share one hairline (`-mt-px`) so several notices read as one ruled block.
+- **A problem that stays** — the band sits at the content it concerns (above the records), with its
+  recovery action on the same line. Nothing is drawn underneath a failed load: no zero, no
+  empty-filter line, no pagination.
+- **In a modal or form** — a refused save stays where it happened: per field through `FormField`, or
+  as a band full-bleed under the dialog header. The entry is preserved, and no toast repeats it.
+
+The band's text lines up with the text of its container through `gutter` (`page`, `panel`, `dialog`,
+`none`), and `surface` picks the sheet it is printed on (`paper` on the taupe canvas and in a muted
+panel, `inset` inside a white dialog or drawer). The intent colour appears only in the solid chip;
+the message stays slate, and the intent name is in the band as screen-reader-only text, so colour is
+never the only carrier of meaning.
 
 Do not assume every component implements every intent: Button supports primary/secondary/warning/error/success/info; Badge adds neutral; Input uses default/error/success. Read each component's types before extending it.
 

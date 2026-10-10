@@ -3,6 +3,7 @@
 	import type { CatalogueStatus, CatalogueSync, Listing, ListingSearchRow } from '$lib/api/types';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -312,7 +313,9 @@
 				</Button>
 			</div>
 			{#if syncError}
-				<p role="alert" class="text-sm text-red-700">{syncError}</p>
+				<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">
+					{syncError}
+				</NoticeBand>
 			{/if}
 		</div>
 
