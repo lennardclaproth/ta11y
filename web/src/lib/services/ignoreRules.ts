@@ -28,7 +28,10 @@ function mockMatches(body: IgnoreRuleRequest): CashflowTransaction[] {
 
 function matchesMockRule(body: IgnoreRuleRequest, tx: CashflowTransaction): boolean {
 	if (body.direction && tx.direction !== body.direction) return false;
-	if (body.source && !contains(tx.source, body.source)) return false;
+	// The bank is chosen from a list of names, so it narrows on the whole name — the API
+	// matches it exactly, and a preview that matched a substring would promise more than
+	// the rule delivers.
+	if (body.source && tx.source.toLowerCase() !== body.source.toLowerCase()) return false;
 	const field = body.match_field === 'note' ? tx.note : tx.description;
 	return contains(field, body.contains);
 }
