@@ -95,6 +95,17 @@ func TestNewIgnoreRuleDraftRefusesTooWideText(t *testing.T) {
 	}
 }
 
+func TestNewIgnoreRuleDraftRefusesLikeWildcards(t *testing.T) {
+	// % and _ keep their LIKE meaning all the way into the query, so they walk past the
+	// minimum length: "a%z" is three characters and matches almost every statement. A
+	// saved rule then runs unseen on every later import.
+	for _, contains := range []string{"a%z", "NL_ABNA"} {
+		if _, err := NewIgnoreRuleDraft("Wide", "description", contains, "", "", true); !errors.Is(err, ErrIgnoreRuleContainsWildcard) {
+			t.Fatalf("contains %q: expected ErrIgnoreRuleContainsWildcard, got %v", contains, err)
+		}
+	}
+}
+
 func TestNewIgnoreRuleDraftRefusesUnknownMatchField(t *testing.T) {
 	if _, err := NewIgnoreRuleDraft("Tagged", "tag", "savings", "", "", true); !errors.Is(err, ErrIgnoreRuleInvalidMatchField) {
 		t.Fatalf("expected ErrIgnoreRuleInvalidMatchField, got %v", err)

@@ -194,6 +194,10 @@ that caused it; an unknown rule → 404; store errors → 500.
   chosen from a list of names rather than typed, so it narrows on `SourceExact`
   (`LOWER(source) = ?`) and a rule scoped to one bank cannot reach another whose name
   contains it.
+- **What a rule may not contain.** `contains` is at least 3 characters and carries no `%`
+  or `_`. Both are LIKE wildcards in the query the text ends up in, so they would walk past
+  the minimum length — `a%z` is three characters and matches almost every statement — and a
+  saved rule runs unseen on every later import.
 - **What a rule may touch.** `ignored = false AND ignore_overridden = false`, within the
   account, plus `import_id = ?` when scoped to an import. `CountIgnoreRuleTargets` counts
   exactly that set, which is the number the confirmation before "apply to existing" names.

@@ -24,7 +24,11 @@ var (
 	ErrIgnoreRuleInvalidDirection  = fmt.Errorf("direction must be empty, in, or out")
 	ErrIgnoreRuleContainsTooShort  = fmt.Errorf("contains must be at least 3 characters")
 	ErrIgnoreRuleContainsTooLong   = fmt.Errorf("contains must be at most 255 characters")
-	ErrIgnoreRuleNotFound          = fmt.Errorf("ignore rule not found")
+	// ErrIgnoreRuleContainsWildcard explains the refusal rather than silently bending
+	// the text: % and _ are LIKE wildcards, so "a%z" would pass the minimum length and
+	// still match nearly every statement.
+	ErrIgnoreRuleContainsWildcard = fmt.Errorf("contains must not use %% or _, which match any text")
+	ErrIgnoreRuleNotFound         = fmt.Errorf("ignore rule not found")
 )
 
 // Account Errors

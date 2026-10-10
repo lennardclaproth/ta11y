@@ -86,6 +86,13 @@ func NewIgnoreRuleDraft(name, matchFieldRaw, contains, directionRaw, source stri
 	}
 
 	trimmedContains := strings.TrimSpace(contains)
+	// The text goes into a LIKE unescaped, so % and _ would keep their wildcard meaning
+	// and walk straight past the minimum length: "a%z" is three characters and matches
+	// almost every statement. "Contains" should mean contains, and a refusal says so
+	// where quietly stripping the characters would not.
+	if strings.ContainsAny(trimmedContains, "%_") {
+		return IgnoreRuleDraft{}, ErrIgnoreRuleContainsWildcard
+	}
 	if len([]rune(trimmedContains)) < ignoreRuleContainsMinLength {
 		return IgnoreRuleDraft{}, ErrIgnoreRuleContainsTooShort
 	}

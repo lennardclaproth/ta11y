@@ -389,7 +389,9 @@ func ignoreRuleProblem(err error) map[string]string {
 		return map[string]string{"name": err.Error()}
 	case errors.Is(err, cashflow.ErrIgnoreRuleInvalidMatchField):
 		return map[string]string{"match_field": err.Error()}
-	case errors.Is(err, cashflow.ErrIgnoreRuleContainsTooShort), errors.Is(err, cashflow.ErrIgnoreRuleContainsTooLong):
+	case errors.Is(err, cashflow.ErrIgnoreRuleContainsTooShort),
+		errors.Is(err, cashflow.ErrIgnoreRuleContainsTooLong),
+		errors.Is(err, cashflow.ErrIgnoreRuleContainsWildcard):
 		return map[string]string{"contains": err.Error()}
 	case errors.Is(err, cashflow.ErrIgnoreRuleInvalidDirection):
 		return map[string]string{"direction": err.Error()}
