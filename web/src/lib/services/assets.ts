@@ -5,17 +5,28 @@ import type {
 	AssetClassDetails,
 	AssetClassesQuery,
 	AssetClassesResponse,
+	AssetHolding,
 	AssetSnapshotsQuery,
 	AssetSnapshotsResponse,
 	CreateAssetClassRequest,
 	CreateAssetClassResponse,
 	CreateAssetRequest,
 	CreateAssetResponse,
+	CreateHoldingRequest,
+	CreateHoldingResponse,
 	DeleteAssetClassRequest,
+	HoldingPurchase,
+	PurchaseRequest,
 	SetAssetWorthRequest,
 	UpdateAssetClassRequest
 } from '$lib/api/types';
-import { assetClassDetails, assetClasses, assetSnapshots } from '$lib/data/fixtures/assets';
+import {
+	assetClassDetails,
+	assetClasses,
+	assetHoldings,
+	assetSnapshots
+} from '$lib/data/fixtures/assets';
+import { ApiError } from '$lib/api/client';
 import { clone, delay, mockId } from './_mock';
 
 /** `GET /assets/classes` */
@@ -35,7 +46,7 @@ export async function getAssetClassDetails(classId: string): Promise<AssetClassD
 		if (details) return clone(details);
 		// Fall back to a details view synthesized from the summary for classes without rich fixtures.
 		const summary = assetClasses.find((c) => c.id === classId) ?? assetClasses[0];
-		return clone({ class: summary, assets: [], growth: [], mutations: [] });
+		return clone({ class: summary, assets: [], holdings: [], growth: [], mutations: [] });
 	}
 	return apiGet<AssetClassDetails>(`/assets/classes/${classId}`);
 }
@@ -115,4 +126,37 @@ export async function adjustAssetWorth(
 		return;
 	}
 	await apiSend<unknown>('PUT', `/assets/${assetId}/adjust`, body);
+}
+
+/** `POST /assets/holdings` — adds an item whose worth follows a daily price. */
+export async function createHolding(body: CreateHoldingRequest): Promise<CreateHoldingResponse> {
+	if (useMocks) {
+		await delay();
+		return { id: mockId(), name: body.name };
+	}
+	return apiSend<CreateHoldingResponse>('POST', '/assets/holdings', body);
+}
+
+/** `GET /assets/{asset_id}/holding` */
+export async function getHolding(assetId: string): Promise<AssetHolding> {
+	if (useMocks) {
+		await delay();
+		const holding = assetHoldings[assetId];
+		if (!holding) throw new ApiError(404, 'Asset not found', { error: 'asset not found' });
+		return clone(holding);
+	}
+	return apiGet<AssetHolding>(`/assets/${assetId}/holding`);
+}
+
+/** `POST /assets/{asset_id}/purchases` */
+export async function addPurchase(
+	assetId: string,
+	body: PurchaseRequest
+): Promise<HoldingPurchase> {
+	if (useMocks) {
+		await delay();
+		const paid = (Number.parseFloat(body.quantity) || 0) * (Number.parseFloat(body.unit_price) || 0);
+		return { id: mockId(), ...body, paid: paid.toFixed(6) };
+	}
+	return apiSend<HoldingPurchase>('POST', `/assets/${assetId}/purchases`, body);
 }

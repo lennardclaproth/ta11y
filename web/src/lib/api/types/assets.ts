@@ -49,10 +49,66 @@ export interface AssetMutation {
 	created_at: string;
 }
 
+/** One recorded purchase of a daily-priced item. Mirrors `assets.PurchaseResponse`. */
+export interface HoldingPurchase {
+	id: string;
+	/** "YYYY-MM-DD". */
+	date: string;
+	/** Units bought, as a plain decimal string. */
+	quantity: string;
+	unit_price: string;
+	/** quantity × unit_price. */
+	paid: string;
+}
+
+/**
+ * One day of a holding's history: what it was worth against what had been paid for
+ * it by then. Mirrors `assets.HoldingValuePointResponse`.
+ */
+export interface HoldingValuePoint {
+	/** "YYYY-MM-DD". */
+	date: string;
+	value: string;
+	paid: string;
+}
+
+/**
+ * An asset item whose worth follows a listing's daily price rather than a worth the
+ * user sets. Mirrors `assets.HoldingResponse`.
+ */
+export interface AssetHolding {
+	id: string;
+	class_id: string;
+	class_name?: string;
+	name: string;
+	/** Quote symbol, e.g. "BTC/EUR". Empty when the listing behind it has gone missing. */
+	symbol: string;
+	instrument_name?: string;
+	/** Total units held, as a plain decimal string. */
+	quantity: string;
+	paid: string;
+	avg_unit_price: string;
+	/** Most recent known daily price per unit. */
+	price: string;
+	/** Day the known price belongs to; absent while no price is known yet. */
+	price_date?: string | null;
+	/** True when `price_date` is older than today, so the price is carried forward. */
+	price_carried_forward: boolean;
+	value: string;
+	unrealized: string;
+	/** Absent when nothing has been paid yet, where a percentage has no meaning. */
+	unrealized_pct?: number | null;
+	series: HoldingValuePoint[];
+	/** Only present on `GET /assets/{asset_id}/holding`. */
+	purchases?: HoldingPurchase[];
+}
+
 /** `GET /assets/classes/{class_id}` — mirrors `assets.ClassDetailsResponse`. */
 export interface AssetClassDetails {
 	class: AssetClass;
 	assets: Asset[];
+	/** The class's daily-priced items; they carry a quantity and a price that `assets` has no equivalent of. */
+	holdings: AssetHolding[];
 	growth: ClassGrowthPoint[];
 	mutations: AssetMutation[];
 }
@@ -112,6 +168,31 @@ export interface SetAssetWorthRequest {
 	/** "YYYY-MM-DD". */
 	effective_date: string;
 	note?: string;
+}
+
+/** One recorded acquisition as the API receives it — mirrors `assets.PurchaseRequest`. */
+export interface PurchaseRequest {
+	/** "YYYY-MM-DD", not in the future. */
+	date: string;
+	/** Positive decimal string. */
+	quantity: string;
+	/** Non-negative decimal string. */
+	unit_price: string;
+}
+
+/** `POST /assets/holdings` request — mirrors `assets.CreateHoldingRequest`. */
+export interface CreateHoldingRequest {
+	class_id: string;
+	name: string;
+	/** Quote symbol from `GET /marketdata/quotes`, e.g. "BTC/EUR". */
+	symbol: string;
+	purchase: PurchaseRequest;
+}
+
+/** `POST /assets/holdings` — mirrors `assets.CreateHoldingResponse`. */
+export interface CreateHoldingResponse {
+	id: string;
+	name: string;
 }
 
 /** Direction for an asset-worth adjustment. */

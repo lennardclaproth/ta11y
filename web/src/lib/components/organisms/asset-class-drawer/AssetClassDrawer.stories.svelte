@@ -5,6 +5,7 @@
 	import { assetClassDetails } from '$lib/data/fixtures/assets';
 
 	const stocks = assetClassDetails['cls-stocks'];
+	const crypto = assetClassDetails['cls-crypto'];
 
 	const { Story } = defineMeta({
 		title: 'Organisms/AssetClassDrawer',
@@ -16,12 +17,26 @@
 <script lang="ts">
 	let open = $state(false);
 	let openLoading = $state(false);
+	let openMixed = $state(false);
 </script>
 
 <Story name="With details" asChild>
 	<div>
 		<Button onclick={() => (open = true)}>Open asset class</Button>
 		<AssetClassDrawer bind:open details={stocks} />
+	</div>
+</Story>
+
+<Story name="Daily-priced items" asChild>
+	<div>
+		<Button onclick={() => (openMixed = true)}>Open mixed class</Button>
+		<AssetClassDrawer
+			bind:open={openMixed}
+			details={crypto}
+			onOpenClass={() => {}}
+			onAddItem={() => {}}
+			onOpenItem={() => {}}
+		/>
 	</div>
 </Story>
 

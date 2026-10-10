@@ -15,6 +15,8 @@ import type {
 	ListingsSearchQuery,
 	ListingsSearchResponse,
 	ProviderCredential,
+	QuotesQuery,
+	QuotesResponse,
 	RevealProviderAPIKeyResponse,
 	UpdateListingFieldsRequest,
 	UpdateProviderCredentialsRequest
@@ -27,7 +29,7 @@ import {
 	type CatalogueEntry
 } from '$lib/data/fixtures/catalogue';
 import { maskKey, mockKeys, providerCredentials } from '$lib/data/fixtures/credentials';
-import { eodByListing, listings } from '$lib/data/fixtures/marketdata';
+import { eodByListing, listings, quotes } from '$lib/data/fixtures/marketdata';
 import { portfolioPositions } from '$lib/data/fixtures/portfolio';
 import { clone, delay, mockId } from './_mock';
 
@@ -109,6 +111,23 @@ export async function searchListings(query: ListingsSearchQuery): Promise<Listin
 		return { pagination: { limit, offset, count: data.length, total: matched.length }, data };
 	}
 	return apiGet<ListingsSearchResponse>('/marketdata/listings/search', { ...query });
+}
+
+/**
+ * `GET /marketdata/quotes` — the instruments an asset item can follow for a daily
+ * price. Unselectable rows are returned too, with the reason, so the picker can show
+ * why gold cannot be linked instead of leaving it out.
+ */
+export async function searchQuotes(query: QuotesQuery = {}): Promise<QuotesResponse> {
+	if (useMocks) {
+		await delay();
+		const needle = (query.q ?? '').trim().toLowerCase();
+		const matched = quotes.filter((q) =>
+			`${q.symbol} ${q.name} ${q.kind}`.toLowerCase().includes(needle)
+		);
+		return clone(matched.slice(0, query.limit ?? 50));
+	}
+	return apiGet<QuotesResponse>('/marketdata/quotes', { ...query });
 }
 
 /** `GET /marketdata/eods` */
