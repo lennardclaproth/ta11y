@@ -10,8 +10,8 @@ import type {
 	IgnoredRuleGroup,
 	ImportIgnoredResponse
 } from '$lib/api/types';
-import { cashflowTransactions } from '$lib/data/fixtures/cashflow';
 import { ignoreRules } from '$lib/data/fixtures/ignoreRules';
+import { mockCashflowRows, mutateMockIgnored, mutateMockImportId } from './cashflow';
 import { clone, contains, delay, mockId } from './_mock';
 
 /**
@@ -23,12 +23,26 @@ let mockRules: IgnoreRule[] = clone(ignoreRules);
 
 /** Which transactions a rule matches, using the same fields the ledger filters on. */
 function mockMatches(body: IgnoreRuleRequest): CashflowTransaction[] {
-	return cashflowTransactions.filter((tx) => {
-		if (body.direction && tx.direction !== body.direction) return false;
-		if (body.source && !contains(tx.source, body.source)) return false;
-		const field = body.match_field === 'note' ? tx.note : tx.description;
-		return contains(field, body.contains);
-	});
+	return mockCashflowRows().filter((tx) => matchesMockRule(body, tx));
+}
+
+function matchesMockRule(body: IgnoreRuleRequest, tx: CashflowTransaction): boolean {
+	if (body.direction && tx.direction !== body.direction) return false;
+	if (body.source && !contains(tx.source, body.source)) return false;
+	const field = body.match_field === 'note' ? tx.note : tx.description;
+	return contains(field, body.contains);
+}
+
+/** The request body that reproduces a stored rule, for matching it against the ledger. */
+function requestFor(rule: IgnoreRule): IgnoreRuleRequest {
+	return {
+		name: rule.name,
+		match_field: rule.match_field,
+		contains: rule.contains,
+		direction: rule.direction,
+		source: rule.source,
+		enabled: rule.enabled
+	};
 }
 
 function mockRule(body: IgnoreRuleRequest, base?: IgnoreRule): IgnoreRule {
@@ -116,8 +130,8 @@ export async function previewIgnoreRule(body: IgnoreRuleRequest): Promise<Ignore
 			.slice(0, 4);
 		return clone({
 			matching: matches.length,
-			not_yet_ignored: matches.filter((tx) => !tx.ignored).length,
-			scanned: cashflowTransactions.length,
+			not_yet_ignored: matches.filter((tx) => !tx.ignored && !tx.ignore_overridden).length,
+			scanned: mockCashflowRows().length,
 			sample
 		});
 	}
@@ -129,16 +143,17 @@ export async function applyIgnoreRule(id: string): Promise<ApplyIgnoreRuleRespon
 	if (useMocks) {
 		await delay();
 		const rule = mockRules.find((entry) => entry.id === id);
-		const matches = rule
-			? mockMatches({
-					name: rule.name,
-					match_field: rule.match_field,
-					contains: rule.contains,
-					direction: rule.direction,
-					source: rule.source
-				}).filter((tx) => !tx.ignored)
-			: [];
-		return { ignored_count: matches.length, status: 'ok' };
+		if (!rule) return { ignored_count: 0, status: 'ok' };
+		// The same rows the server would touch: matching, not ignored yet, and not
+		// decided by hand.
+		const ignored = mutateMockIgnored(
+			(tx) => !tx.ignored && !tx.ignore_overridden && matchesMockRule(requestFor(rule), tx),
+			true,
+			rule.id
+		);
+		rule.ignored_total += ignored;
+		rule.last_applied_at = new Date().toISOString();
+		return { ignored_count: ignored, status: 'ok' };
 	}
 	return apiSend<ApplyIgnoreRuleResponse>('POST', `/cashflow/ignore-rules/${id}/apply`, undefined);
 }
@@ -147,20 +162,30 @@ export async function applyIgnoreRule(id: string): Promise<ApplyIgnoreRuleRespon
 export async function getImportIgnored(importId: string): Promise<IgnoredRuleGroup[]> {
 	if (useMocks) {
 		await delay();
-		// Fixture transactions carry no import, so the groups are built from what each
-		// enabled rule matches — enough to read the page, never claiming a real import.
+		// Fixture rows carry no import of their own, so the first read of a review stands
+		// in for the import: each enabled rule claims what it matches, stamped with this
+		// import. From then on the page works against real session state, so restoring a
+		// row and showing the rest of a group behave the way they do against the API.
+		for (const rule of mockRules) {
+			if (!rule.enabled) continue;
+			mutateMockIgnored(
+				(tx) =>
+					!tx.ignored &&
+					!tx.ignore_overridden &&
+					!tx.ignored_by_rule_id &&
+					matchesMockRule(requestFor(rule), tx),
+				true,
+				rule.id
+			);
+		}
+		mutateMockImportId(importId);
+
+		const rows = mockCashflowRows().filter((tx) => tx.import_id === importId);
 		return clone(
 			mockRules
-				.filter((rule) => rule.enabled)
 				.map((rule) => {
-					const matches = mockMatches({
-						name: rule.name,
-						match_field: rule.match_field,
-						contains: rule.contains,
-						direction: rule.direction,
-						source: rule.source
-					}).map((tx) => ({ ...tx, ignored: true, ignored_by_rule_id: rule.id }));
-					return { rule, total: matches.length, transactions: matches.slice(0, 5) };
+					const caught = rows.filter((tx) => tx.ignored_by_rule_id === rule.id);
+					return { rule, total: caught.length, transactions: caught.slice(0, 5) };
 				})
 				.filter((group) => group.total > 0)
 		);

@@ -114,6 +114,10 @@ func (s *SQLXCashflowIgnoreRuleStore) CountIgnoreRuleTargets(ctx context.Context
 // ApplyIgnoreRule ignores what the rule matches and has not been decided by hand, and
 // adds the number it ignored to the rule's own total. A non-nil importID narrows it to
 // the rows one import brought in.
+//
+// The two writes run in one transaction: the rule's own total is the count the rules page
+// reports, so rows ignored without the tally landing would make the page understate what
+// the rule did, with no way to notice.
 func (s *SQLXCashflowIgnoreRuleStore) ApplyIgnoreRule(ctx context.Context, rule *cashflow.IgnoreRule, importID *uuid.UUID) (int, error) {
 	whereClause, whereArgs := s.targetWhereClause(rule.Filters(), importID)
 	now := time.Now().UTC()
@@ -122,8 +126,26 @@ func (s *SQLXCashflowIgnoreRuleStore) ApplyIgnoreRule(ctx context.Context, rule 
 		s.transactionsTable, whereClause,
 	))
 	args := append([]any{true, rule.ID, now}, whereArgs...)
+	touch := s.db.Rebind(fmt.Sprintf(
+		`UPDATE %s SET ignored_total = ignored_total + ?, last_applied_at = ?, updated_at = ? WHERE id = ?`,
+		s.tableName,
+	))
 
-	ignored, err := s.exec(ctx, update, args...)
+	ignored := 0
+	err := s.db.WithTx(ctx, func(ctx context.Context) error {
+		count, err := s.exec(ctx, update, args...)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return nil
+		}
+		if _, err := s.exec(ctx, touch, count, now, now, rule.ID); err != nil {
+			return err
+		}
+		ignored = count
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -131,13 +153,6 @@ func (s *SQLXCashflowIgnoreRuleStore) ApplyIgnoreRule(ctx context.Context, rule 
 		return 0, nil
 	}
 
-	touch := s.db.Rebind(fmt.Sprintf(
-		`UPDATE %s SET ignored_total = ignored_total + ?, last_applied_at = ?, updated_at = ? WHERE id = ?`,
-		s.tableName,
-	))
-	if _, err := s.exec(ctx, touch, ignored, now, now, rule.ID); err != nil {
-		return ignored, err
-	}
 	rule.IgnoredTotal += ignored
 	rule.LastAppliedAt = &now
 	return ignored, nil
