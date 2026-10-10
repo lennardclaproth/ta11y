@@ -8,9 +8,9 @@
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
-	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
@@ -32,6 +32,7 @@
 	} from '$lib/services/portfolio';
 	import { listVendors } from '$lib/services/vendors';
 	import { accountStore } from '$lib/stores/account.svelte';
+	import { periodStore } from '$lib/stores/period.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { isManualPortfolioTransaction, portfolioOriginLabel } from '$lib/api/transactions';
@@ -39,7 +40,6 @@
 	import { chartColors } from '$lib/charts/theme';
 	import { formatDisplayDate, todayISO } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { KpiItem } from '$lib/components/organisms/kpi-row/kpi-row.types';
-	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 	import type {
 		ListingSearchRow,
 		PortfolioPosition,
@@ -55,11 +55,20 @@
 	let transactions = $state<PortfolioTransaction[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let includeClosed = $state(false);
 	let tab = $state('positions');
-	let from = $state('');
-	let to = $state('');
 	let searchQuery = $state('');
+
+	/**
+	 * The row filter that replaced the "Include closed" switch. `include_closed` is the only
+	 * thing the API offers, so `Closed` asks for everything and keeps the closed rows here --
+	 * the positions list is not paginated, so narrowing it in the browser costs nothing.
+	 */
+	let positionStatus = $state('open');
+	const includeClosed = $derived(positionStatus !== 'open');
+
+	// One period for the whole app, chosen in the account overview.
+	const from = $derived(periodStore.from);
+	const to = $derived(periodStore.to);
 
 	let txOpen = $state(false);
 	let vendors = $state<Vendor[]>([]);
@@ -92,6 +101,12 @@
 		{ value: 'transactions', label: 'Transactions' }
 	];
 
+	const statusTabs = [
+		{ value: 'open', label: 'Open' },
+		{ value: 'closed', label: 'Closed' },
+		{ value: 'all', label: 'All' }
+	];
+
 	const txTypeOptions = [
 		{ value: 'BUY', label: 'Buy' },
 		{ value: 'SELL', label: 'Sell' },
@@ -105,19 +120,6 @@
 	const needsListing = $derived(txType !== 'CASH');
 	const needsQuantity = $derived(txType === 'BUY' || txType === 'SELL');
 	const vendorOptions = $derived(vendors.map((v) => ({ value: v.id, label: v.name })));
-
-	const navActions: MenuItem[] = [
-		{
-			label: 'Import CSV',
-			icon: 'heroicons:cloud-arrow-up',
-			onSelect: () => void openImport()
-		},
-		{
-			label: 'Rebuild portfolio',
-			icon: 'heroicons:arrow-path',
-			onSelect: () => void handleRebuild()
-		}
-	];
 
 	const monthShort = (iso: string) =>
 		new Date(iso).toLocaleDateString('en', { month: 'short', timeZone: 'UTC' });
@@ -141,6 +143,44 @@
 					{ label: 'Cost basis', amount: scaledToNumber(latest.total_cost_basis), currency: 'EUR' }
 				]
 			: []
+	);
+
+	/**
+	 * One search box serves both views, so what it means follows the tab. Transactions are
+	 * searched by the API; positions come back as one unpaginated list, so the same words
+	 * narrow them here without a round trip.
+	 */
+	const transactionQuery = $derived(tab === 'transactions' ? searchQuery.trim() : '');
+
+	const visiblePositions = $derived.by(() => {
+		const needle = tab === 'positions' ? searchQuery.trim().toLowerCase() : '';
+		return positions.filter((position) => {
+			if (positionStatus === 'open' && position.is_closed) return false;
+			if (positionStatus === 'closed' && !position.is_closed) return false;
+			if (!needle) return true;
+			return (
+				(position.symbol ?? '').toLowerCase().includes(needle) ||
+				(position.name ?? '').toLowerCase().includes(needle)
+			);
+		});
+	});
+
+	const tableMeta = $derived.by(() => {
+		if (loading) return 'Loading…';
+		if (error) return 'Could not load';
+		if (tab === 'positions') {
+			return `${visiblePositions.length} ${visiblePositions.length === 1 ? 'position' : 'positions'}`;
+		}
+		return `${transactions.length} ${transactions.length === 1 ? 'row' : 'rows'}`;
+	});
+
+	// An empty list after a search is a different situation from an account with no positions.
+	const positionsEmptyText = $derived(
+		searchQuery.trim()
+			? `No positions match “${searchQuery.trim()}”. Clear the search to see them all.`
+			: positionStatus === 'closed'
+				? 'No closed positions.'
+				: 'No positions yet. Add a transaction or import a file to build them.'
 	);
 
 	async function loadPositions() {
@@ -176,7 +216,7 @@
 				}),
 				listPortfolioTransactions({
 					limit: 25,
-					q: searchQuery || undefined,
+					q: transactionQuery || undefined,
 					from: from || undefined,
 					to: to || undefined
 				})
@@ -195,7 +235,7 @@
 	$effect(() => {
 		void from;
 		void to;
-		void searchQuery;
+		void transactionQuery;
 		void loadAll();
 	});
 
@@ -402,30 +442,32 @@
 	</Badge>
 {/snippet}
 
+{#snippet viewTabs()}
+	<Tabs {tabs} bind:value={tab} size="sm" ariaLabel="Portfolio view" />
+{/snippet}
+
+{#snippet statusFilter()}
+	<Tabs tabs={statusTabs} bind:value={positionStatus} size="sm" ariaLabel="Position status" />
+{/snippet}
+
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Portfolio"
-			showSearch
-			searchValue={searchQuery}
-			searchPlaceholder="Search transactions…"
-			onSearch={(q) => (searchQuery = q)}
-			showDateRange
-			dateFrom={from || null}
-			dateTo={to || null}
-			onDateChange={(r) => {
-				from = r.from ?? '';
-				to = r.to ?? '';
-			}}
-			actions={navActions}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Portfolio">
 		{#snippet analytics()}
 			<div class="flex flex-col gap-3">
 				<KpiRow items={kpis} columns={3} />
+				<!-- Rebuilding recomputes the series this chart draws, so it hangs on the chart's
+				     own rule rather than in a menu above the page. -->
 				<AnalyticsCard title="Value vs cost basis">
+					{#snippet actions()}
+						<Button variant="ruled" loading={rebuilding} onclick={handleRebuild}>
+							<Icon icon="heroicons:arrow-path" />
+							Rebuild portfolio
+						</Button>
+					{/snippet}
 					<TimeSeriesChart
 						height="h-52"
 						{loading}
@@ -461,22 +503,38 @@
 		{/if}
 
 		<div class="flex min-h-0 flex-1 flex-col">
-			<LedgerToolbar actionLabel="Add transaction" onAdd={openTx}>
-				<Tabs {tabs} bind:value={tab} ariaLabel="Portfolio view" />
-				{#if tab === 'positions'}
-					<label class="flex items-center gap-2 text-sm text-slate-600">
-						<span>Include closed</span>
-						<Switch bind:checked={includeClosed} aria-label="Include closed positions" />
-					</label>
-				{/if}
+			<!-- The status filter belongs to the positions, so it is absent on the other tab. -->
+			<LedgerToolbar
+				title={tab === 'positions' ? 'Positions' : 'Transactions'}
+				meta={tableMeta}
+				showSearch
+				searchValue={searchQuery}
+				onSearch={(q) => (searchQuery = q)}
+				searchPlaceholder={tab === 'positions'
+					? 'Search symbol or name…'
+					: 'Search transactions…'}
+				searchAriaLabel={tab === 'positions' ? 'Search positions' : 'Search transactions'}
+				before={viewTabs}
+				filters={tab === 'positions' ? statusFilter : undefined}
+			>
+				{#snippet actions()}
+					<Button variant="ruled" onclick={() => void openImport()}>
+						<Icon icon="heroicons:cloud-arrow-up" />
+						Import CSV
+					</Button>
+					<Button shape="default" onclick={openTx}>
+						<Icon icon="heroicons:plus" />
+						Add transaction
+					</Button>
+				{/snippet}
 			</LedgerToolbar>
 
 			{#if tab === 'positions'}
 				<DataTable
-					rows={positions}
+					rows={visiblePositions}
 					{loading}
 					{error}
-					emptyText="No positions"
+					emptyText={positionsEmptyText}
 					onRetry={() => void loadAll()}
 					columns={[
 						{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
@@ -496,7 +554,9 @@
 					rows={transactions}
 					{loading}
 					{error}
-					emptyText="No transactions"
+					emptyText={transactionQuery
+						? `No transactions match “${transactionQuery}”. Clear the search to see them all.`
+						: 'No transactions in this period.'}
 					onRowClick={openDetail}
 					onRetry={() => void loadAll()}
 					columns={[

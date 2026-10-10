@@ -28,6 +28,10 @@ export type { CalendarMode } from './components/molecules/calendar/calendar.type
 export * as calendarUtils from './components/molecules/calendar/calendar.utils';
 export { default as DatePicker } from './components/molecules/date-picker/DatePicker.svelte';
 export { default as DateRangePicker } from './components/molecules/date-range-picker/DateRangePicker.svelte';
+export type {
+	DateRangePickerSize,
+	DateRangePreset
+} from './components/molecules/date-range-picker/date-range-picker.types';
 export { default as FilterPopover } from './components/molecules/filter-popover/FilterPopover.svelte';
 export { default as TextFilter } from './components/molecules/text-filter/TextFilter.svelte';
 export { default as DirectionFilter } from './components/molecules/direction-filter/DirectionFilter.svelte';
@@ -60,6 +64,9 @@ export type {
 export { default as FooterBar } from './components/organisms/footer-bar/FooterBar.svelte';
 export { default as Drawer } from './components/organisms/drawer/Drawer.svelte';
 export { default as TopNavbar } from './components/organisms/top-navbar/TopNavbar.svelte';
+export { default as AccountOverview } from './components/organisms/account-overview/AccountOverview.svelte';
+export type { AccountOverviewLayout } from './components/organisms/account-overview/account-overview.types';
+export { default as LedgerToolbar } from './components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 export { default as CashflowTransactionsTable } from './components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 export { default as AssetClassDrawer } from './components/organisms/asset-class-drawer/AssetClassDrawer.svelte';
 export { default as TransactionFormModal } from './components/organisms/transaction-form-modal/TransactionFormModal.svelte';
@@ -69,3 +76,8 @@ export type { CashflowTransactionFormValue } from './components/organisms/transa
 export { default as AppShellTemplate } from './components/templates/app-shell/AppShellTemplate.svelte';
 export { default as PageContentTemplate } from './components/templates/page-content/PageContentTemplate.svelte';
 export * from './url/routeQuery';
+
+// The one app-wide period, and the net worth read over it.
+export { periodStore, periodPresetLabels, periodPresetOrder } from './stores/period.svelte';
+export type { PeriodPreset, PeriodRange } from './stores/period.svelte';
+export { netWorthStore } from './stores/net-worth.svelte';

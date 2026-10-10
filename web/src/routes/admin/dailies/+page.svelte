@@ -3,8 +3,10 @@
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
+	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import EodUploadForm from '$lib/components/organisms/eod-upload-form/EodUploadForm.svelte';
 	import { getEOD } from '$lib/services/marketdata';
@@ -103,30 +105,43 @@
 	}
 </script>
 
+{#snippet listingPicker()}
+	<div class="w-full max-w-sm sm:w-72">
+		<ListingSearchSelect
+			value={selected}
+			placeholder="Search a listing…"
+			onSelect={selectListing}
+			onClear={clearListing}
+		/>
+	</div>
+{/snippet}
+
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Dailies" />
+		<TopNavbar showPeriod={false} />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Dailies" titleMeta="Reference data">
 		<div class="flex min-h-0 flex-1 flex-col">
-			<div class="border-b border-slate-200 p-3">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<div class="w-full max-w-sm">
-						<ListingSearchSelect
-							value={selected}
-							placeholder="Search a listing…"
-							onSelect={selectListing}
-							onClear={clearListing}
-						/>
-					</div>
+			<!-- The listing picker names which rows the table holds, so it sits with them rather
+			     than in the navigation bar. It selects rather than filters, so it is not the
+			     search line. -->
+			<LedgerToolbar
+				title="Daily prices"
+				meta={selected
+					? `${selected.symbol} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`
+					: 'No listing selected'}
+				filters={listingPicker}
+			>
+				{#snippet actions()}
 					<!-- Only listings on a manual provider accept uploads; the API is the authority on
 					     which those are, so the action stays available and reports its refusal. -->
-					<Button variant="outline" disabled={!selected} onclick={() => (uploadOpen = true)}>
+					<Button shape="default" disabled={!selected} onclick={() => (uploadOpen = true)}>
+						<Icon icon="heroicons:cloud-arrow-up" />
 						Upload prices
 					</Button>
-				</div>
-			</div>
+				{/snippet}
+			</LedgerToolbar>
 
 			{#if !selected}
 				<div class="flex flex-1 items-center justify-center p-8 text-sm text-slate-500">

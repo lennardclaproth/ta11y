@@ -14,9 +14,17 @@ doc (e.g. all cashflow and all market-data features).
 Cashflow, assets, portfolio, and admin pages share ta11y's editorial shell: a ruled masthead,
 visible desktop navigation, a labeled mobile menu, serif headings, flat analytics sections,
 and square paper table surfaces. Narrow screens scroll through analytics to a dedicated table
-region; wide tables scroll horizontally without widening the page. Existing financial actions,
-filters, date selection, and account controls remain available. Cashflow, Portfolio and Assets
-place labeled creation actions with plus icons above the ledger, alongside its title or view tabs.
+region; wide tables scroll horizontally without widening the page.
+
+Every page arranges its controls the same way, so where a control sits says what it affects. The
+top bar is navigation only. To the right of it sits your overview: the signed-in account, net
+worth with its change over the selected period, one period choice, and sign out — open in the
+masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
+charts and the table of whichever page you are on and stays put when you change page; admin pages
+have no charts and no period. Actions that recompute a chart, such as rebuilding the portfolio,
+hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
+importing, acting on a selection — lives in the ledger header above the table.
+
 Every notification uses one shape: a ruled band in the page flow. Feedback after an action appears
 in the single notice region under the masthead; a problem that stays sits at the content it
 concerns with its recovery action; a refused save stays in the modal or form that caused it, with
@@ -268,8 +276,9 @@ generated API contract with an interactive UI at `/swagger/`.
 → Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
 
 ### Web app
-A SvelteKit (Svelte 5) frontend in `web/`; it is early-stage — currently an Atomic-Design
-component library built in Storybook, not yet consuming the API — and most application
-logic lives in the Go backend.
+A SvelteKit (Svelte 5) frontend in `web/`, built from an Atomic-Design component library
+catalogued in Storybook. It consumes the API over REST plus a per-account WebSocket, and runs
+standalone on fixtures when no API URL is configured. Most application logic still lives in the
+Go backend.
 
 → Details: [Web app](%5B020%5D_WEB_APP.md)
