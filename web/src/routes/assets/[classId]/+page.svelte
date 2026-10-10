@@ -198,7 +198,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title={details?.class.name ?? 'Asset class'} />
+		<TopNavbar />
 	{/snippet}
 
 	<div class="relative flex min-h-full flex-col gap-5 px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8">
@@ -292,14 +292,20 @@
 						view === 'ledger' ? 'flex' : 'hidden'
 					].join(' ')}
 				>
-					<LedgerToolbar
-						title="Items"
-						actionLabel="Add item"
-						onAdd={() => {
-							addTo = null;
-							addOpen = true;
-						}}
-					/>
+					<LedgerToolbar title="Items">
+						{#snippet actions()}
+							<Button
+								shape="default"
+								onclick={() => {
+									addTo = null;
+									addOpen = true;
+								}}
+							>
+								<Icon icon="heroicons:plus" />
+								Add item
+							</Button>
+						{/snippet}
+					</LedgerToolbar>
 					{#if loading}
 						<div class="space-y-2 p-3" aria-busy="true">
 							{#each [0, 1, 2] as i (i)}
@@ -514,14 +520,20 @@
 							padding="none"
 							class="flex min-h-56 flex-col overflow-hidden"
 						>
-							<LedgerToolbar
-								title="Purchases"
-								actionLabel="Add purchase"
-								onAdd={() => {
-									addTo = selected;
-									addOpen = true;
-								}}
-							/>
+							<LedgerToolbar title="Purchases">
+								{#snippet actions()}
+									<Button
+										shape="default"
+										onclick={() => {
+											addTo = selected;
+											addOpen = true;
+										}}
+									>
+										<Icon icon="heroicons:plus" />
+										Add purchase
+									</Button>
+								{/snippet}
+							</LedgerToolbar>
 							<DataTable
 								rows={purchases}
 								emptyText="No purchases yet"
