@@ -164,6 +164,12 @@ projection to keep in step.
 
 - **One goal per account, nothing else.** Year-on-year growth, a return on a holding, paying
   off a house and budgets are out of scope, as are several goals side by side.
+- **An ignored transaction cannot be marked from the portal.** The backend counts a marked
+  row whatever its ignored state — the resolved rabbit hole, because a contribution to a
+  savings account is usually a transfer you ignore. The ledger does not reach it: it asks
+  for `hide_ignored: true`, there is no "show ignored" switch, and no screen sets or shows
+  the flag. Until the ledger can show ignored rows, that money can only be marked through
+  the API.
 - **Nothing is recognised automatically.** Income and contributions are marked by hand;
   recurring-transaction detection (#16) and transfer detection (#23) are not wired to this.
 - **Portfolio and Assets are not counted.** Only cashflow transactions feed the standing, so
