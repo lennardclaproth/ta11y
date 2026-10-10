@@ -26,8 +26,22 @@ export function ruleSummary(rule: IgnoreRule | IgnoreRuleRequest): string {
 	return `${field} contains “${rule.contains}” · ${direction} · ${bank}`;
 }
 
-/** The request body that recreates a rule, for editing and for previewing it unchanged. */
-export function ruleToRequest(rule: IgnoreRule): IgnoreRuleRequest {
+/**
+ * The fields a request is built from, carried by a saved rule and by a rule being written
+ * alike. Naming them here rather than taking an `IgnoreRule` lets a draft use the same
+ * builder, so there is one place that decides what a request looks like.
+ */
+export type IgnoreRuleFields = Pick<
+	IgnoreRule,
+	'name' | 'match_field' | 'contains' | 'direction' | 'source' | 'enabled'
+>;
+
+/**
+ * The request body that recreates a rule, for creating, editing and previewing it. Both
+ * sides of the "has the draft drifted from the saved rule" comparison on the rules page go
+ * through this, so they cannot disagree about fields or their order.
+ */
+export function ruleToRequest(rule: IgnoreRuleFields): IgnoreRuleRequest {
 	return {
 		name: rule.name,
 		match_field: rule.match_field,

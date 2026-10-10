@@ -33,7 +33,7 @@
 		type DeskPane,
 		type IgnoreRuleDraft
 	} from '$lib/components/organisms/ignore-rules-desk/ignore-rules-desk.types';
-	import type { IgnoreRule, IgnoreRulePreview, IgnoreRuleRequest } from '$lib/api/types';
+	import type { IgnoreRule, IgnoreRulePreview } from '$lib/api/types';
 
 	/** How long typing settles before the preview is re-checked. */
 	const PREVIEW_DEBOUNCE_MS = 400;
@@ -110,17 +110,6 @@
 	 */
 	let previewSeq = 0;
 
-	function toRequest(value: IgnoreRuleDraft): IgnoreRuleRequest {
-		return {
-			name: value.name,
-			match_field: value.match_field,
-			contains: value.contains,
-			direction: value.direction,
-			source: value.source,
-			enabled: value.enabled
-		};
-	}
-
 	/**
 	 * Re-checks what the draft catches once typing settles. Debounced rather than run per
 	 * keystroke: the preview is a read over the whole ledger, and a half-typed word would
@@ -145,7 +134,7 @@
 
 	async function runPreview(value: IgnoreRuleDraft, seq: number) {
 		try {
-			const result = await previewIgnoreRule(toRequest(value));
+			const result = await previewIgnoreRule(ruleToRequest(value));
 			if (seq !== previewSeq) return;
 			preview = result;
 		} catch {
@@ -181,8 +170,8 @@
 		fieldErrors = {};
 		try {
 			const saved = value.id
-				? await updateIgnoreRule(value.id, toRequest(value))
-				: await createIgnoreRule(toRequest(value));
+				? await updateIgnoreRule(value.id, ruleToRequest(value))
+				: await createIgnoreRule(ruleToRequest(value));
 			rules = value.id
 				? rules.map((rule) => (rule.id === saved.id ? saved : rule))
 				: [saved, ...rules];
@@ -251,13 +240,14 @@
 	 * Whether the open draft still says what the saved rule says. The preview runs on the
 	 * draft, but applying runs the *saved* rule on the server — so an unsaved edit would
 	 * make the button and the confirmation name a count belonging to a different rule.
-	 * Applying waits until the two agree.
+	 * Applying waits until the two agree. Both sides are built by `ruleToRequest`, so a
+	 * field added there joins the comparison instead of quietly falling out of it.
 	 */
 	const dirty = $derived.by(() => {
 		if (!draft?.id) return false;
 		const saved = rules.find((rule) => rule.id === draft?.id);
 		if (!saved) return false;
-		return JSON.stringify(toRequest(draft)) !== JSON.stringify(ruleToRequest(saved));
+		return JSON.stringify(ruleToRequest(draft)) !== JSON.stringify(ruleToRequest(saved));
 	});
 </script>
 
