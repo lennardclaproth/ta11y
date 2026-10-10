@@ -1,5 +1,5 @@
 /**
- * Monthly wealth-growth goal [033]. The goal is one share of income per account, applying
+ * Monthly wealth-growth goal [034]. The goal is one share of income per account, applying
  * from the calendar month it was set in; the standing scores each month against the goal
  * that applied in it. Amounts are 1e6-scaled, like everywhere else (see api/money.ts).
  */

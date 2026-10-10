@@ -52,6 +52,10 @@ const (
 	TableAssetMutations  = "mutations"
 	TableAssetSnapshot   = "snapshots"
 	TableWealthGoals     = "goals"
+
+	TableRecurringItems      = "recurring_items"
+	TableRecurringLinks      = "recurring_links"
+	TableRecurringDismissals = "recurring_dismissals"
 )
 
 type DB struct {

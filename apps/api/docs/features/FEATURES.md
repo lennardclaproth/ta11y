@@ -21,7 +21,8 @@ top bar is navigation only. To the right of it sits your overview: the signed-in
 worth with its change over the selected period, one period choice, and sign out — open in the
 masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
 charts and the table of whichever page you are on and stays put when you change page; admin pages
-have no charts and no period. Actions that recompute a chart, such as rebuilding the portfolio,
+have no charts and no period, and Recurring looks back over your whole history, so it has none
+either. Actions that recompute a chart, such as rebuilding the portfolio,
 hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
 importing, acting on a selection — lives in the ledger header above the table.
 
@@ -94,13 +95,13 @@ allows after the fact. Imported transactions keep their statement date: the fing
 that recognises a re-imported row carries its date, so moving one would make the next
 import of the same file add the old row alongside it.
 
-A transaction also carries a **purpose** for the monthly wealth goal ([033]) — income, a
+A transaction also carries a **purpose** for the monthly wealth goal ([034]) — income, a
 contribution towards wealth, or nothing — set per selection or per filter, independently of
 its tag and its ignored state.
 
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
-### Monthly wealth goal [033]
+### Monthly wealth goal [034]
 Users set one goal: the share of the income they mark each month that should go towards
 wealth. Marking transactions on Cashflow as income or as a contribution feeds a monthly
 standing that scores each calendar month against the goal that applied in it, shows how many
@@ -109,7 +110,27 @@ encouragement. Only incoming money can be income and only outgoing money a contr
 the two sides of a transfer between your own accounts are never both counted. A new goal
 applies from the month it is set in; the running month is never scored.
 
-→ Details: [Monthly wealth goal](%5B033%5D_WEALTH_GOAL.md)
+→ Details: [Monthly wealth goal](%5B034%5D_WEALTH_GOAL.md)
+
+### Recurring items [033]
+Users see their subscriptions, fixed costs and recurring income in one place: to or from
+whom, how often (monthly, quarterly or yearly), how the amount moved over time, and when the
+next one is expected. An item is created by pointing cashflow transactions at it — a new item
+or an existing one — or by confirming a pattern ta11y found in the account's history. Nothing
+becomes an item without that confirmation, and a dismissed suggestion is not offered again.
+
+Once an item is confirmed, the rows of a later cashflow import that match it (same
+counterparty, same direction, an amount within a quarter of the last one) are linked to it, so
+a recurring payment is pointed at once rather than after every statement. A row that does not
+belong is unlinked in the item; the transaction itself stays in Cashflow. Ending an item is a
+date, not a delete: from the chosen month it is no longer expected and nothing new is linked,
+while everything before it keeps its history.
+
+Items are unrelated to tags and the ignored status: marking changes neither, so the tag
+distribution and monthly totals on Cashflow do not move. ta11y reports the amounts as they
+were charged and labels none of them expensive, and raises no notification anywhere.
+
+→ Details: [Recurring items](%5B033%5D_RECURRING_ITEMS.md)
 
 ### Portfolio management
 Users read portfolio snapshots, current positions, and transaction history, add manual

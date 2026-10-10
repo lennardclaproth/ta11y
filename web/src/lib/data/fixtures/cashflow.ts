@@ -345,7 +345,7 @@ const transactions: Omit<CashflowTransaction, 'purpose'>[] = [
 ];
 
 /**
- * What the fixtures assume has been pointed at for the monthly wealth goal [033]: the pay and
+ * What the fixtures assume has been pointed at for the monthly wealth goal [034]: the pay and
  * the invoices are the income, the savings transfer is the contribution. Everything else is
  * still unassigned, so the "not assigned" filter and the standing's open counts have rows.
  * Only incoming money can be income and only outgoing money a contribution, exactly as the

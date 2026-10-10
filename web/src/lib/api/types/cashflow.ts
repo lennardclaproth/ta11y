@@ -19,7 +19,7 @@ export interface CashflowTransaction {
 	date: string;
 	tag: string;
 	ignored: boolean;
-	/** What it counts as towards the monthly wealth goal [033]; `''` is "not assigned". */
+	/** What it counts as towards the monthly wealth goal [034]; `''` is "not assigned". */
 	purpose: TransactionPurpose;
 }
 

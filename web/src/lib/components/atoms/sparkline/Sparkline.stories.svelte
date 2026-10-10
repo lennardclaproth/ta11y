@@ -7,6 +7,7 @@
 
   const rising = [4, 6, 5, 8, 7, 10, 12, 11, 14];
   const falling = [14, 12, 13, 9, 10, 7, 6, 8, 4];
+  const flat = [45, 45, 45, 45, 45, 45];
 
   const { Story } = defineMeta({
     title: 'Atoms/Sparkline',
@@ -48,6 +49,15 @@
   <div class="flex items-center gap-6">
     <Sparkline data={rising} fill ariaLabel="Rising balance" />
     <Sparkline data={falling} fill ariaLabel="Falling balance" />
+  </div>
+</Story>
+
+<!-- An amount that never changed: the line sits on the middle, not on the bottom edge
+     where it would read as having fallen to zero. -->
+<Story name="Unchanged" asChild>
+  <div class="flex items-center gap-6">
+    <Sparkline data={flat} tone="neutral" ariaLabel="Amount unchanged" />
+    <Sparkline data={flat} tone="neutral" fill ariaLabel="Amount unchanged" />
   </div>
 </Story>
 

@@ -1,6 +1,6 @@
-# [033] Monthly wealth goal
+# [034] Monthly wealth goal
 
-> **Feature IDs:** 033 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 034 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/wealthgoal` · `transport/http/handlers/wealthgoal` · `internal/storage/sqlx_wealthgoal_store.go` · the `purpose` half lives in `internal/cashflow`
 >
@@ -171,7 +171,8 @@ projection to keep in step.
   the flag. Until the ledger can show ignored rows, that money can only be marked through
   the API.
 - **Nothing is recognised automatically.** Income and contributions are marked by hand;
-  recurring-transaction detection (#16) and transfer detection (#23) are not wired to this.
+  recurring items ([033]) and transfer detection (#23) are not wired to this: confirming a
+  recurring item does not set a purpose.
 - **Portfolio and Assets are not counted.** Only cashflow transactions feed the standing, so
   a deposit that exists only in Portfolio is invisible to the goal.
 - **No history of adjustments beyond the month.** Adjusting the goal twice in one month

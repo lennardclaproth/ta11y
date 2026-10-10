@@ -1,5 +1,5 @@
 /**
- * Reading the monthly wealth goal [033] the way the backend means it.
+ * Reading the monthly wealth goal [034] the way the backend means it.
  *
  * The API reports a month's income and contribution as 1e6-scaled amounts plus the goal
  * that applied in it; the share and the money still to go are derived here so every card

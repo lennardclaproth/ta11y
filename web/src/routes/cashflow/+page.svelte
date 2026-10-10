@@ -27,6 +27,7 @@
 	import GoalErrorCard from '$lib/components/organisms/wealth-goal-cards/GoalErrorCard.svelte';
 	import GoalLoadingCard from '$lib/components/organisms/wealth-goal-cards/GoalLoadingCard.svelte';
 	import SetGoalDialog from '$lib/components/organisms/set-goal-dialog/SetGoalDialog.svelte';
+	import MarkRecurringDialog from '$lib/components/organisms/mark-recurring-dialog/MarkRecurringDialog.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
 		listCashflowTransactions,
@@ -43,6 +44,11 @@
 		setWealthGoal
 	} from '$lib/services/wealthgoal';
 	import { monthLabel, monthRange } from '$lib/api/wealthgoal';
+	import {
+		createRecurringItem,
+		getRecurringOverview,
+		linkRecurringTransactions
+	} from '$lib/services/recurring';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
@@ -66,11 +72,13 @@
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
 		MonthStanding,
+		RecurringItem,
 		TagDistributionEntry,
 		TransactionPurpose,
 		Vendor,
 		WealthGoalStandingResponse
 	} from '$lib/api/types';
+	import type { MarkRecurringValue } from '$lib/components/organisms/mark-recurring-dialog/mark-recurring-dialog.types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
@@ -132,6 +140,11 @@
 	let createError = $state<string | null>(null);
 	let importOpen = $state(false);
 	let brokerageVendors = $state<Vendor[]>([]);
+
+	let markOpen = $state(false);
+	let marking = $state(false);
+	let markError = $state<string | null>(null);
+	let recurringItems = $state<RecurringItem[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
 	let detailOpen = $state(false);
@@ -399,12 +412,12 @@
 
 	// A mark is idempotent, so a double click corrupts nothing -- but it does fire a second
 	// mutation, a second toast and a second pair of reloads that race each other.
-	let marking = $state(false);
+	let markingPurpose = $state(false);
 
 	async function handleMarkSelection(purpose: TransactionPurpose) {
 		const ids = selectedIds;
-		if (ids.length === 0 || marking) return;
-		marking = true;
+		if (ids.length === 0 || markingPurpose) return;
+		markingPurpose = true;
 		try {
 			const result = await markCashflowPurposeBySelection({
 				purpose: purpose === '' ? 'none' : purpose,
@@ -417,13 +430,13 @@
 		} catch {
 			toast.error('Failed to mark transactions');
 		} finally {
-			marking = false;
+			markingPurpose = false;
 		}
 	}
 
 	async function handleMarkFilter(purpose: TransactionPurpose) {
-		if (marking) return;
-		marking = true;
+		if (markingPurpose) return;
+		markingPurpose = true;
 		try {
 			const result = await markCashflowPurposeByFilter({
 				purpose: purpose === '' ? 'none' : purpose,
@@ -444,7 +457,7 @@
 		} catch {
 			toast.error('Failed to mark transactions');
 		} finally {
-			marking = false;
+			markingPurpose = false;
 		}
 	}
 
@@ -576,6 +589,66 @@
 		}
 	}
 
+	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
+
+	// The dialog offers "add to an existing item" first, so the items are read when it
+	// opens rather than on every page load: most visits never mark anything. They are read
+	// *before* opening, because the dialog picks its route once from the list it sees on
+	// opening — arriving late would point an account that already has items at "new".
+	async function openMark() {
+		markError = null;
+		try {
+			const overview = await getRecurringOverview();
+			recurringItems = [...overview.expenses, ...overview.income];
+		} catch {
+			// Starting a new item still works without the list, so this is not reported as a
+			// failure — the dialog simply offers only that route.
+			recurringItems = [];
+		}
+		markOpen = true;
+	}
+
+	async function handleMarkRecurring(value: MarkRecurringValue) {
+		const ids = selectedIds;
+		marking = true;
+		markError = null;
+		try {
+			if (value.mode === 'existing') {
+				await linkRecurringTransactions(value.itemId, { ids });
+			} else {
+				await createRecurringItem({
+					name: value.name,
+					direction: value.direction,
+					rhythm: value.rhythm,
+					ids
+				});
+			}
+			markOpen = false;
+			selectedIds = [];
+			toast.success(
+				value.mode === 'existing'
+					? `Linked ${ids.length} transactions`
+					: `${value.name} added, with ${ids.length} transactions`
+			);
+		} catch (err) {
+			markError = markRecurringMessage(err);
+		} finally {
+			marking = false;
+		}
+	}
+
+	// The refusals worth naming are the ones the reader can act on: a name already taken,
+	// or an item that was ended and no longer takes transactions.
+	function markRecurringMessage(err: unknown): string {
+		if (err instanceof ApiError && err.status === 409) {
+			return 'A recurring item with that name already exists. Pick another name, or add these to it.';
+		}
+		if (err instanceof ApiError && err.status === 422) {
+			return 'That item was ended, so it takes no new transactions.';
+		}
+		return 'Could not mark these as recurring. Try again.';
+	}
+
 	const tableMeta = $derived.by(() => {
 		if (loading) return 'Loading…';
 		if (error) return 'Could not load';
@@ -605,15 +678,23 @@
 	// ledger header. Three of them beside Tag, Import and Add would crowd the rule, so the
 	// purposes themselves live in one menu.
 	const selectionMarkItems: MenuItem[] = $derived([
-		{ label: 'Mark as income', disabled: marking, onSelect: () => handleMarkSelection('income') },
-		{ label: 'Mark as wealth', disabled: marking, onSelect: () => handleMarkSelection('wealth') },
-		{ label: 'Clear purpose', disabled: marking, onSelect: () => handleMarkSelection('') }
+		{
+			label: 'Mark as income',
+			disabled: markingPurpose,
+			onSelect: () => handleMarkSelection('income')
+		},
+		{
+			label: 'Mark as wealth',
+			disabled: markingPurpose,
+			onSelect: () => handleMarkSelection('wealth')
+		},
+		{ label: 'Clear purpose', disabled: markingPurpose, onSelect: () => handleMarkSelection('') }
 	]);
 
 	const filterMarkItems: MenuItem[] = $derived([
-		{ label: 'Mark as income', disabled: marking, onSelect: () => handleMarkFilter('income') },
-		{ label: 'Mark as wealth', disabled: marking, onSelect: () => handleMarkFilter('wealth') },
-		{ label: 'Clear purpose', disabled: marking, onSelect: () => handleMarkFilter('') }
+		{ label: 'Mark as income', disabled: markingPurpose, onSelect: () => handleMarkFilter('income') },
+		{ label: 'Mark as wealth', disabled: markingPurpose, onSelect: () => handleMarkFilter('wealth') },
+		{ label: 'Clear purpose', disabled: markingPurpose, onSelect: () => handleMarkFilter('') }
 	]);
 </script>
 
@@ -761,6 +842,10 @@
 						Tag {selectedIds.length} selected
 					</Button>
 					<ActionMenu label="Mark {selectedIds.length} selected…" items={selectionMarkItems} />
+					<Button variant="ruled" onclick={() => void openMark()}>
+						<Icon icon="heroicons:arrow-path-rounded-square" />
+						Mark as recurring
+					</Button>
 				{/if}
 				<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
 				{#if !loading && !error && filtering && total > 0}
@@ -818,6 +903,15 @@
 	onSave={handleSaveGoal}
 />
 
+<MarkRecurringDialog
+	bind:open={markOpen}
+	selection={selectedRows}
+	items={recurringItems}
+	saving={marking}
+	error={markError}
+	onSubmit={handleMarkRecurring}
+/>
+
 <ImportDialog
 	bind:open={importOpen}
 	vendors={brokerageVendors}
@@ -828,6 +922,7 @@
 	}}
 	onGoToPortfolio={() => void goto('/portfolio')}
 />
+
 {#snippet detailFields()}
 	{#if detailRow}
 		<div class="flex items-center justify-between gap-3 py-3">

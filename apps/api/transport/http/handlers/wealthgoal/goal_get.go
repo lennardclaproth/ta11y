@@ -1,4 +1,4 @@
-// Package wealthgoal exposes the monthly wealth-growth goal [033] over HTTP: the one goal
+// Package wealthgoal exposes the monthly wealth-growth goal [034] over HTTP: the one goal
 // an account sets, and the monthly standing scored against it.
 package wealthgoal
 
