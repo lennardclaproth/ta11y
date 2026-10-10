@@ -20,7 +20,7 @@
 		RecurringItem,
 		RecurringRhythm
 	} from '$lib/api/types';
-	import type { MarkRecurringValue } from './mark-recurring-dialog.types';
+	import type { MarkRecurringMode, MarkRecurringValue } from './mark-recurring-dialog.types';
 
 	type Props = {
 		open?: boolean;
@@ -43,7 +43,7 @@
 	}: Props = $props();
 
 	// The Select and Radio atoms speak plain strings; the values narrow on submit.
-	let mode = $state('existing');
+	let mode = $state<MarkRecurringMode>('existing');
 	let existing = $state('');
 	let name = $state('');
 	let direction = $state('out');
