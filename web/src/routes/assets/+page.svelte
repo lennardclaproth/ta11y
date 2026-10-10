@@ -10,6 +10,7 @@
 	import AssetClassDrawer from '$lib/components/organisms/asset-class-drawer/AssetClassDrawer.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
@@ -44,6 +45,7 @@
 	let createOpen = $state(false);
 	let className = $state('');
 	let creatingClass = $state(false);
+	let createError = $state<string | null>(null);
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
 	const monthShort = (iso: string) =>
@@ -92,6 +94,7 @@
 	async function createClass() {
 		if (className.trim() === '') return;
 		creatingClass = true;
+		createError = null;
 		try {
 			await accountStore.ensureLoaded();
 			await createAssetClass({ name: className.trim() });
@@ -100,7 +103,8 @@
 			toast.success('Asset class created');
 			void loadAll();
 		} catch {
-			toast.error('Failed to create asset class');
+			// The dialog stays open with the entry, so the refusal is stated in it, not behind it.
+			createError = 'Failed to create asset class';
 		} finally {
 			creatingClass = false;
 		}
@@ -175,7 +179,15 @@
 			meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
 		>
 			{#snippet actions()}
-				<Button shape="default" onclick={() => (createOpen = true)}>
+				<!-- Reset on opening, not on closing: Cancel sets `createOpen` itself, which never reaches
+				     the dialog's `onClose`, and a stale band would greet the next empty form. -->
+				<Button
+					shape="default"
+					onclick={() => {
+						createError = null;
+						createOpen = true;
+					}}
+				>
 					<Icon icon="heroicons:plus" />
 					Add asset class
 				</Button>
@@ -187,6 +199,7 @@
 			{error}
 			emptyText="No asset classes yet. Add one to start tracking what you own."
 			onRowClick={openClass}
+			onRetry={() => void loadAll()}
 			columns={[
 				{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
 				{ key: 'source', header: 'Source', value: (r: AssetClass) => r.source },
@@ -200,6 +213,11 @@
 <AssetClassDrawer bind:open={drawerOpen} {details} loading={detailsLoading} />
 
 <Dialog bind:open={createOpen} title="New asset class" size="sm">
+	{#if createError}
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
+			{createError}
+		</NoticeBand>
+	{/if}
 	<FormField label="Name" id="class-name">
 		{#snippet children(ctx)}
 			<Input id={ctx.id} bind:value={className} placeholder="e.g. Real estate" />

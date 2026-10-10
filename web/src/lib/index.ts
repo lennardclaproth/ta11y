@@ -48,7 +48,7 @@ export { default as DonutChart } from './components/organisms/charts/DonutChart.
 export type { SeriesDataset, DonutDatum } from './charts/types';
 
 // Toast system (Phase 5).
-export { default as ToastHost } from './components/organisms/toast-host/ToastHost.svelte';
+export { default as NoticeBandRegion } from './components/organisms/notice-band-region/NoticeBandRegion.svelte';
 export { toast } from './stores/toast.svelte';
 export type { Toast, ToastOptions } from './stores/toast.svelte';
 

@@ -1,18 +1,18 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import ToastHost from '$lib/components/organisms/toast-host/ToastHost.svelte';
+	import NoticeBandRegion from '$lib/components/organisms/notice-band-region/NoticeBandRegion.svelte';
 
 	type Props = {
 		/** Sticky top region (typically the TopNavbar). */
 		top?: Snippet;
 		/** Main scrollable area. */
 		children: Snippet;
-		/** Render the single app-level toast host. */
-		withToastHost?: boolean;
+		/** Render the single app-level notice region. */
+		withNotices?: boolean;
 		class?: string;
 	};
 
-	let { top, children, withToastHost = true, class: className = '' }: Props = $props();
+	let { top, children, withNotices = true, class: className = '' }: Props = $props();
 </script>
 
 <div
@@ -29,11 +29,13 @@
 		<div class="shrink-0">{@render top()}</div>
 	{/if}
 
+	<!-- The single notice place: in the flow between the masthead and the content, so a notice
+	     never covers the navigation or the page's own actions. -->
+	{#if withNotices}
+		<NoticeBandRegion class="shrink-0 pb-4" />
+	{/if}
+
 	<main id="app-main" tabindex="-1" class="min-h-0 flex-1 overflow-auto lg:overflow-hidden">
 		{@render children()}
 	</main>
-
-	{#if withToastHost}
-		<ToastHost />
-	{/if}
 </div>

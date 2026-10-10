@@ -3,6 +3,8 @@
 	import type { CatalogueStatus, CatalogueSync, Listing, ListingSearchRow } from '$lib/api/types';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
+	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -14,7 +16,6 @@
 		searchProviderCatalogue,
 		startCatalogueSync
 	} from '$lib/services/marketdata';
-	import { toast } from '$lib/stores/toast.svelte';
 	import type { AdoptOutcome } from './provider-catalogue-drawer.types';
 
 	type Props = {
@@ -58,7 +59,11 @@
 	const SYNC_POLL_MS = 2000;
 
 	let startingSync = $state(false);
-	let syncError = $state<string | null>(null);
+	/**
+	 * What this drawer has to report, in its own band. The drawer is an overlay above the notice
+	 * region under the masthead, so a toast sent from here would be drawn behind its own scrim.
+	 */
+	let notice = $state<{ intent: NoticeIntent; message: string } | null>(null);
 	/** The run this drawer is following, so its outcome is announced exactly once. */
 	let watchedRunId = $state<string | null>(null);
 
@@ -82,7 +87,7 @@
 		outcomes = [];
 		selectedIds = [];
 		clearProviderNotice();
-		syncError = null;
+		notice = null;
 		void loadStatus();
 	});
 
@@ -123,9 +128,15 @@
 		if (!run || run.id !== watchedRunId || run.status === 'running') return;
 		watchedRunId = null;
 		if (run.status === 'completed') {
-			toast.success(`Catalogue resynced — ${run.rows_upserted.toLocaleString()} entries cached`);
+			notice = {
+				intent: 'success',
+				message: `Catalogue resynced — ${run.rows_upserted.toLocaleString()} entries cached`
+			};
 		} else {
-			syncError = run.last_error ?? 'The catalogue sync failed. Try again.';
+			notice = {
+				intent: 'error',
+				message: run.last_error ?? 'The catalogue sync failed. Try again.'
+			};
 		}
 	}
 
@@ -135,7 +146,7 @@
 	 */
 	async function startSync() {
 		startingSync = true;
-		syncError = null;
+		notice = null;
 		try {
 			const run = await startCatalogueSync({ source, pages: SEED_PAGES });
 			watchedRunId = run.id;
@@ -147,7 +158,10 @@
 				await loadStatus();
 				watchedRunId = status?.latest_sync?.id ?? null;
 			} else {
-				syncError = 'Could not start the catalogue sync. Check your connection and try again.';
+				notice = {
+					intent: 'error',
+					message: 'Could not start the catalogue sync. Check your connection and try again.'
+				};
 			}
 		} finally {
 			startingSync = false;
@@ -182,12 +196,24 @@
 	}
 
 	/**
+	 * A search the user asked for. The outcome box reports one adopted batch, so it is dropped
+	 * here and not in `searchLocal`: `adoptSelection` calls that itself, right after filling the
+	 * box, to bring the adopted rows back marked as tracked.
+	 */
+	function startSearch() {
+		if (!query.trim()) return;
+		outcomes = [];
+		void searchLocal(0);
+	}
+
+	/**
 	 * Asks the provider directly, which costs one request. The local cache can never
 	 * be known to be complete for a query it has not seen, so this is a deliberate
 	 * action rather than an automatic fallback.
 	 */
 	async function askProvider() {
 		if (!query.trim()) return;
+		outcomes = [];
 		askingProvider = true;
 		error = null;
 		try {
@@ -223,6 +249,7 @@
 
 		adopting = true;
 		error = null;
+		notice = null;
 		const results: AdoptOutcome[] = [];
 		const created: Listing[] = [];
 
@@ -253,7 +280,15 @@
 		outcomes = results;
 		selectedIds = [];
 		adopting = false;
-		if (created.length > 0) onAdopted?.(created);
+		if (created.length > 0) {
+			// The drawer stays open after adopting, so the confirmation is stated in it. On the page
+			// behind it, it would be covered by this drawer's own scrim.
+			notice = {
+				intent: 'success',
+				message: `Added ${created.length} listing${created.length === 1 ? '' : 's'}`
+			};
+			onAdopted?.(created);
+		}
 		// Re-run the search so adopted rows come back marked as tracked.
 		await searchLocal(offset);
 	}
@@ -311,8 +346,19 @@
 					{syncRunning ? 'Syncing…' : `Resync catalogue (${SEED_PAGES} requests)`}
 				</Button>
 			</div>
-			{#if syncError}
-				<p role="alert" class="text-sm text-red-700">{syncError}</p>
+			{#if notice}
+				<!-- The band has no timer, so it is dismissible: a confirmation that outlived the search
+				     it belonged to can be put away without waiting for the drawer to close. -->
+				<NoticeBand
+					intent={notice.intent}
+					surface="inset"
+					gutter="dialog"
+					class="-mx-5"
+					dismissible
+					onDismiss={() => (notice = null)}
+				>
+					{notice.message}
+				</NoticeBand>
 			{/if}
 		</div>
 
@@ -322,10 +368,10 @@
 					bind:value={query}
 					placeholder="Symbol, name or ISIN…"
 					ariaLabel="Search the provider catalogue"
-					onSearch={() => searchLocal(0)}
+					onSearch={startSearch}
 				/>
 			</div>
-			<Button disabled={!query.trim() || loading} onclick={() => searchLocal(0)}>Search</Button>
+			<Button disabled={!query.trim() || loading} onclick={startSearch}>Search</Button>
 			<Button
 				variant="outline"
 				intent="secondary"
@@ -349,6 +395,9 @@
 				role="status"
 				class="space-y-1 rounded-lg border border-slate-200 bg-taupe-50 p-3 text-sm"
 			>
+				<!-- The band above announces the adoption, but it can be dismissed and a later resync
+				     replaces it, so this box keeps the record of what the batch did — for as long as
+				     the rows it describes are the ones on screen. -->
 				{#if addedCount > 0}
 					<p class="text-slate-800">Added {addedCount} listing{addedCount === 1 ? '' : 's'}.</p>
 				{/if}

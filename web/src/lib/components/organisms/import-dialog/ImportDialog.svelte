@@ -6,7 +6,7 @@
 	// collapsing them into a single verdict.
 	import { ApiError } from '$lib/api/client';
 	import type { ImportResult, Vendor } from '$lib/api/types';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
@@ -367,10 +367,10 @@
 			{@render trail()}
 
 			{#if everythingKnown}
-				<Alert intent="info" title="No new transactions">
+				<NoticeBand intent="info" surface="inset" gutter="dialog" title="No new transactions" class="-mx-5">
 					Every row in this export was already imported earlier. Nothing was added, and nothing was
 					duplicated.
-				</Alert>
+				</NoticeBand>
 			{/if}
 
 			<div class="grid gap-4 sm:grid-cols-2">
@@ -417,13 +417,27 @@
 			</Text>
 
 			{#if failure}
-				<Alert intent="error" title="That file was not imported">{failure}</Alert>
+				<NoticeBand
+					intent="error"
+					surface="inset"
+					gutter="dialog"
+					title="That file was not imported"
+					class="-mx-5"
+				>
+					{failure}
+				</NoticeBand>
 			{/if}
 
 			{#if vendorOptions.length === 0}
-				<Alert intent="warning" title="No brokerage account">
+				<NoticeBand
+					intent="warning"
+					surface="inset"
+					gutter="dialog"
+					title="No brokerage account"
+					class="-mx-5"
+				>
 					Add an active brokerage vendor before importing a broker export.
-				</Alert>
+				</NoticeBand>
 			{/if}
 
 			<FormField label="Account" id="imp-account" hint="The brokerage account this export belongs to">

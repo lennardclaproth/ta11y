@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
 
-  import Alert from '$lib/components/molecules/alert/Alert.svelte';
+  import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
   import Heading from '$lib/components/atoms/typography/Heading.svelte';
   import Panel from '$lib/components/atoms/panel/Panel.svelte';
   import Spinner from '$lib/components/atoms/spinner/Spinner.svelte';
@@ -39,7 +39,11 @@
     </Text>
 
     {#if signInError}
-      <Alert intent="error" class="mt-6" title="Couldn't sign you in">{signInError}</Alert>
+      <!-- The card already pads its own content, so the band keeps its text on the card's own
+           text column rather than adding a gutter of its own. -->
+      <NoticeBand intent="error" surface="inset" gutter="none" class="mt-6" title="Couldn't sign you in">
+        {signInError}
+      </NoticeBand>
     {/if}
 
     <div class="mt-8 flex flex-col gap-3">
@@ -49,13 +53,18 @@
           Loading sign-in options…
         </div>
       {:else if loadFailed}
-        <Alert intent="error" title="The service is unreachable">
+        <NoticeBand intent="error" surface="inset" gutter="none" title="The service is unreachable">
           Sign-in options couldn't be loaded. Check your connection and reload the page.
-        </Alert>
+        </NoticeBand>
       {:else if providers && providers.length === 0}
-        <Alert intent="warning" title="No sign-in methods are configured">
+        <NoticeBand
+          intent="warning"
+          surface="inset"
+          gutter="none"
+          title="No sign-in methods are configured"
+        >
           The server has authentication switched on but no identity provider set up.
-        </Alert>
+        </NoticeBand>
       {:else if providers}
         {#each providers as provider (provider)}
           <a

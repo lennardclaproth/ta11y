@@ -8,6 +8,7 @@
 	import ListingForm from '$lib/components/organisms/listing-form/ListingForm.svelte';
 	import ListingEditForm from '$lib/components/organisms/listing-form/ListingEditForm.svelte';
 	import ProviderCatalogueDrawer from '$lib/components/organisms/provider-catalogue-drawer/ProviderCatalogueDrawer.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
@@ -141,20 +142,14 @@
 				</Button>
 			{/snippet}
 		</LedgerToolbar>
-		{#if error}
-			<div role="alert" class="flex flex-wrap items-center gap-3 p-4">
-				<p class="text-sm text-red-700">{error}. Check your connection and try again.</p>
-				<Button variant="outline" onclick={load}>Retry loading</Button>
-			</div>
-		{/if}
 		<DataTable
 			rows={visibleListings}
 			{loading}
-			emptyText={error
-				? 'Listings are unavailable. Retry loading above.'
-				: filter.trim()
-					? `No listings match “${filter.trim()}”. Try Browse catalogue to add one.`
-					: 'No listings yet. Add your first listing to get started.'}
+			error={error ? `${error}. Check your connection and try again.` : null}
+			onRetry={load}
+			emptyText={filter.trim()
+				? `No listings match “${filter.trim()}”. Try Browse catalogue to add one.`
+				: 'No listings yet. Add your first listing to get started.'}
 			columns={[
 				{ key: 'symbol', header: 'Symbol', value: (r: Listing) => r.symbol },
 				{ key: 'name', header: 'Name', value: (r: Listing) => r.name },
@@ -216,12 +211,16 @@
 >
 	{#if confirmingDelete}
 		{@const target = confirmingDelete}
+		{#if deleteError}
+			<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
+				{deleteError}
+			</NoticeBand>
+		{/if}
 		<div class="space-y-4">
 			<p class="text-slate-600">
 				{target.name} will be removed, along with any price history stored for it. Listings held in a
 				portfolio cannot be deleted.
 			</p>
-			{#if deleteError}<p role="alert" class="text-sm text-red-700">{deleteError}</p>{/if}
 			<div class="flex justify-end gap-2 border-t border-slate-200 pt-4">
 				<Button
 					variant="ghost"
@@ -264,8 +263,9 @@
 
 <ProviderCatalogueDrawer
 	bind:open={catalogueOpen}
-	onAdopted={(created) => {
-		toast.success(`Added ${created.length} listing${created.length === 1 ? '' : 's'}`);
+	onAdopted={() => {
+		// The drawer stays open and confirms the adoption in its own band; here only the list behind
+		// it has to catch up.
 		void load();
 	}}
 />

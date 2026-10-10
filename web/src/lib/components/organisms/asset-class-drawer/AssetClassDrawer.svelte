@@ -3,6 +3,7 @@
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import type { AssetClassDetails } from '$lib/api/types';
@@ -34,9 +35,7 @@
 			{/each}
 		</div>
 	{:else if error}
-		<div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-			{error}
-		</div>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 	{:else if details}
 		<div class="space-y-6">
 			<div class="flex items-end justify-between gap-3">

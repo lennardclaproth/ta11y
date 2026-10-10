@@ -26,6 +26,11 @@ either. Actions that recompute a chart, such as rebuilding the portfolio,
 hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
 importing, acting on a selection — lives in the ledger header above the table.
 
+Every notification uses one shape: a ruled band in the page flow. Feedback after an action appears
+in the single notice region under the masthead; a problem that stays sits at the content it
+concerns with its recovery action; a refused save stays in the modal or form that caused it, with
+the entry preserved and no second notice on top of it.
+
 ### Authentication [030]
 People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow
 itself, verifies the ID token once and throws it away, then issues its own opaque,

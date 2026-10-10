@@ -306,11 +306,12 @@
 			void load(currentQuery());
 			void loadAnalytics();
 		} catch (err) {
+			// The modal stays open with the entry, so the refusal belongs in it. A toast on top of it
+			// would say the same thing twice.
 			createError =
 				err instanceof ApiError && err.status === 409
 					? `A transaction with the same amount and description already exists on ${formatDisplayDate(value.date)}. Pick another day.`
 					: 'Failed to create transaction';
-			toast.error('Failed to create transaction');
 		} finally {
 			creating = false;
 		}
@@ -551,6 +552,7 @@
 			{onLimitChange}
 			{onFilterChange}
 			onRowClick={openDetail}
+			onRetry={() => void load(currentQuery())}
 		/>
 	</PageContentTemplate>
 </AppShellTemplate>
