@@ -145,6 +145,7 @@ projection to keep in step.
 
 | Path | Responsibility |
 | --- | --- |
+| `migrations/{postgres,sqlite}/20261010090000_wealth_goal.sql` | The `purpose` column and the goals table |
 | `internal/wealthgoal/goal.go` | `Goal`, validation, `StartOfMonth` |
 | `internal/wealthgoal/commands.go` | `SetGoal`, `CommandStore` |
 | `internal/wealthgoal/queries.go` | `CurrentGoal`, `Standing`, `QueryStore`, the month window |
