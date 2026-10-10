@@ -334,11 +334,15 @@
 	// remembered so "Show all transactions" puts it back.
 	function openUnassigned(month: MonthStanding) {
 		const range = monthRange(month.month);
-		periodBeforeScope = {
-			from: periodStore.from,
-			to: periodStore.to,
-			preset: periodStore.preset
-		};
+		// Only a jump from an unscoped view may record the period: a second jump would otherwise
+		// remember the month scope of the first, and "Show all transactions" would restore that.
+		if (!scopedMonth) {
+			periodBeforeScope = {
+				from: periodStore.from,
+				to: periodStore.to,
+				preset: periodStore.preset
+			};
+		}
 		periodStore.set({ from: range.from, to: range.to });
 		purposeFilter = ['none'];
 		scopedMonth = month.month;
