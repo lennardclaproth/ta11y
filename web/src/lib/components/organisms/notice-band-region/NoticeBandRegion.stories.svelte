@@ -38,8 +38,9 @@
 	</div>
 </Story>
 
-<!-- Four at once, three bands: the region shows at most three so the page below it does not jump by
-     an arbitrary height. The fourth waits in the store and appears as one above it goes. -->
+<!-- Four pushed, three bands: the store holds at most three so the page below does not jump by an
+     arbitrary height. The fourth does not wait its turn — the oldest ("Import scheduled") is
+     dismissed as it arrives, so no notice counts down unseen. -->
 <Story name="Stacked (capped at three)" asChild>
 	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">

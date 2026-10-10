@@ -20,7 +20,8 @@ components live in `src/routes/` instead.
 
 One molecule reports everything: `molecules/notice-band` (`NoticeBand`), a ruled band in normal
 document flow. `organisms/notice-band-region` renders the `toast` store as bands under the
-masthead, at most three at a time — the store itself (API, timers, intents) is unchanged. A dialog
+masthead; the store keeps at most three notices and drops the oldest for a newer one, so nothing
+counts down unseen. Its API, timers and intents are otherwise unchanged. A dialog
 or drawer covers that region with its own scrim, so an overlay that stays open reports its own
 outcomes in a band inside it (`ProviderCatalogueDrawer`). A problem that stays is rendered
 by the component that owns the content (`DataTable` on a failed load, with an optional `onRetry`);

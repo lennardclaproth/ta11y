@@ -275,8 +275,9 @@ table row.
 
 - **After an action** — `NoticeBandRegion` renders the toast store directly under the masthead.
   Stacked bands share one hairline (`-mt-px`) so several notices read as one ruled block, and at
-  most three show at once: a band is in the flow, so each one pushes the page down. The rest keep
-  their place and their timer in the store.
+  most three exist at once: a band is in the flow, so each one pushes the page down. The store holds
+  the cap, so a fourth notice does not queue out of sight while its timer runs — the oldest is
+  dismissed as the new one arrives.
 - **Under an overlay** — a dialog or drawer covers the notice region with its own scrim, so what it
   reports it reports itself, in a band inside it. Never send a toast from an overlay that stays open.
 - **A problem that stays** — the band sits at the content it concerns (above the records), with its

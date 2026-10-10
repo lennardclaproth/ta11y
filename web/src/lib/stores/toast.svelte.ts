@@ -22,6 +22,13 @@ export interface ToastOptions {
 }
 
 const DEFAULT_DURATION = 4500;
+/**
+ * How many notices exist at once. A band sits in the page flow, so every extra one pushes the
+ * content down; beyond a few at a time the jump costs more than the notice is worth. The cap lives
+ * here rather than in the region so a notice can never count down unseen: past this many, the
+ * oldest is dismissed — timer and all — the moment a newer one arrives.
+ */
+const MAX_ITEMS = 3;
 
 let items = $state<Toast[]>([]);
 let nextId = 0;
@@ -48,8 +55,10 @@ function push(intent: NoticeIntent, message: string, options: ToastOptions = {})
 		dismissible: options.dismissible ?? true,
 		duration
 	};
-	// Newest on top.
+	// Newest on top, and the oldest beyond the cap goes rather than waiting for a turn it would
+	// have spent its timer on.
 	items = [next, ...items];
+	for (const stale of items.slice(MAX_ITEMS)) dismiss(stale.id);
 	if (duration > 0) {
 		timers[id] = setTimeout(() => dismiss(id), duration);
 	}
