@@ -272,7 +272,7 @@ func AddPurchase(log logging.Logger, commands assets.Commands) http.Handler {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /assets/{asset_id}/holding [get]
+// @Router /assets/holdings/{asset_id} [get]
 func GetHolding(log logging.Logger, queries assets.Queries) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		accountID, ok := httpx.AccountID(w, r)

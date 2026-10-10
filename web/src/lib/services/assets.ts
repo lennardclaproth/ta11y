@@ -137,7 +137,7 @@ export async function createHolding(body: CreateHoldingRequest): Promise<CreateH
 	return apiSend<CreateHoldingResponse>('POST', '/assets/holdings', body);
 }
 
-/** `GET /assets/{asset_id}/holding` */
+/** `GET /assets/holdings/{asset_id}` */
 export async function getHolding(assetId: string): Promise<AssetHolding> {
 	if (useMocks) {
 		await delay();
@@ -145,7 +145,7 @@ export async function getHolding(assetId: string): Promise<AssetHolding> {
 		if (!holding) throw new ApiError(404, 'Asset not found', { error: 'asset not found' });
 		return clone(holding);
 	}
-	return apiGet<AssetHolding>(`/assets/${assetId}/holding`);
+	return apiGet<AssetHolding>(`/assets/holdings/${assetId}`);
 }
 
 /** `POST /assets/{asset_id}/purchases` */

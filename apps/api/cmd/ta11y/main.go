@@ -425,7 +425,9 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /assets/holdings", assethttp.CreateHolding(app.log, *app.assetsCommands))
 	protected("PUT /assets/{asset_id}/worth", assethttp.SetAssetWorth(app.log, *app.assetsCommands))
 	protected("PUT /assets/{asset_id}/adjust", assethttp.AdjustAssetWorth(app.log, *app.assetsCommands))
-	protected("GET /assets/{asset_id}/holding", assethttp.GetHolding(app.log, *app.assetsQueries))
+	// Reading one holding hangs off /assets/holdings rather than /assets/{asset_id}/holding:
+	// the latter is ambiguous against /assets/classes/{class_id} and makes the mux panic.
+	protected("GET /assets/holdings/{asset_id}", assethttp.GetHolding(app.log, *app.assetsQueries))
 	protected("POST /assets/{asset_id}/purchases", assethttp.AddPurchase(app.log, *app.assetsCommands))
 	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
 }

@@ -1169,47 +1169,6 @@ paths:
       summary: Adjust asset worth
       tags:
       - assets
-  /assets/{asset_id}/holding:
-    get:
-      consumes:
-      - application/json
-      description: Returns a daily-priced item with its quantity, what was paid, the
-        latest known price, the value-against-paid series since the first purchase,
-        and the purchases behind it.
-      parameters:
-      - description: Asset item ID
-        in: path
-        name: asset_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/assets.HoldingResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Get daily-priced asset item
-      tags:
-      - assets
   /assets/{asset_id}/purchases:
     post:
       consumes:
@@ -1544,6 +1503,47 @@ paths:
               type: string
             type: object
       summary: Create daily-priced asset item
+      tags:
+      - assets
+  /assets/holdings/{asset_id}:
+    get:
+      consumes:
+      - application/json
+      description: Returns a daily-priced item with its quantity, what was paid, the
+        latest known price, the value-against-paid series since the first purchase,
+        and the purchases behind it.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/assets.HoldingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get daily-priced asset item
       tags:
       - assets
   /assets/snapshots:

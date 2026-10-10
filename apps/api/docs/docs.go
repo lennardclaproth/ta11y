@@ -553,6 +553,65 @@ const docTemplate = `{
                 }
             }
         },
+        "/assets/holdings/{asset_id}": {
+            "get": {
+                "description": "Returns a daily-priced item with its quantity, what was paid, the latest known price, the value-against-paid series since the first purchase, and the purchases behind it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Get daily-priced asset item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Asset item ID",
+                        "name": "asset_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/assets.HoldingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/assets/snapshots": {
             "get": {
                 "description": "Returns account-level daily total worth snapshot points.",
@@ -654,65 +713,6 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/assets/{asset_id}/holding": {
-            "get": {
-                "description": "Returns a daily-priced item with its quantity, what was paid, the latest known price, the value-against-paid series since the first purchase, and the purchases behind it.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "assets"
-                ],
-                "summary": "Get daily-priced asset item",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Asset item ID",
-                        "name": "asset_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/assets.HoldingResponse"
-                        }
                     },
                     "400": {
                         "description": "Bad Request",

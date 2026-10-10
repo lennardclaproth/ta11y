@@ -108,7 +108,7 @@ write side) and `assets.snapshots.rebuilt`.
 | `GET` | `/marketdata/quotes` | Instruments that can back a holding, blocked ones included with a reason |
 | `POST` | `/assets/holdings` | Add a daily-priced item with its first purchase |
 | `POST` | `/assets/{asset_id}/purchases` | Record another acquisition |
-| `GET` | `/assets/{asset_id}/holding` | One holding with its purchases and value-against-paid series |
+| `GET` | `/assets/holdings/{asset_id}` | One holding with its purchases and value-against-paid series |
 
 `GET /assets/classes/{class_id}` gained a `holdings` array alongside `assets`.
 
