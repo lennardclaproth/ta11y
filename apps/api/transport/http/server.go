@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -42,6 +42,20 @@ func NewServer(addr string, router *Router, log logging.Logger, corsOrigins []st
 	return s
 }
 
+// swaggerURL is the browsable Swagger address for a listen address; an empty or
+// wildcard host is shown as localhost.
+func swaggerURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://localhost" + addr + "/swagger/index.html"
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/swagger/index.html"
+}
+
 // Run starts the http server on the address provided
 func (s *Server) Run(ctx context.Context) error {
 	handler := apmhttp.Wrap(s.mux, apmhttp.WithServerRequestIgnorer(func(r *http.Request) bool {
@@ -61,7 +75,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.log.Info(context.Background(),
 		"ta11y is listening for incoming requests...",
 		"addr", s.addr,
-		"swagger_url", fmt.Sprintf("http://localhost%s/swagger/index.html", s.addr),
+		"swagger_url", swaggerURL(s.addr),
 	)
 	// Run server in a goroutine
 	errChan := make(chan error, 1)

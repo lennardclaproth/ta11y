@@ -163,7 +163,7 @@ func run() error {
 	router := apphttp.NewRouter()
 	registerRoutes(router, app)
 
-	server := apphttp.NewServer(fmt.Sprintf(":%d", cfg.Server.Port), router, log, cfg.Server.AllowedOrigins())
+	server := apphttp.NewServer(cfg.Server.Addr(), router, log, cfg.Server.AllowedOrigins())
 	return server.Run(ctx)
 }
 

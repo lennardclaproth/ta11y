@@ -9,6 +9,7 @@
 	import DonutChart from '$lib/components/organisms/charts/DonutChart.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
 	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
@@ -27,10 +28,10 @@
 	} from '$lib/services/cashflow';
 	import { listIgnoreRules } from '$lib/services/ignoreRules';
 	import Switch from '$lib/components/atoms/switch/Switch.svelte';
-	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import { connectRealtime } from '$lib/services/realtime';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
+	import { periodStore } from '$lib/stores/period.svelte';
 	import type { CashflowTransactionFormValue } from '$lib/components/organisms/transaction-form-modal/transaction-form-modal.types';
 	import {
 		parseQuery,
@@ -54,7 +55,6 @@
 		Vendor
 	} from '$lib/api/types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
-	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
 	const schema: QuerySchema = {
 		description: { type: 'string' },
@@ -77,8 +77,12 @@
 	let sortDirection = $state(((initial.sort_order as string) || 'desc') as SortDirection);
 	let limit = $state((initial.limit as number) || 25);
 	let offset = $state((initial.offset as number) || 0);
-	let from = $state((initial.from as string) || '');
-	let to = $state((initial.to as string) || '');
+
+	// The period is the app's, not this page's: a link that carries one seeds it, but only
+	// while nothing has chosen a period yet, so returning here never undoes a later choice.
+	periodStore.seed((initial.from as string) || null, (initial.to as string) || null);
+	const from = $derived(periodStore.from);
+	const to = $derived(periodStore.to);
 
 	let rows = $state<CashflowTransaction[]>([]);
 	let total = $state(0);
@@ -120,13 +124,16 @@
 	);
 
 	// An empty ledger and an empty result set are different situations, so they read differently.
+	// The period is app-wide and always set, so it is not what makes this a filtered view.
 	const filtering = $derived(
-		Boolean(descriptionFilter || tagFilter.length > 0 || directionFilter || from || to)
+		Boolean(descriptionFilter.trim() || tagFilter.length > 0 || directionFilter)
 	);
 	const emptyText = $derived(
-		filtering
-			? 'No transactions match your filters'
-			: 'No transactions yet. Add one to start your ledger.'
+		descriptionFilter.trim()
+			? `No transactions match “${descriptionFilter.trim()}”. Clear the search to see them all.`
+			: filtering
+				? 'No transactions match your filters'
+				: 'No transactions yet. Add one to start your ledger.'
 	);
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
@@ -162,17 +169,25 @@
 		};
 	}
 
+	// A period change invalidates the load effect and then resets `offset`, so two queries can be
+	// in flight at once. Only the newest may write the table, or a slow response for the page you
+	// just left can land last and show rows the URL and the pagination control disagree with.
+	let requestId = 0;
+
 	async function load(query: CashflowTransactionsQuery) {
+		const id = ++requestId;
 		loading = true;
 		error = null;
 		try {
 			const result = await listCashflowTransactions(query);
+			if (id !== requestId) return;
 			rows = result.data;
 			total = result.pagination.total;
 		} catch {
+			if (id !== requestId) return;
 			error = 'Failed to load transactions';
 		} finally {
-			loading = false;
+			if (id === requestId) loading = false;
 		}
 	}
 
@@ -212,6 +227,21 @@
 		void from;
 		void to;
 		void loadAnalytics();
+	});
+
+	// Keep the URL in step with the period after it is changed elsewhere (the overview, or a
+	// drag on the chart). The first run is the page's own initial state, which the URL already
+	// holds -- rewriting it there would discard a deep-linked page offset.
+	let periodSynced = false;
+	$effect(() => {
+		void periodStore.from;
+		void periodStore.to;
+		if (!periodSynced) {
+			periodSynced = true;
+			return;
+		}
+		offset = 0;
+		syncUrl();
 	});
 
 	// The rules are read once and only to name the rule on an ignored row; the ledger does
@@ -259,10 +289,8 @@
 		syncUrl();
 	}
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
-		from = rangeFrom;
-		to = rangeTo;
-		offset = 0;
-		syncUrl();
+		// Dragging the chart picks a period like any other, so it goes through the same store.
+		periodStore.set({ from: rangeFrom, to: rangeTo });
 		toast.info(`Filtered to ${rangeFrom} – ${rangeTo}`);
 	}
 
@@ -399,6 +427,13 @@
 		return trimmed.length >= 3 ? trimmed : values[0];
 	}
 
+	const tableMeta = $derived.by(() => {
+		if (loading) return 'Loading…';
+		if (error) return 'Could not load';
+		const selected = selectedIds.length > 0 ? ` · ${selectedIds.length} selected` : '';
+		return `${total} ${total === 1 ? 'row' : 'rows'}${selected}`;
+	});
+
 	// Imports need a brokerage vendor, which the cashflow page does not otherwise load,
 	// so the list is fetched when the dialog is first opened rather than on every visit.
 	async function openImport() {
@@ -411,37 +446,14 @@
 		}
 		importOpen = true;
 	}
-
-	const navActions: MenuItem[] = [
-		{ label: 'Import CSV', icon: 'heroicons:cloud-arrow-up', onSelect: () => void openImport() }
-	];
 </script>
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Cashflow"
-			showSearch
-			searchValue={descriptionFilter}
-			searchPlaceholder="Search description…"
-			onSearch={(q) => {
-				descriptionFilter = q;
-				onFilterChange();
-			}}
-			showDateRange
-			dateFrom={from || null}
-			dateTo={to || null}
-			onDateChange={(r) => {
-				from = r.from ?? '';
-				to = r.to ?? '';
-				offset = 0;
-				syncUrl();
-			}}
-			actions={navActions}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Cashflow">
 		{#snippet analytics()}
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-4">
 				<AnalyticsCard title="Net trend" class="lg:col-span-2">
@@ -483,29 +495,68 @@
 			</div>
 		{/snippet}
 
+		<!-- Everything that acts on these rows lives here: searching, tagging a selection,
+		     importing a statement and adding one. -->
 		<LedgerToolbar
 			title="Transactions"
-			actionLabel="Add transaction"
-			onAdd={() => (createOpen = true)}
+			meta={tableMeta}
+			showSearch
+			searchValue={descriptionFilter}
+			searchPlaceholder="Search description…"
+			searchAriaLabel="Search transactions by description"
+			onSearch={(q) => {
+				descriptionFilter = q;
+				onFilterChange();
+			}}
 		>
-			<div class="flex items-center gap-2 text-sm text-slate-700">
-				<Switch
-					checked={showIgnored}
-					aria-label="Show ignored rows"
-					onchange={(event) => {
-						showIgnored = (event.currentTarget as HTMLInputElement).checked;
-						offset = 0;
-						selectedIds = [];
-					}}
-				/>
-				<span>Show ignored rows</span>
-			</div>
-			<a
-				href="/cashflow/ignore-rules"
-				class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
-			>
-				<Icon icon="heroicons:funnel" size="sm" />Ignore rules
-			</a>
+			<!-- What is in the list is a filter over these rows, so the ignored switch and the
+			     page that owns the rules sit with the filters rather than with the actions. -->
+			{#snippet filters()}
+				<div class="flex items-center gap-2 text-sm text-slate-700">
+					<Switch
+						checked={showIgnored}
+						aria-label="Show ignored rows"
+						onchange={(event) => {
+							showIgnored = (event.currentTarget as HTMLInputElement).checked;
+							offset = 0;
+							selectedIds = [];
+						}}
+					/>
+					<span>Show ignored rows</span>
+				</div>
+				<a
+					href="/cashflow/ignore-rules"
+					class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+				>
+					<Icon icon="heroicons:funnel" size="sm" />Ignore rules
+				</a>
+			{/snippet}
+			{#snippet actions()}
+				{#if selectedIds.length > 0}
+					<Button variant="ruled" onclick={handleBulkTag}>
+						<Icon icon="heroicons:tag" />
+						Tag {selectedIds.length} selected
+					</Button>
+					{#if showIgnored}
+						<Button variant="ruled" onclick={() => void restore(selectedIds)}>
+							<Icon icon="heroicons:arrow-uturn-left" />
+							Restore
+						</Button>
+					{/if}
+					<Button variant="ruled" onclick={makeRuleFromSelection}>
+						<Icon icon="heroicons:funnel" />
+						Make an ignore rule
+					</Button>
+				{/if}
+				<Button variant="ruled" onclick={() => void openImport()}>
+					<Icon icon="heroicons:cloud-arrow-up" />
+					Import CSV
+				</Button>
+				<Button shape="default" onclick={() => (createOpen = true)}>
+					<Icon icon="heroicons:plus" />
+					Add transaction
+				</Button>
+			{/snippet}
 		</LedgerToolbar>
 		<CashflowTransactionsTable
 			{rows}
@@ -530,24 +581,7 @@
 			{onLimitChange}
 			{onFilterChange}
 			onRowClick={openDetail}
-		>
-			{#snippet bulkActions()}
-				<Button size="sm" variant="ghost" intent="secondary" onclick={handleBulkTag}>Tag</Button>
-				{#if showIgnored}
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						onclick={() => void restore(selectedIds)}
-					>
-						Restore
-					</Button>
-				{/if}
-				<Button size="sm" variant="ghost" intent="secondary" onclick={makeRuleFromSelection}>
-					Make an ignore rule
-				</Button>
-			{/snippet}
-		</CashflowTransactionsTable>
+		/>
 	</PageContentTemplate>
 </AppShellTemplate>
 

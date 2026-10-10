@@ -200,7 +200,7 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Cashflow" />
+		<TopNavbar />
 	{/snippet}
 
 	<div class="flex min-h-full flex-col px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8">

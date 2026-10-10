@@ -111,9 +111,17 @@ dense columns that make financial information harder to read.
 The first portal rollout implements the ruled ta11y masthead, visible desktop navigation, labeled
 mobile menu, serif analytics headings, flat KPI sections, and square paper content panels. More
 extensive editorial treatments remain forward-looking; dialogs and operational controls retain
-their existing shapes and behavior. Primary creation actions on Cashflow, Assets and Portfolio
-use labeled buttons with a plus icon in a ruled ledger header, immediately above the records.
-Portfolio shares this header with its view tabs. Actions remain in normal document flow and wrap on mobile.
+their existing shapes and behavior.
+
+**Where a control sits says what it affects.** The masthead carries navigation and, to the right
+of a vertical rule, the personal region: account, net worth with its change, the one period
+choice, and sign out. Nothing in the masthead changes the page below it. The page owns its own
+heading. Actions that recompute a chart hang on that chart's rule; everything that acts on the
+rows — searching, row filters, creating, acting on a selection — sits in the ruled ledger header
+immediately above the records, with searching as the ruled line directly beneath it. Portfolio
+shares that header with its view tabs. One region shows one filled action; its supporting actions
+use the `ruled` button variant so they read as a rule with a label rather than a second box.
+Actions remain in normal document flow and wrap on mobile.
 The standalone [HTML guide](DESIGN.html) demonstrates the editorial direction; this Markdown file
 remains the editable source of truth. Regenerate the HTML with `node scripts/render-design.cjs`
 after changing this document or its companion metadata (requires the existing frontend dependencies).
@@ -194,7 +202,9 @@ The portal is an operational workspace with a top navigation region, analytics a
 | App shell | `AppShellTemplate`: dynamic viewport-height flex column; main region scrolls below `lg`, while desktop panels own scrolling; skip link targets main content |
 | Content | `PageContentTemplate`: 16px horizontal padding (32px at `lg`), 20px section gaps, 24px bottom padding |
 | Main panel | Square muted Panel, no shadow or internal padding; 32rem tall below `lg`, remaining available height on desktop |
-| Top navigation | Ruled ta11y masthead; direct links from `md`, labeled menu below; title, search, date, actions, and account controls wrap below the masthead |
+| Top navigation | Ruled ta11y masthead; wordmark above the destinations, direct links from `md`, labeled menu below. Nothing that acts on the page |
+| Your overview | Right of a vertical rule in the masthead: account, net worth and its change, one period card, sign out. Inline from `lg`, behind one entry below it |
+| Ledger header | Title, row count, row filters and row actions on the section rule; searching on the ruled line directly underneath, the full width of the table |
 | KPI grid | One column initially, two at `sm`, three or four at `lg` depending on configuration; 12px gap |
 | Panel padding | None, 12px, 16px, or 24px |
 | Controls | Small 32px, medium 40px, large 48px high |
@@ -244,7 +254,7 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 
 | Need | Reuse | Usage rule |
 | --- | --- | --- |
-| Primary/supporting action | Button | `intent`, `variant`, `size`, `shape`; one visually dominant action per task region |
+| Primary/supporting action | Button | `intent`, `variant`, `size`, `shape`; one visually dominant action per task region. `ruled` is the supporting action on a section rule, and carries its own geometry instead of `shape` |
 | Icon-only action | IconButton | Supply the required accessible label; use the Icon atom for icon rendering |
 | Text entry | Input, Textarea, FormField | Visible label, optional help, linked error; placeholders supplement labels |
 | Search or affixes | SearchInput, IconInput | Compose the input atom instead of duplicating its focus and error styles |
@@ -252,7 +262,8 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Classification/status | Badge | `soft`, `solid`, `outline`; use semantic text, not color alone |
 | Surface | Panel | Choose background, padding, border, shape, and shadow deliberately |
 | Navigation/filtering | NavMenu, Tabs, filter molecules | Show current state and preserve the query/selection context |
-| Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning |
+| Period selection | DateRangePicker | One period for the app, chosen in the overview. Supply `presets` to name the ranges and a `trigger` to render your own control; the presets then read inside the picker rather than beside it |
+| Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning. AnalyticsCard's `actions` snippet puts chart-level actions on the section rule |
 | Counts | CountStat | Tabular and labelled; no currency, no colour by sign; a placeholder, not a zero, while unknown |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
@@ -270,7 +281,7 @@ Existing controls include focus rings, disabled treatment, and ARIA hooks. The f
 - Check text, control boundaries, and focus indicators for sufficient contrast in their actual background combinations. Do not assume every palette shade is interchangeable.
 - Provide usable touch targets and spacing; prefer large controls on touch layouts. The existing 32px compact size is not the default for a touch-first screen.
 - Distinguish initial loading, empty account, no filter matches, request failure, and stale data. Provide an appropriate next action for each.
-- Existing transitions commonly use 150ms ease-out; buttons also scale to 0.98 when pressed, and navigation uses a short fly transition. New or revised motion must respect reduced-motion preferences. Do not use animation as the only state signal.
+- Existing transitions commonly use 150ms ease-out; buttons also scale to 0.98 and show the amber focus ring while pressed, and navigation uses a short fly transition. The press ring is on `active:` as well as `focus-visible:`, because `focus-visible` stays off for pointer input and a solid button's `active:` colour equals its resting colour — without it a mouse click would show nothing. It is a colour change rather than only motion, so it survives a reduced-motion preference. New or revised motion must respect reduced-motion preferences. Do not use animation as the only state signal.
 
 ### Charts
 

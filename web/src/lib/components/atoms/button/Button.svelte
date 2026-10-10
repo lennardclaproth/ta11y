@@ -14,7 +14,8 @@
     buttonShapeClasses,
     buttonSizeClasses,
     iconSizeClasses,
-    intentVariantClasses
+    intentVariantClasses,
+    ruledShapeClasses
   } from './button.variants';
 
   type Props = {
@@ -55,7 +56,8 @@
   const classes = $derived([
     baseButtonClasses,
     buttonSizeClasses[size],
-    buttonShapeClasses[shape],
+    // A ruled action is not a box, so `shape` does not apply to it.
+    variant === 'ruled' ? ruledShapeClasses : buttonShapeClasses[shape],
     intentVariantClasses[intent][variant],
     loading ? 'cursor-wait' : '',
     className

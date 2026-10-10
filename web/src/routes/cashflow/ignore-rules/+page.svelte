@@ -13,6 +13,7 @@
 	import IgnoreRulesDesk from '$lib/components/organisms/ignore-rules-desk/IgnoreRulesDesk.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
+	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import { ApiError } from '$lib/api/client';
 	import {
@@ -233,10 +234,15 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar title="Ignore rules" />
+		<TopNavbar />
 	{/snippet}
 
 	<div class="flex min-h-full flex-col gap-5 px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8">
+		<!-- The navigation bar carries destinations only, so the page says its own name here,
+		     the same way PageContentTemplate does for the pages that use it. -->
+		<div class="flex shrink-0 flex-wrap items-baseline justify-between gap-2 pt-1">
+			<Heading level="h1" size="2xl" class="leading-none">Ignore rules</Heading>
+		</div>
 		<IgnoreRulesDesk
 			{rules}
 			bind:draft
