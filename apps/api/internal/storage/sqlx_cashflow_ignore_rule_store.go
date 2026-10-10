@@ -168,62 +168,74 @@ func (s *SQLXCashflowIgnoreRuleStore) ListIgnoredByRule(ctx context.Context, acc
 		return nil, err
 	}
 
-	totals, err := s.countIgnoredPerRule(ctx, accountID, importID)
+	harvest, err := s.ignoredPerRule(ctx, accountID, importID, perRule)
 	if err != nil {
 		return nil, err
 	}
 
-	groups := make([]cashflow.IgnoredRuleGroup, 0, len(totals))
+	groups := make([]cashflow.IgnoredRuleGroup, 0, len(harvest))
 	for _, rule := range rules {
-		total, ok := totals[rule.ID]
+		group, ok := harvest[rule.ID]
 		if !ok {
 			continue
 		}
-		rows, err := s.ignoredByRule(ctx, accountID, importID, rule.ID, perRule)
-		if err != nil {
-			return nil, err
-		}
-		groups = append(groups, cashflow.IgnoredRuleGroup{Rule: rule, Total: total, Transactions: rows})
+		groups = append(groups, cashflow.IgnoredRuleGroup{
+			Rule:         rule,
+			Total:        group.total,
+			Transactions: group.transactions,
+		})
 	}
 	return groups, nil
 }
 
-func (s *SQLXCashflowIgnoreRuleStore) countIgnoredPerRule(ctx context.Context, accountID, importID uuid.UUID) (map[uuid.UUID]int, error) {
+// ruleHarvest is what one rule ignored in an import: the full count, and the capped
+// sample the review shows.
+type ruleHarvest struct {
+	total        int
+	transactions []*cashflow.Transaction
+}
+
+// ignoredPerRule reads every rule's capped sample and full total in one pass. The window
+// functions do the per-rule limiting the page used to ask for rule by rule, which kept
+// the query count growing with the number of rules somebody writes.
+func (s *SQLXCashflowIgnoreRuleStore) ignoredPerRule(ctx context.Context, accountID, importID uuid.UUID, perRule int) (map[uuid.UUID]*ruleHarvest, error) {
 	query := s.db.Rebind(fmt.Sprintf(`
-		SELECT ignored_by_rule_id AS rule_id, COUNT(1) AS total
-		FROM %s
-		WHERE account_id = ? AND import_id = ? AND ignored_by_rule_id IS NOT NULL
-		GROUP BY ignored_by_rule_id
+		SELECT * FROM (
+			SELECT
+				t.*,
+				ROW_NUMBER() OVER (PARTITION BY ignored_by_rule_id ORDER BY date DESC) AS row_in_group,
+				COUNT(1) OVER (PARTITION BY ignored_by_rule_id) AS group_total
+			FROM %s t
+			WHERE account_id = ? AND import_id = ? AND ignored_by_rule_id IS NOT NULL
+		) grouped
+		WHERE row_in_group <= ?
+		ORDER BY ignored_by_rule_id, row_in_group
 	`, s.transactionsTable))
 
 	type row struct {
-		RuleID uuid.UUID `db:"rule_id"`
-		Total  int       `db:"total"`
+		cashflow.Transaction
+		RowInGroup int `db:"row_in_group"`
+		GroupTotal int `db:"group_total"`
 	}
 	var rows []row
-	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &rows, query, accountID, importID); err != nil {
-		return nil, fmt.Errorf("cashflow ignore rule store: count ignored per rule: %w", err)
-	}
-
-	totals := make(map[uuid.UUID]int, len(rows))
-	for _, r := range rows {
-		totals[r.RuleID] = r.Total
-	}
-	return totals, nil
-}
-
-func (s *SQLXCashflowIgnoreRuleStore) ignoredByRule(ctx context.Context, accountID, importID, ruleID uuid.UUID, limit int) ([]*cashflow.Transaction, error) {
-	query := s.db.Rebind(fmt.Sprintf(`
-		SELECT * FROM %s
-		WHERE account_id = ? AND import_id = ? AND ignored_by_rule_id = ?
-		ORDER BY date DESC
-		LIMIT ?
-	`, s.transactionsTable))
-	transactions := []*cashflow.Transaction{}
-	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &transactions, query, accountID, importID, ruleID, limit); err != nil {
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &rows, query, accountID, importID, perRule); err != nil {
 		return nil, fmt.Errorf("cashflow ignore rule store: list ignored by rule: %w", err)
 	}
-	return transactions, nil
+
+	harvest := map[uuid.UUID]*ruleHarvest{}
+	for _, r := range rows {
+		if r.IgnoredByRuleID == nil {
+			continue
+		}
+		group, ok := harvest[*r.IgnoredByRuleID]
+		if !ok {
+			group = &ruleHarvest{total: r.GroupTotal}
+			harvest[*r.IgnoredByRuleID] = group
+		}
+		transaction := r.Transaction
+		group.transactions = append(group.transactions, &transaction)
+	}
+	return harvest, nil
 }
 
 // targetWhereClause narrows the ledger filters a rule carries to the rows a rule is
