@@ -105,6 +105,28 @@ func TestBuildStandingAlwaysHoldsTheRunningMonth(t *testing.T) {
 	}
 }
 
+// A transaction dated in a month that has not started yet -- an import carries no date
+// validation -- must not add a second in_progress month in front of the running one.
+func TestBuildStandingLeavesOutMonthsThatHaveNotStarted(t *testing.T) {
+	now := month(t, "2026-07-10")
+	totals := []MonthlyPurposeTotals{
+		{Month: month(t, "2026-07-01"), IncomeCents: 1000, ContributedCents: 300},
+		{Month: month(t, "2027-01-01"), IncomeCents: 1000, ContributedCents: 0},
+	}
+
+	standing := buildStanding(totals, []*Goal{goalFrom(t, "2026-01-01", 30)}, now)
+
+	if len(standing.Months) != 1 {
+		t.Fatalf("months = %d, want 1", len(standing.Months))
+	}
+	if standing.Months[0].Month != month(t, "2026-07-01") {
+		t.Errorf("month = %s, want 2026-07-01", standing.Months[0].Month)
+	}
+	if standing.Months[0].Result != ResultInProgress {
+		t.Errorf("result = %s, want %s", standing.Months[0].Result, ResultInProgress)
+	}
+}
+
 // Without a goal there is nothing to score against, and nothing is invented.
 func TestBuildStandingWithoutAGoalScoresNothing(t *testing.T) {
 	now := month(t, "2026-07-10")

@@ -116,7 +116,9 @@ values) with an index on `(account_id, date, purpose)`.
   transactions does count, with the result it has; the open count says the figure can still
   move.
 - **Months without any transaction are absent** rather than scored as missed, and therefore
-  do not break a streak. The running month is always present once a goal exists.
+  do not break a streak. The running month is always present once a goal exists. A month
+  that has not started yet is left out entirely: an import can carry a date in the future,
+  and that month is not something to judge or to lead the card with.
 - **The streak** is the run of `met` months back from the newest finished one; the best
   streak is the longest such run in the window. The window is `months` (default 12, max 60).
 

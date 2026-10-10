@@ -66,6 +66,12 @@ func buildStanding(totals []MonthlyPurposeTotals, goals []*Goal, now time.Time) 
 	months := make([]MonthStanding, 0, len(totals))
 	for _, total := range totals {
 		month := StartOfMonth(total.Month)
+		if month.After(currentMonth) {
+			// A month that has not started yet is not part of the standing. An import can
+			// carry a date in the future, and scoring it would put a second in_progress
+			// month in front of the running one.
+			continue
+		}
 		goal := goalAt(ordered, month)
 		if goal == nil {
 			// Before the first goal there is nothing to score against. The month still
