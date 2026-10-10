@@ -44,6 +44,7 @@ import (
 	portfoliohttp "github.com/lennardclaproth/ta11y/transport/http/handlers/portfolio"
 	vendorshttp "github.com/lennardclaproth/ta11y/transport/http/handlers/vendors"
 	assetsevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/assets"
+	cashflowevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/cashflow"
 	importerevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/importer"
 	portfolioevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/portfolio"
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -67,8 +68,10 @@ type application struct {
 	vendorCommands  *vendor.Commands
 	vendorQueries   *vendor.Queries
 
-	cashflowCommands *cashflow.Commands
-	cashflowQueries  *cashflow.Queries
+	cashflowCommands  *cashflow.Commands
+	cashflowQueries   *cashflow.Queries
+	recurringCommands *cashflow.RecurringCommands
+	recurringQueries  *cashflow.RecurringQueries
 
 	portfolioCommands *portfolio.Commands
 	portfolioQueries  *portfolio.Queries
@@ -205,6 +208,7 @@ func buildApplication(
 	authStore := storage.NewSQLXAuthStore(db)
 	vendorStore := storage.NewSQLXVendorStore(db)
 	cashflowStore := storage.NewSQLXCashflowStore(db)
+	recurringStore := storage.NewSQLXRecurringStore(db)
 	portfolioStore := storage.NewSQLXPortfolioStore(db)
 	assetsStore := storage.NewSQLXAssetsStore(db)
 	importerStore := storage.NewSQLXImporterStore(db)
@@ -230,6 +234,8 @@ func buildApplication(
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, accountQueries)
 	cashflowQueries := cashflow.NewQueries(cashflowStore)
+	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore, recurringStore)
+	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
 	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
@@ -271,8 +277,10 @@ func buildApplication(
 		vendorCommands: vendorCommands,
 		vendorQueries:  vendorQueries,
 
-		cashflowCommands: cashflowCommands,
-		cashflowQueries:  cashflowQueries,
+		cashflowCommands:  cashflowCommands,
+		cashflowQueries:   cashflowQueries,
+		recurringCommands: recurringCommands,
+		recurringQueries:  recurringQueries,
 
 		portfolioCommands: portfolioCommands,
 		portfolioQueries:  portfolioQueries,
@@ -304,6 +312,9 @@ func registerEventHandlers(bus eventbus.Bus, app *application) error {
 		return err
 	}
 	if err := subscribe(bus, importer.TopicCompleted, portfolioevents.NewImportCompletedHandler(app.portfolioBuilder, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, importer.TopicCompleted, cashflowevents.NewImportCompletedHandler(app.recurringCommands, app.log).Handle); err != nil {
 		return err
 	}
 	if err := subscribe(bus, importer.TopicCompleted, notify.NewImportCompletedHandler(app.hub).Handle); err != nil {
@@ -398,6 +409,19 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/selection", cashflowhttp.IgnoreTransactionsBySelection(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/filter", cashflowhttp.IgnoreTransactionsByFilter(app.log, app.cashflowCommands))
+
+	// Recurring items are cashflow data for one account, so they sit in the same
+	// tier as the transactions they are built from.
+	protected("GET /cashflow/recurring", cashflowhttp.GetRecurringItems(app.log, app.recurringQueries))
+	protected("POST /cashflow/recurring", cashflowhttp.CreateRecurringItem(app.log, app.recurringCommands))
+	protected("GET /cashflow/recurring/suggestions", cashflowhttp.GetRecurringSuggestions(app.log, app.recurringQueries))
+	protected("POST /cashflow/recurring/suggestions/confirm", cashflowhttp.ConfirmRecurringSuggestion(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/suggestions/dismiss", cashflowhttp.DismissRecurringSuggestion(app.log, app.recurringCommands))
+	protected("GET /cashflow/recurring/{item_id}", cashflowhttp.GetRecurringItem(app.log, app.recurringQueries))
+	protected("PATCH /cashflow/recurring/{item_id}", cashflowhttp.UpdateRecurringItem(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/{item_id}/end", cashflowhttp.EndRecurringItem(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/{item_id}/transactions", cashflowhttp.LinkRecurringTransactions(app.log, app.recurringCommands))
+	protected("DELETE /cashflow/recurring/{item_id}/transactions/{transaction_id}", cashflowhttp.UnlinkRecurringTransaction(app.log, app.recurringCommands))
 
 	protected("GET /portfolio/positions", portfoliohttp.GetPortfolioPositions(app.log, app.portfolioQueries))
 	protected("GET /portfolio/snapshots", portfoliohttp.GetPortfolioSnapshots(app.log, app.accountQueries, app.portfolioQueries))

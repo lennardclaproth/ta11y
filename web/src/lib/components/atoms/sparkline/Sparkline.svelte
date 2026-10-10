@@ -42,13 +42,16 @@
     if (values.length === 0) return [];
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const range = max - min || 1;
     const innerW = w - p * 2;
     const innerH = h - p * 2;
     const step = values.length > 1 ? innerW / (values.length - 1) : 0;
+    // A series that never moved has no shape to show, so it draws through the middle.
+    // Scaling it against a substitute range would park every point on the bottom edge,
+    // where a line that never changed reads as one that fell to zero.
+    const flat = max === min;
     return values.map((value, i) => ({
       x: p + i * step,
-      y: p + innerH - ((value - min) / range) * innerH
+      y: flat ? p + innerH / 2 : p + innerH - ((value - min) / (max - min)) * innerH
     }));
   }
 

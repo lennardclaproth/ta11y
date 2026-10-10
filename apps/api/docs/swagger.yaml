@@ -211,6 +211,17 @@ definitions:
       id:
         type: string
     type: object
+  cashflow.ConfirmRecurringSuggestionRequest:
+    properties:
+      direction:
+        type: string
+      match_key:
+        type: string
+      name:
+        type: string
+      rhythm:
+        type: string
+    type: object
   cashflow.CreateManualCashflowTransactionRequest:
     properties:
       amount:
@@ -226,6 +237,19 @@ definitions:
       type:
         type: string
       vendor:
+        type: string
+    type: object
+  cashflow.CreateRecurringItemRequest:
+    properties:
+      direction:
+        type: string
+      ids:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      rhythm:
         type: string
     type: object
   cashflow.CreateTransactionResponse:
@@ -256,6 +280,18 @@ definitions:
           $ref: '#/definitions/cashflow.CreateManualCashflowTransactionRequest'
         type: array
     type: object
+  cashflow.DismissRecurringSuggestionRequest:
+    properties:
+      direction:
+        type: string
+      match_key:
+        type: string
+    type: object
+  cashflow.EndRecurringItemRequest:
+    properties:
+      from:
+        type: string
+    type: object
   cashflow.IgnoreTransactionsByFilterRequest:
     properties:
       filters:
@@ -279,6 +315,13 @@ definitions:
       updated_count:
         type: integer
     type: object
+  cashflow.LinkRecurringTransactionsRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
   cashflow.MonthlyAnalyticsPointResponse:
     properties:
       incoming_cents:
@@ -289,6 +332,146 @@ definitions:
         type: integer
       outgoing_cents:
         type: integer
+    type: object
+  cashflow.RecurringAmountPointResponse:
+    properties:
+      amountCents:
+        type: integer
+      date:
+        type: string
+    type: object
+  cashflow.RecurringItemDetailResponse:
+    properties:
+      direction:
+        type: string
+      ended_from:
+        type: string
+      history:
+        items:
+          $ref: '#/definitions/cashflow.RecurringAmountPointResponse'
+        type: array
+      id:
+        type: string
+      last_seen:
+        type: string
+      lastAmountCents:
+        type: integer
+      linked_count:
+        type: integer
+      name:
+        type: string
+      next_expected:
+        type: string
+      rhythm:
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/cashflow.RecurringTransactionResponse'
+        type: array
+    type: object
+  cashflow.RecurringItemResponse:
+    properties:
+      direction:
+        type: string
+      ended_from:
+        type: string
+      history:
+        items:
+          $ref: '#/definitions/cashflow.RecurringAmountPointResponse'
+        type: array
+      id:
+        type: string
+      last_seen:
+        type: string
+      lastAmountCents:
+        type: integer
+      linked_count:
+        type: integer
+      name:
+        type: string
+      next_expected:
+        type: string
+      rhythm:
+        type: string
+    type: object
+  cashflow.RecurringMonthPointResponse:
+    properties:
+      expenseCents:
+        type: integer
+      incomeCents:
+        type: integer
+      month:
+        type: string
+    type: object
+  cashflow.RecurringMutationResponse:
+    properties:
+      linked_count:
+        type: integer
+    type: object
+  cashflow.RecurringOverviewResponse:
+    properties:
+      ended:
+        items:
+          $ref: '#/definitions/cashflow.RecurringItemResponse'
+        type: array
+      expenses:
+        items:
+          $ref: '#/definitions/cashflow.RecurringItemResponse'
+        type: array
+      income:
+        items:
+          $ref: '#/definitions/cashflow.RecurringItemResponse'
+        type: array
+      monthlyExpenseCents:
+        description: |-
+          Monthly totals spread a quarterly amount over three months and a yearly one
+          over twelve; the page says so where it shows them.
+        type: integer
+      monthlyIncomeCents:
+        type: integer
+      series:
+        items:
+          $ref: '#/definitions/cashflow.RecurringMonthPointResponse'
+        type: array
+    type: object
+  cashflow.RecurringSuggestionResponse:
+    properties:
+      amountCents:
+        type: integer
+      direction:
+        type: string
+      match_key:
+        type: string
+      matches:
+        type: integer
+      name:
+        type: string
+      rhythm:
+        type: string
+      sample:
+        type: string
+      since:
+        type: string
+    type: object
+  cashflow.RecurringSuggestionsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.RecurringSuggestionResponse'
+        type: array
+    type: object
+  cashflow.RecurringTransactionResponse:
+    properties:
+      amountCents:
+        type: integer
+      date:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      source:
+        type: string
     type: object
   cashflow.TagDistributionEntryResponse:
     properties:
@@ -350,6 +533,13 @@ definitions:
         items:
           $ref: '#/definitions/cashflow.CreateTransactionResponse'
         type: array
+    type: object
+  cashflow.UpdateRecurringItemRequest:
+    properties:
+      name:
+        type: string
+      rhythm:
+        type: string
     type: object
   handlers.CatalogueSearchRequest:
     properties:
@@ -1557,6 +1747,429 @@ paths:
       summary: Get cashflow tag distribution
       tags:
       - Transactions
+  /cashflow/recurring:
+    get:
+      consumes:
+      - application/json
+      description: Returns running recurring expenses, running recurring income and
+        ended items, with monthly-equivalent totals and a per-month trend.
+      parameters:
+      - description: Narrow the groups by item name
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringOverviewResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get recurring items
+      tags:
+      - Recurring
+    post:
+      consumes:
+      - application/json
+      description: Starts a recurring item from one or more cashflow transactions.
+        The tag and ignored status of those transactions are left untouched.
+      parameters:
+      - description: Create recurring item request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.CreateRecurringItemRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cashflow.RecurringItemResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a recurring item
+      tags:
+      - Recurring
+  /cashflow/recurring/{item_id}:
+    get:
+      consumes:
+      - application/json
+      description: Returns a recurring item with its observed amounts over time and
+        the transactions linked to it, newest first.
+      parameters:
+      - description: Recurring item id
+        in: path
+        name: item_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringItemDetailResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get one recurring item
+      tags:
+      - Recurring
+    patch:
+      consumes:
+      - application/json
+      description: Renames a recurring item and sets its rhythm. The direction follows
+        from the linked transactions and is not editable.
+      parameters:
+      - description: Recurring item id
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: Update recurring item request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.UpdateRecurringItemRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringItemResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a recurring item
+      tags:
+      - Recurring
+  /cashflow/recurring/{item_id}/end:
+    post:
+      consumes:
+      - application/json
+      description: Stops a recurring item from the first day of the given month ("YYYY-MM").
+        Transactions linked before it stay linked; nothing after it is linked automatically.
+      parameters:
+      - description: Recurring item id
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: End recurring item request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.EndRecurringItemRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringItemResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: End a recurring item
+      tags:
+      - Recurring
+  /cashflow/recurring/{item_id}/transactions:
+    post:
+      consumes:
+      - application/json
+      description: Links cashflow transactions to an existing recurring item. An ended
+        item takes no new transactions.
+      parameters:
+      - description: Recurring item id
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: Link transactions request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.LinkRecurringTransactionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringMutationResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Link transactions to a recurring item
+      tags:
+      - Recurring
+  /cashflow/recurring/{item_id}/transactions/{transaction_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes one transaction from a recurring item. The transaction
+        itself stays in Cashflow.
+      parameters:
+      - description: Recurring item id
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: Cashflow transaction id
+        in: path
+        name: transaction_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Unlink a transaction from a recurring item
+      tags:
+      - Recurring
+  /cashflow/recurring/suggestions:
+    get:
+      consumes:
+      - application/json
+      description: Returns patterns found in transactions that are neither ignored
+        nor already linked, leaving out dismissed patterns and patterns that already
+        belong to an item.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.RecurringSuggestionsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get recurring suggestions
+      tags:
+      - Recurring
+  /cashflow/recurring/suggestions/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Creates the recurring item a suggestion proposed and links every
+        transaction it was found in. A suggestion counts for nothing until this is
+        called.
+      parameters:
+      - description: Confirm suggestion request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.ConfirmRecurringSuggestionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cashflow.RecurringItemResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Confirm a recurring suggestion
+      tags:
+      - Recurring
+  /cashflow/recurring/suggestions/dismiss:
+    post:
+      consumes:
+      - application/json
+      description: Refuses a suggested pattern. A dismissed suggestion is not offered
+        again.
+      parameters:
+      - description: Dismiss suggestion request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.DismissRecurringSuggestionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Dismiss a recurring suggestion
+      tags:
+      - Recurring
   /cashflow/transactions:
     get:
       consumes:
