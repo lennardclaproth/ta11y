@@ -329,6 +329,12 @@
 		}
 	}
 
+	// A period change already resets the offset and rewrites the URL (the effect above), so the
+	// two paths below leave that to it and only push the query state themselves when they leave
+	// the period where it is -- otherwise their change to the Purpose filter never reaches the URL.
+	const periodMoves = (next: { from: string; to: string }) =>
+		next.from !== periodStore.from || next.to !== periodStore.to;
+
 	// The standing sends you to exactly the transactions that keep a month incomplete: the
 	// month as the period, and the Purpose filter on "not assigned". The period it replaces is
 	// remembered so "Show all transactions" puts it back.
@@ -343,23 +349,29 @@
 				preset: periodStore.preset
 			};
 		}
+		const moves = periodMoves(range);
 		periodStore.set({ from: range.from, to: range.to });
 		purposeFilter = ['none'];
 		scopedMonth = month.month;
 		selectedIds = [];
-		offset = 0;
-		syncUrl();
+		if (!moves) {
+			offset = 0;
+			syncUrl();
+		}
 	}
 
 	function clearScope() {
 		scopedMonth = null;
 		purposeFilter = [];
+		const moves = periodBeforeScope !== null && periodMoves(periodBeforeScope);
 		if (periodBeforeScope) {
 			periodStore.set(periodBeforeScope);
 			periodBeforeScope = null;
 		}
-		offset = 0;
-		syncUrl();
+		if (!moves) {
+			offset = 0;
+			syncUrl();
+		}
 	}
 
 	// Marking is reported honestly: income only sticks to incoming money and a contribution
