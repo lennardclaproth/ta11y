@@ -75,6 +75,13 @@
 	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 	/**
+	 * Whether this page is gone. The poll below outlives a click on "Back to Cashflow" at
+	 * the bottom of this very page, and would keep asking for up to two minutes — and
+	 * twice over if the review is opened again.
+	 */
+	let gone = false;
+
+	/**
 	 * Follows the import to the end. Processing is detached from the upload, so the page
 	 * fills in when the import reports it is done rather than claiming a figure it cannot
 	 * know yet.
@@ -84,17 +91,20 @@
 		error = null;
 		const deadline = Date.now() + POLL_TIMEOUT_MS;
 		try {
-			while (Date.now() < deadline) {
+			while (!gone && Date.now() < deadline) {
 				const current = await getImport(importId);
+				if (gone) return;
 				result = current;
 				if (current.status === 'completed' || current.status === 'failed') break;
 				await sleep(POLL_MS);
 			}
 		} catch {
+			if (gone) return;
 			error = 'This import could not be read. It may belong to another account.';
 		} finally {
-			loading = false;
+			if (!gone) loading = false;
 		}
+		if (gone) return;
 		if (result?.status === 'completed') await loadGroups();
 		else groupsLoading = false;
 	}
@@ -103,16 +113,22 @@
 		groupsLoading = true;
 		groupsError = null;
 		try {
-			groups = await getImportIgnored(importId);
+			const loaded = await getImportIgnored(importId);
+			if (gone) return;
+			groups = loaded;
 		} catch {
+			if (gone) return;
 			groupsError = 'What this import ignored could not be read.';
 		} finally {
-			groupsLoading = false;
+			if (!gone) groupsLoading = false;
 		}
 	}
 
 	onMount(() => {
 		void load();
+		return () => {
+			gone = true;
+		};
 	});
 
 	/** Replaces one group's rows in place, so a restore does not reload the whole page. */
