@@ -275,19 +275,28 @@
 		syncUrl();
 	});
 
+	// Marking, saving a goal, an import and the realtime refresh all reload the standing, so two
+	// calls can be in flight at once. As with `load`, only the newest may write: a slow first
+	// response landing last would put the standing from before the mutation back on screen.
+	let standingRequestId = 0;
+
 	// The standing scores whole calendar months, so it deliberately ignores the page's date
 	// range: narrowing the ledger to a week must not make a month look empty.
 	async function loadStanding() {
+		const id = ++standingRequestId;
 		standingLoading = true;
 		standingError = false;
 		try {
-			standing = await getWealthGoalStanding();
+			const result = await getWealthGoalStanding();
+			if (id !== standingRequestId) return;
+			standing = result;
 			if (standing.goal) goalPercent = standing.goal.share_percent;
 		} catch {
+			if (id !== standingRequestId) return;
 			standing = null;
 			standingError = true;
 		} finally {
-			standingLoading = false;
+			if (id === standingRequestId) standingLoading = false;
 		}
 	}
 
