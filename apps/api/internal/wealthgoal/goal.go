@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/date"
 )
 
 // Goal is the share of income an account wants to put towards wealth, from one month
@@ -33,15 +34,8 @@ func NewGoal(accountID uuid.UUID, sharePercent int, effectiveFrom time.Time) (*G
 		ID:            uuid.New(),
 		AccountID:     accountID,
 		SharePercent:  sharePercent,
-		EffectiveFrom: StartOfMonth(effectiveFrom),
+		EffectiveFrom: date.StartOfMonthUTC(effectiveFrom),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}, nil
-}
-
-// StartOfMonth is the first day of t's calendar month in UTC. A month in this feature is
-// always the calendar month of the transaction date -- there is no custom period.
-func StartOfMonth(t time.Time) time.Time {
-	utc := t.UTC()
-	return time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, time.UTC)
 }

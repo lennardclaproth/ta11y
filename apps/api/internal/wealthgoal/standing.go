@@ -3,6 +3,8 @@ package wealthgoal
 import (
 	"sort"
 	"time"
+
+	"github.com/lennardclaproth/ta11y/internal/date"
 )
 
 // MonthResult is how a calendar month ended up against the goal that applied in it.
@@ -57,7 +59,7 @@ type Standing struct {
 // force in it. Months are returned newest first; months without any transaction at all are
 // absent rather than scored as missed, because nothing happened in them to judge.
 func buildStanding(totals []MonthlyPurposeTotals, goals []*Goal, now time.Time) Standing {
-	currentMonth := StartOfMonth(now)
+	currentMonth := date.StartOfMonthUTC(now)
 	ordered := append([]*Goal(nil), goals...)
 	sort.Slice(ordered, func(i, j int) bool {
 		return ordered[i].EffectiveFrom.Before(ordered[j].EffectiveFrom)
@@ -65,7 +67,7 @@ func buildStanding(totals []MonthlyPurposeTotals, goals []*Goal, now time.Time) 
 
 	months := make([]MonthStanding, 0, len(totals))
 	for _, total := range totals {
-		month := StartOfMonth(total.Month)
+		month := date.StartOfMonthUTC(total.Month)
 		if month.After(currentMonth) {
 			// A month that has not started yet is not part of the standing. An import can
 			// carry a date in the future, and scoring it would put a second in_progress

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/date"
 )
 
 const (
@@ -42,7 +43,7 @@ func (q *Queries) CurrentGoal(ctx context.Context, accountID uuid.UUID) (*Goal, 
 	if err != nil {
 		return nil, fmt.Errorf("current monthly goal: %w", err)
 	}
-	return goalAt(goals, StartOfMonth(time.Now())), nil
+	return goalAt(goals, date.StartOfMonthUTC(time.Now())), nil
 }
 
 // Standing scores the last `months` calendar months against the goal that applied in each,
@@ -60,7 +61,7 @@ func (q *Queries) Standing(ctx context.Context, accountID uuid.UUID, months int)
 		return nil, fmt.Errorf("monthly standing: %w", err)
 	}
 
-	from := StartOfMonth(time.Now()).AddDate(0, -(months - 1), 0)
+	from := date.StartOfMonthUTC(time.Now()).AddDate(0, -(months - 1), 0)
 	totals, err := q.qs.MonthlyPurposeTotals(ctx, accountID, from)
 	if err != nil {
 		return nil, fmt.Errorf("monthly standing: %w", err)
