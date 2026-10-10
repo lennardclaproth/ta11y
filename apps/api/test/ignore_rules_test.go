@@ -72,6 +72,28 @@ func seedRuleTransaction(
 	return tx.ID
 }
 
+// seedRuleTransactionFrom stores one outgoing transaction imported from a named bank.
+func seedRuleTransactionFrom(t *testing.T, db *storage.DB, accountID uuid.UUID, description, source string) uuid.UUID {
+	t.Helper()
+
+	tx := &cashflow.Transaction{
+		ID:          uuid.New(),
+		AccountID:   accountID,
+		Description: description,
+		Source:      source,
+		Direction:   cashflow.CashOut,
+		AmountCents: money.Price(1000),
+		Date:        time.Now().UTC(),
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+		Checksum:    uuid.NewString(),
+	}
+	if _, err := storage.NewSQLXCashflowStore(db).CreateTransactions(t.Context(), []*cashflow.Transaction{tx}); err != nil {
+		t.Fatalf("create transaction: %v", err)
+	}
+	return tx.ID
+}
+
 // seedImport stores the vendor and import row transactions can be attributed to.
 func seedImport(t *testing.T, db *storage.DB, accountID uuid.UUID, name string) uuid.UUID {
 	t.Helper()
@@ -331,6 +353,40 @@ func TestApplyIgnoreRuleScopedToAnImportLeavesTheRestAlone(t *testing.T) {
 		}
 		if tx := fetchTransaction(t, db, accountID, older); tx.Ignored {
 			t.Fatal("a row from outside the import was ignored")
+		}
+	})
+}
+
+// The bank is chosen from a list of names, not typed, so narrowing to one bank means
+// that bank. A substring match could only ever catch more than was chosen, and the rows
+// of the other bank would leave the monthly totals with nobody looking at them.
+func TestARuleScopedToOneBankLeavesOtherBanksAlone(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		accountID := seedCashflowAccount(t, db, "mine@example.com")
+		draft, err := cashflow.NewIgnoreRuleDraft("Credit card payment", "description", "Credit card", "out", "ING", true)
+		if err != nil {
+			t.Fatalf("new ignore rule draft: %v", err)
+		}
+		rule := cashflow.NewIgnoreRule(accountID, draft)
+		if err := storage.NewSQLXCashflowIgnoreRuleStore(db).CreateIgnoreRule(t.Context(), rule); err != nil {
+			t.Fatalf("create ignore rule: %v", err)
+		}
+
+		chosen := seedRuleTransactionFrom(t, db, accountID, "Credit card payment", "ING")
+		other := seedRuleTransactionFrom(t, db, accountID, "Credit card payment", "INGENIOUS BANK")
+
+		ignored, err := storage.NewSQLXCashflowIgnoreRuleStore(db).ApplyIgnoreRule(t.Context(), rule, nil)
+		if err != nil {
+			t.Fatalf("apply ignore rule: %v", err)
+		}
+		if ignored != 1 {
+			t.Fatalf("ignored = %d, want only the chosen bank's row", ignored)
+		}
+		if tx := fetchTransaction(t, db, accountID, chosen); !tx.Ignored {
+			t.Fatal("the chosen bank's row was not ignored")
+		}
+		if tx := fetchTransaction(t, db, accountID, other); tx.Ignored {
+			t.Fatal("a row from a bank whose name merely contains the chosen one was ignored")
 		}
 	})
 }

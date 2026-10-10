@@ -13,6 +13,10 @@ type TransactionFilters struct {
 	Description string
 	Note        string
 	Source      string
+	// SourceExact narrows to one bank by name rather than by text it contains. It is
+	// what a chosen scope means: a substring match could only ever catch more than was
+	// chosen, and silently.
+	SourceExact string
 
 	Direction   *CashFlowDirection
 	Tags        []string

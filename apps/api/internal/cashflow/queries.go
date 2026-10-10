@@ -110,6 +110,8 @@ type TransactionListQuery struct {
 	Description string
 	Note        string
 	Source      string
+	// SourceExact narrows to one bank by name rather than by text it contains.
+	SourceExact string
 	Direction   *CashFlowDirection
 	Tags        []string
 	Untagged    bool

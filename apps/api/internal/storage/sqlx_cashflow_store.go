@@ -350,6 +350,7 @@ type cashflowQuery struct {
 	Description     string
 	Note            string
 	Source          string
+	SourceExact     string
 	Direction       string
 	Tags            []string
 	Untagged        bool
@@ -375,6 +376,7 @@ func cashflowQueryFromList(query cashflow.TransactionListQuery) cashflowQuery {
 		Description:     query.Description,
 		Note:            query.Note,
 		Source:          query.Source,
+		SourceExact:     query.SourceExact,
 		Direction:       direction,
 		Tags:            query.Tags,
 		Untagged:        query.Untagged,
@@ -393,6 +395,7 @@ func cashflowQueryFromFilters(filters cashflow.TransactionFilters) cashflowQuery
 		Description:     filters.Description,
 		Note:            filters.Note,
 		Source:          filters.Source,
+		SourceExact:     filters.SourceExact,
 		Tags:            filters.Tags,
 		ImportID:        filters.ImportID,
 		IgnoredByRuleID: filters.IgnoredByRuleID,
@@ -436,6 +439,13 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 	appendContains("description", query.Description)
 	appendContains("note", query.Note)
 	appendContains("source", query.Source)
+
+	// A chosen bank is the whole name, not text inside it: an ignore rule scoped to one
+	// bank must not reach a second one whose name happens to contain the first.
+	if source := strings.TrimSpace(query.SourceExact); source != "" {
+		conditions = append(conditions, "LOWER(source) = ?")
+		args = append(args, strings.ToLower(source))
+	}
 
 	if direction := strings.TrimSpace(strings.ToLower(query.Direction)); direction != "" {
 		conditions = append(conditions, "LOWER(direction) = ?")

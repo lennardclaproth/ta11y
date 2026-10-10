@@ -136,12 +136,13 @@ func (r *IgnoreRule) Apply(draft IgnoreRuleDraft) {
 
 // Filters returns the transaction filters that select what a draft matches, scoped to
 // one account. The rule reuses the ledger's own filters, so what it catches is
-// previewed with the query the ledger itself runs.
+// previewed with the query the ledger itself runs. The bank is the exception: it is
+// chosen from a list of names rather than typed, so it matches the whole name.
 func (d IgnoreRuleDraft) Filters(accountID uuid.UUID) TransactionFilters {
 	filters := TransactionFilters{
-		AccountID: accountID,
-		Direction: d.Direction,
-		Source:    d.Source,
+		AccountID:   accountID,
+		Direction:   d.Direction,
+		SourceExact: d.Source,
 	}
 	switch d.MatchField {
 	case MatchFieldNote:

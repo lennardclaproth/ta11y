@@ -189,8 +189,11 @@ that caused it; an unknown rule → 404; store errors → 500.
 
 - **What a rule matches.** `IgnoreRuleDraft.Filters` produces a `cashflow.TransactionFilters`
   with the text on `description` *or* `note` (never both), the direction, and the source.
-  The ledger's own case-insensitive `LIKE %v%` does the matching, so preview, apply and
-  import can never disagree about what a rule catches.
+  The ledger's own case-insensitive `LIKE %v%` does the text matching, so preview, apply and
+  import can never disagree about what a rule catches. The bank is the exception: it is
+  chosen from a list of names rather than typed, so it narrows on `SourceExact`
+  (`LOWER(source) = ?`) and a rule scoped to one bank cannot reach another whose name
+  contains it.
 - **What a rule may touch.** `ignored = false AND ignore_overridden = false`, within the
   account, plus `import_id = ?` when scoped to an import. `CountIgnoreRuleTargets` counts
   exactly that set, which is the number the confirmation before "apply to existing" names.
@@ -234,8 +237,7 @@ cashflow import processor, before the import is marked completed, so the existin
   bank and in the note at another needs two rules.
 - **The bank scope is the import source, not an account.** A cashflow transaction has no
   account of its own — only the vendor it was imported from — so `source` is what a rule
-  can honestly narrow on. The source filter is the ledger's `LIKE %v%`, so a rule scoped to
-  a bank matches any source containing that text.
+  can honestly narrow on.
 - **No bulk apply.** Applying runs one rule at a time, synchronously; there is no "apply
   all rules to the ledger" and no async path for a very large match set.
 - **Nothing is suggested.** Rules are written by hand. The Cashflow page prefills a draft

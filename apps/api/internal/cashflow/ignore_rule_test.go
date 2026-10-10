@@ -114,6 +114,12 @@ func TestIgnoreRuleFiltersMatchTheChosenField(t *testing.T) {
 	if byDescription.AccountID != accID {
 		t.Fatalf("expected the account scope to be carried, got %s", byDescription.AccountID)
 	}
+	// The bank is chosen from a list of names, so it narrows on the whole name. Reusing
+	// the ledger's free-text source filter would let a rule scoped to one bank reach a
+	// second one whose name contains the first.
+	if byDescription.SourceExact != "ING" || byDescription.Source != "" {
+		t.Fatalf("expected the bank to narrow exactly, got source=%q exact=%q", byDescription.Source, byDescription.SourceExact)
+	}
 
 	note, err := NewIgnoreRuleDraft("Own transfer", "note", "Own account", "", "", true)
 	if err != nil {

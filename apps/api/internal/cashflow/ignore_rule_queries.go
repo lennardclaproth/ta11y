@@ -90,7 +90,7 @@ func (q *Queries) PreviewIgnoreRule(ctx context.Context, accountID uuid.UUID, dr
 		Sort:        sorting.Sort{Field: TransactionSortFieldDate, Direction: sorting.DESC},
 		Description: filters.Description,
 		Note:        filters.Note,
-		Source:      filters.Source,
+		SourceExact: filters.SourceExact,
 		Direction:   filters.Direction,
 	})
 	if err != nil {
