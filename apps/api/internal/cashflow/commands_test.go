@@ -49,6 +49,12 @@ func (s *dateStore) UpdateIgnoredByIDs(_ context.Context, _ uuid.UUID, _ []uuid.
 func (s *dateStore) UpdateIgnoredByFilter(_ context.Context, _ TransactionFilters, _ bool) (int, error) {
 	return 0, nil
 }
+func (s *dateStore) UpdatePurposeByIDs(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ Purpose) (int, error) {
+	return 0, nil
+}
+func (s *dateStore) UpdatePurposeByFilter(_ context.Context, _ TransactionFilters, _ Purpose) (int, error) {
+	return 0, nil
+}
 func (s *dateStore) GetMonthlyAnalytics(_ context.Context, _ AnalyticsFilter) ([]MonthlyAnalyticsPoint, error) {
 	return nil, nil
 }

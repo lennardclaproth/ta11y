@@ -1,4 +1,5 @@
 import type { PaginatedResponse } from './common';
+import type { TransactionPurpose } from './wealthgoal';
 
 /** Cashflow direction. */
 export type CashflowDirection = 'in' | 'out';
@@ -18,6 +19,8 @@ export interface CashflowTransaction {
 	date: string;
 	tag: string;
 	ignored: boolean;
+	/** What it counts as towards the monthly wealth goal [034]; `''` is "not assigned". */
+	purpose: TransactionPurpose;
 }
 
 /** `GET /cashflow/transactions` — mirrors `cashflow.GetTransactionsResponse`. */
@@ -103,6 +106,8 @@ export interface CashflowTransactionFilters {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Comma-separated goal purposes: `income`, `wealth`, `none`. */
+	purpose?: string;
 	from?: string;
 	to?: string;
 }
@@ -159,6 +164,8 @@ export interface CashflowTransactionsQuery {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Comma-separated goal purposes: `income`, `wealth`, `none`. */
+	purpose?: string;
 	from?: string;
 	to?: string;
 }

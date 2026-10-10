@@ -70,7 +70,8 @@
 			direction: 'out',
 			date: transaction.date,
 			tag: '',
-			ignored: false
+			ignored: false,
+			purpose: ''
 		});
 	}
 </script>

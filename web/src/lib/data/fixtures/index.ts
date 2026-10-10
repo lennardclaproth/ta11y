@@ -5,3 +5,4 @@ export * from './recurring';
 export * from './portfolio';
 export * from './assets';
 export * from './marketdata';
+export * from './wealthgoal';

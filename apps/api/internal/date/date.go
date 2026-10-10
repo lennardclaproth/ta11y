@@ -10,6 +10,12 @@ func StartOfDayUTC(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
+// StartOfMonthUTC is the first day of t's calendar month in UTC.
+func StartOfMonthUTC(t time.Time) time.Time {
+	t = t.UTC()
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+}
+
 func EndOfDayUTC(t time.Time) time.Time {
 	d := StartOfDayUTC(t)
 	return d.AddDate(0, 0, 1).Add(-time.Nanosecond)

@@ -28,6 +28,7 @@ const (
 	SchemaImports    = "import"
 	SchemaMarketData = "marketdata"
 	SchemaAssets     = "assets"
+	SchemaWealthGoal = "wealthgoal"
 )
 
 const (
@@ -50,6 +51,7 @@ const (
 	TableAssetItems      = "items"
 	TableAssetMutations  = "mutations"
 	TableAssetSnapshot   = "snapshots"
+	TableWealthGoals     = "goals"
 
 	TableRecurringItems      = "recurring_items"
 	TableRecurringLinks      = "recurring_links"

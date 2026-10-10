@@ -268,6 +268,11 @@ definitions:
         type: boolean
       note:
         type: string
+      purpose:
+        description: |-
+          Purpose is what the transaction counts as towards the monthly wealth goal:
+          "income", "wealth", or "" when nobody has pointed at it yet.
+        type: string
       source:
         type: string
       tag:
@@ -321,6 +326,31 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  cashflow.MarkPurposeByFilterRequest:
+    properties:
+      filters:
+        $ref: '#/definitions/transport_http_handlers_cashflow.TransactionFilters'
+      purpose:
+        type: string
+    type: object
+  cashflow.MarkPurposeBySelectionRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+      purpose:
+        type: string
+    type: object
+  cashflow.MarkPurposeResponse:
+    properties:
+      matched_count:
+        type: integer
+      status:
+        type: string
+      updated_count:
+        type: integer
     type: object
   cashflow.MonthlyAnalyticsPointResponse:
     properties:
@@ -1087,6 +1117,10 @@ definitions:
         type: boolean
       note:
         type: string
+      purpose:
+        description: 'Purpose is a comma-separated goal purpose filter: income, wealth,
+          none.'
+        type: string
       q:
         type: string
       source:
@@ -1097,6 +1131,16 @@ definitions:
         type: string
       untagged:
         type: boolean
+    type: object
+  transport_http_handlers_wealthgoal.Goal:
+    properties:
+      effective_from:
+        description: |-
+          EffectiveFrom is the first of the calendar month the goal started applying in,
+          as "YYYY-MM-DD".
+        type: string
+      share_percent:
+        type: integer
     type: object
   vendors.VendorResponse:
     properties:
@@ -1114,6 +1158,51 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  wealthgoal.GoalResponse:
+    properties:
+      goal:
+        $ref: '#/definitions/transport_http_handlers_wealthgoal.Goal'
+    type: object
+  wealthgoal.MonthStandingResponse:
+    properties:
+      contributed_cents:
+        type: integer
+      goal_percent:
+        description: GoalPercent is the goal in force in this month, not today's goal.
+        type: integer
+      income_cents:
+        description: IncomeCents and ContributedCents are 1e6-scaled, like every amount
+          in this API.
+        type: integer
+      month:
+        description: Month is the first of the calendar month, as "YYYY-MM-DD".
+        type: string
+      result:
+        description: Result is one of met, missed, in_progress, not_scored.
+        type: string
+      unassigned_count:
+        description: UnassignedCount is how many transactions in the month carry no
+          purpose yet.
+        type: integer
+    type: object
+  wealthgoal.SetGoalRequest:
+    properties:
+      share_percent:
+        type: integer
+    type: object
+  wealthgoal.StandingResponse:
+    properties:
+      best_streak:
+        type: integer
+      current_streak:
+        type: integer
+      goal:
+        $ref: '#/definitions/transport_http_handlers_wealthgoal.Goal'
+      months:
+        items:
+          $ref: '#/definitions/wealthgoal.MonthStandingResponse'
+        type: array
     type: object
 info:
   contact: {}
@@ -2225,6 +2314,10 @@ paths:
         in: query
         name: hide_ignored
         type: boolean
+      - description: 'Comma-separated goal purpose filter: income, wealth, none'
+        in: query
+        name: purpose
+        type: string
       - description: Start date (YYYY-MM-DD)
         in: query
         name: from
@@ -2421,6 +2514,78 @@ paths:
               type: string
             type: object
       summary: Create manual cashflow transactions
+      tags:
+      - Transactions
+  /cashflow/transactions/purpose/filter:
+    post:
+      consumes:
+      - application/json
+      description: Set purpose=income/wealth/none for all transactions matching the
+        supplied filter. Income only applies to incoming money and wealth only to
+        outgoing money.
+      parameters:
+      - description: Filter purpose request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.MarkPurposeByFilterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.MarkPurposeResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mark filtered cashflow transactions for the monthly goal
+      tags:
+      - Transactions
+  /cashflow/transactions/purpose/selection:
+    post:
+      consumes:
+      - application/json
+      description: Set purpose=income/wealth/none for selected transaction IDs. Income
+        only applies to incoming money and wealth only to outgoing money; rows of
+        the other direction are left unchanged.
+      parameters:
+      - description: Selection purpose request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.MarkPurposeBySelectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.MarkPurposeResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mark selected cashflow transactions for the monthly goal
       tags:
       - Transactions
   /cashflow/transactions/tag:
@@ -3563,6 +3728,93 @@ paths:
       summary: List vendors
       tags:
       - vendors
+  /wealth-goal:
+    get:
+      description: The share of income that should go towards wealth each month. `goal`
+        is null when none has been set.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/wealthgoal.GoalResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get the monthly wealth goal
+      tags:
+      - WealthGoal
+    put:
+      consumes:
+      - application/json
+      description: Sets the share of income that should go towards wealth each month.
+        The new goal applies from the current calendar month; months already scored
+        keep the goal they were judged by.
+      parameters:
+      - description: Monthly goal
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/wealthgoal.SetGoalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/wealthgoal.GoalResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Set the monthly wealth goal
+      tags:
+      - WealthGoal
+  /wealth-goal/standing:
+    get:
+      description: 'Per calendar month: what was marked as income, what went towards
+        wealth, the goal that applied, and whether the month was met. The running
+        month is never scored, and the streak counts only finished months.'
+      parameters:
+      - description: How many calendar months back to score (default 12, max 60)
+        in: query
+        name: months
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/wealthgoal.StandingResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get the monthly wealth-goal standing
+      tags:
+      - WealthGoal
   /ws/accounts/{account_id}:
     get:
       description: Opens an account-scoped websocket that emits data-changed notifications.

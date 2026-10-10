@@ -29,6 +29,8 @@ type CommandStore interface {
 	UpdateTagByFilter(ctx context.Context, filters TransactionFilters, tag string) (int, error)
 	UpdateIgnoredByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, ignored bool) (int, error)
 	UpdateIgnoredByFilter(ctx context.Context, filters TransactionFilters, ignored bool) (int, error)
+	UpdatePurposeByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, purpose Purpose) (int, error)
+	UpdatePurposeByFilter(ctx context.Context, filters TransactionFilters, purpose Purpose) (int, error)
 }
 
 const (
@@ -323,4 +325,37 @@ func (c *Commands) IgnoreByFilter(ctx context.Context, filters TransactionFilter
 		return 0, fmt.Errorf("cashflow ignore by filter: %w", err)
 	}
 	return updated, nil
+}
+
+// MarkPurposeResult reports what a purpose mutation did. Matched counts the rows the
+// caller pointed at, Updated only those the purpose could actually apply to: a selection
+// may hold both directions, and income only sticks to incoming money.
+type MarkPurposeResult struct {
+	Matched int
+	Updated int
+}
+
+// MarkPurposeByIDs sets what the selected transactions count as towards the monthly goal.
+// Rows whose direction does not allow the purpose are left alone, which the result reports.
+func (c *Commands) MarkPurposeByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, purpose Purpose) (MarkPurposeResult, error) {
+	updated, err := c.cs.UpdatePurposeByIDs(ctx, accountID, ids, purpose)
+	if err != nil {
+		return MarkPurposeResult{}, fmt.Errorf("cashflow mark purpose by ids: %w", err)
+	}
+	return MarkPurposeResult{Matched: len(ids), Updated: updated}, nil
+}
+
+// MarkPurposeByFilter sets what every transaction matching the filters counts as towards
+// the monthly goal. The account is authoritative over anything the filters carried in.
+func (c *Commands) MarkPurposeByFilter(ctx context.Context, accountID uuid.UUID, filters TransactionFilters, purpose Purpose) (MarkPurposeResult, error) {
+	filters.AccountID = accountID
+	matched, err := c.qs.CountByFilter(ctx, filters)
+	if err != nil {
+		return MarkPurposeResult{}, fmt.Errorf("cashflow mark purpose by filter count: %w", err)
+	}
+	updated, err := c.cs.UpdatePurposeByFilter(ctx, filters, purpose)
+	if err != nil {
+		return MarkPurposeResult{}, fmt.Errorf("cashflow mark purpose by filter: %w", err)
+	}
+	return MarkPurposeResult{Matched: matched, Updated: updated}, nil
 }
