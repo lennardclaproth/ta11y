@@ -60,7 +60,8 @@ type ImportFileWriter interface {
 	WriteCsv(r io.Reader) (string, error)
 }
 
-// FileRemover deletes a stored file, used to clean up after a rejected import.
+// FileRemover deletes a stored file. It cleans up after a rejected import, and again
+// once an import reaches a terminal state and nothing reads the upload any more.
 type FileRemover interface {
 	Remove(path string) error
 }

@@ -89,7 +89,7 @@ classDiagram
     CommandStore <|.. SQLXCashflowStore
     QueryStore <|.. SQLXCashflowStore
 
-    note for Transaction "Checksum = SHA-256 over description, note, source,\ndirection, amount, date, row_number, account_id"
+    note for Transaction "Checksum = SHA-256 over description, note, source,\ndirection, amount, date, dedup sequence, account_id"
     note for SQLXCashflowStore "bulk insert is ON CONFLICT(checksum) DO NOTHING"
 ```
 
@@ -208,10 +208,14 @@ rows updated).
 ## Processing rules
 
 - **Dedup.** `NewTransaction` computes a SHA-256 `checksum` over description, note, source,
-  direction, amount-cents, date (`YYYYMMDD`), `row_number`, and account ID. Bulk inserts use
-  `ON CONFLICT (checksum) DO NOTHING`; `Imported` = rows actually inserted, `Duplicates` =
-  the remainder. Because `row_number` is in the checksum, the same logical transaction on a
-  different CSV row counts as distinct.
+  direction, amount-cents, date (`YYYYMMDD`), a **dedup sequence**, and account ID. Bulk
+  inserts use `ON CONFLICT (checksum) DO NOTHING`; `Imported` = rows actually inserted,
+  `Duplicates` = the remainder. The sequence is how often identical content occurred inside
+  the same import file ([032]) — *not* the CSV row number, which moves when exports overlap —
+  so the same logical transaction on a different CSV row is recognised, while two identical
+  rows in one file stay two transactions. Manual entries carry no sequence and fall back to
+  their generated row number, so manual deduplication is unchanged. Rows imported before this
+  change keep their old checksums and are not converted.
 - **Manual create.** Capped at 100 rows (`ErrTransactionLimitExceeded`); `tag` is required;
   `source` = `manual` or `manual:<vendor>`; any duplicate in the batch yields a 409. The date
   must be today or earlier — a cashflow transaction records something that already happened.

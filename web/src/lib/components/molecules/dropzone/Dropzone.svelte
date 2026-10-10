@@ -2,6 +2,8 @@
   import Icon from '$lib/components/atoms/icon/Icon.svelte';
 
   type Props = {
+    /** Identifies the file input, so an external `<label for>` can reach it. */
+    id?: string;
     /** Comma-separated accepted types, e.g. '.csv,.xml'. */
     accept?: string;
     multiple?: boolean;
@@ -15,6 +17,7 @@
   };
 
   let {
+    id,
     accept,
     multiple = false,
     disabled = false,
@@ -68,5 +71,5 @@
     <span class="text-xs text-slate-500">{hint}</span>
   {/if}
 
-  <input type="file" bind:files {accept} {multiple} {disabled} class="sr-only" {onchange} />
+  <input type="file" {id} bind:files {accept} {multiple} {disabled} class="sr-only" {onchange} />
 </label>

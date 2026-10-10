@@ -1,6 +1,7 @@
 package parsers
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -39,6 +40,40 @@ func TestDegiroParser_ParseAll_HappyPath(t *testing.T) {
 	if got[1].Type != portfolio.TxFee {
 		t.Fatalf("expected second row to be FEE, got %s", got[1].Type)
 	}
+}
+
+func TestDegiroParser_ParseAll_WrongHeadersAreRecognisableAsSuch(t *testing.T) {
+	// The importer classifies on this sentinel: it is what separates "that is not the
+	// DEGIRO export" from a read failure the user should simply retry.
+	cases := map[string]string{
+		"other export": "Date,Name / Description,Amount (EUR)\n01-09-2026,Groceries,\"-12,00\"\n",
+		"empty file":   "",
+	}
+
+	for name, input := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewDegiroParser().ParseAll(io.NopCloser(strings.NewReader(input)))
+			if !errors.Is(err, ErrMissingHeader) {
+				t.Fatalf("expected ErrMissingHeader, got %v", err)
+			}
+		})
+	}
+}
+
+func TestDegiroParser_ParseAll_ReadErrorIsNotAHeaderMismatch(t *testing.T) {
+	_, err := NewDegiroParser().ParseAll(io.NopCloser(failingReader{}))
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	if errors.Is(err, ErrMissingHeader) {
+		t.Fatalf("expected a read failure not to be reported as the wrong file, got %v", err)
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, errors.New("disk is having a day")
 }
 
 func TestCreateCsvParser_Degiro(t *testing.T) {

@@ -351,7 +351,8 @@ type CreateManyResult struct {
 
 // CreateMany builds a batch of imported portfolio transactions and persists them with a
 // single bulk insert, skipping and counting rows that already exist. Each TransactionData
-// must carry its source row number for deduplication.
+// carries its source row number, which orders rows that share a day, and its DedupSeq,
+// which is what deduplication keys on.
 func (c *Commands) CreateMany(ctx context.Context, importID uuid.UUID, accountID *uuid.UUID, rows []TransactionData) (CreateManyResult, error) {
 	if len(rows) == 0 {
 		return CreateManyResult{}, nil

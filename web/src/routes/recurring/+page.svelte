@@ -262,19 +262,10 @@
 
 <AppShellTemplate>
 	{#snippet top()}
-		<TopNavbar
-			title="Recurring"
-			showSearch
-			searchValue={search}
-			searchPlaceholder="Search name…"
-			onSearch={(q) => {
-				search = q;
-				syncUrl();
-			}}
-		/>
+		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate>
+	<PageContentTemplate title="Recurring">
 		{#snippet analytics()}
 			{#if error}
 				<!-- No totals rather than a zero that would be a lie: the amounts are unknown, not nil. -->
@@ -350,26 +341,41 @@
 			{/if}
 		{/snippet}
 
+		<!-- Everything that acts on these rows lives here: the groups, searching them and
+		     reviewing what ta11y proposes. -->
 		<LedgerToolbar
 			title="Recurring items"
-			actionLabel={known && suggestions.length > 0
-				? `Review suggestions (${suggestions.length})`
-				: undefined}
-			actionIcon="heroicons:light-bulb"
-			onAdd={() => (suggestionsOpen = true)}
+			showSearch
+			searchValue={search}
+			searchPlaceholder="Search name…"
+			searchAriaLabel="Search recurring items by name"
+			onSearch={(q) => {
+				search = q;
+				syncUrl();
+			}}
 		>
-			<Tabs
-				tabs={groups}
-				bind:value={
-					() => group,
-					(next) => {
-						group = next as 'expenses' | 'income' | 'ended';
-						syncUrl();
+			{#snippet before()}
+				<Tabs
+					tabs={groups}
+					bind:value={
+						() => group,
+						(next) => {
+							group = next as 'expenses' | 'income' | 'ended';
+							syncUrl();
+						}
 					}
-				}
-				size="sm"
-				ariaLabel="Recurring item groups"
-			/>
+					size="sm"
+					ariaLabel="Recurring item groups"
+				/>
+			{/snippet}
+			{#snippet actions()}
+				{#if known && suggestions.length > 0}
+					<Button variant="ruled" onclick={() => (suggestionsOpen = true)}>
+						<Icon icon="heroicons:light-bulb" />
+						Review suggestions ({suggestions.length})
+					</Button>
+				{/if}
+			{/snippet}
 		</LedgerToolbar>
 
 		<!-- Named, so the strip says what the button would open. It stays out of a search
