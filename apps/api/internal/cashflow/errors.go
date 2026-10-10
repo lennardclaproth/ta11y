@@ -16,6 +16,17 @@ var (
 	ErrManualCashflowTagRequired         = fmt.Errorf("tag is required")
 )
 
+// Ignore rule Errors
+var (
+	ErrIgnoreRuleNameRequired      = fmt.Errorf("name is required")
+	ErrIgnoreRuleNameTooLong       = fmt.Errorf("name must be at most 120 characters")
+	ErrIgnoreRuleInvalidMatchField = fmt.Errorf("match_field must be either description or note")
+	ErrIgnoreRuleInvalidDirection  = fmt.Errorf("direction must be empty, in, or out")
+	ErrIgnoreRuleContainsTooShort  = fmt.Errorf("contains must be at least 3 characters")
+	ErrIgnoreRuleContainsTooLong   = fmt.Errorf("contains must be at most 255 characters")
+	ErrIgnoreRuleNotFound          = fmt.Errorf("ignore rule not found")
+)
+
 // Account Errors
 var (
 	ErrAccountNotFound = fmt.Errorf("account not found")

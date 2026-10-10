@@ -33,6 +33,7 @@ const (
 const (
 	TableVendors         = "vendors"
 	TableTransactions    = "transactions"
+	TableIgnoreRules     = "ignore_rules"
 	TableImports         = "imports"
 	TableListings        = "listings"
 	TableEOD             = "eods"

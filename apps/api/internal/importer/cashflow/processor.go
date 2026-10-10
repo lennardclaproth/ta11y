@@ -94,9 +94,27 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 	if err != nil {
 		return importer.ProcessResult{TotalRows: len(data), Failed: len(data)}, fmt.Errorf("import cashflow: %w", err)
 	}
+
+	// Rules run over the rows this import inserted, never over the ledger as a whole:
+	// a duplicate keeps the import it first arrived with, so re-importing the same
+	// statement offers them nothing to catch.
+	autoIgnored, err := p.commands.ApplyIgnoreRulesToImport(ctx, accountID, imp.ID)
+	if err != nil {
+		// The rows are already in the ledger, and nothing was ignored, so the counters
+		// travel with the failure: the import reports what it inserted and says the
+		// rules did not run, rather than leaving the person to guess which rows are
+		// unreviewed. Applying the rules to the ledger afterwards is the way back.
+		return importer.ProcessResult{
+			TotalRows:  len(data),
+			Imported:   result.Imported,
+			Duplicates: result.Duplicates,
+		}, fmt.Errorf("import cashflow: apply ignore rules: %w", err)
+	}
+
 	return importer.ProcessResult{
-		TotalRows:  len(data),
-		Imported:   result.Imported,
-		Duplicates: result.Duplicates,
+		TotalRows:   len(data),
+		Imported:    result.Imported,
+		Duplicates:  result.Duplicates,
+		AutoIgnored: autoIgnored,
 	}, nil
 }

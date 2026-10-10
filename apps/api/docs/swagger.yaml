@@ -190,6 +190,13 @@ definitions:
           type: string
         type: array
     type: object
+  cashflow.ApplyIgnoreRuleResponse:
+    properties:
+      ignored_count:
+        type: integer
+      status:
+        type: string
+    type: object
   cashflow.CashflowMonthlyAnalyticsResponse:
     properties:
       data:
@@ -240,8 +247,22 @@ definitions:
         type: string
       id:
         type: string
+      ignore_overridden:
+        description: |-
+          IgnoreOverridden says the ignored state was decided by hand, so no rule will
+          change it again.
+        type: boolean
       ignored:
         type: boolean
+      ignored_by_rule_id:
+        description: |-
+          IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's
+          rule did. The rule's name is resolved from the account's rules, not repeated here.
+        type: string
+      import_id:
+        description: ImportID names the import the row arrived with, null for a manual
+          entry.
+        type: string
       note:
         type: string
       source:
@@ -254,6 +275,72 @@ definitions:
       transactions:
         items:
           $ref: '#/definitions/cashflow.CreateManualCashflowTransactionRequest'
+        type: array
+    type: object
+  cashflow.IgnoreRulePreviewResponse:
+    properties:
+      matching:
+        type: integer
+      not_yet_ignored:
+        type: integer
+      sample:
+        items:
+          $ref: '#/definitions/cashflow.CreateTransactionResponse'
+        type: array
+      scanned:
+        type: integer
+    type: object
+  cashflow.IgnoreRuleRequest:
+    properties:
+      contains:
+        type: string
+      direction:
+        description: Direction is empty for a rule that matches both directions.
+        type: string
+      enabled:
+        description: 'Enabled defaults to true when omitted: a rule is written to
+          be used.'
+        type: boolean
+      match_field:
+        type: string
+      name:
+        type: string
+      source:
+        description: Source is the bank the rule is limited to, empty for every bank.
+        type: string
+    type: object
+  cashflow.IgnoreRuleResponse:
+    properties:
+      contains:
+        type: string
+      created_at:
+        type: string
+      direction:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      ignored_total:
+        description: IgnoredTotal is how many transactions this rule has ignored since
+          it was made.
+        type: integer
+      last_applied_at:
+        type: string
+      match_field:
+        type: string
+      name:
+        type: string
+      source:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  cashflow.IgnoreRulesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.IgnoreRuleResponse'
         type: array
     type: object
   cashflow.IgnoreTransactionsByFilterRequest:
@@ -278,6 +365,24 @@ definitions:
         type: string
       updated_count:
         type: integer
+    type: object
+  cashflow.IgnoredRuleGroupResponse:
+    properties:
+      rule:
+        $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+      total:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/cashflow.CreateTransactionResponse'
+        type: array
+    type: object
+  cashflow.ImportIgnoredResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.IgnoredRuleGroupResponse'
+        type: array
     type: object
   cashflow.MonthlyAnalyticsPointResponse:
     properties:
@@ -633,6 +738,11 @@ definitions:
     type: object
   importer.ImportResultResponse:
     properties:
+      auto_ignored:
+        description: |-
+          AutoIgnored is how many of the imported rows an ignore rule recognised. They
+          are counted in Imported too: they were imported, and then ignored.
+        type: integer
       created_at:
         type: string
       duplicates:
@@ -895,6 +1005,14 @@ definitions:
         type: string
       hide_ignored:
         type: boolean
+      ignored_by_rule:
+        type: string
+      import_id:
+        description: |-
+          ImportID narrows to the rows one import brought in, ImportedByRule to the rows
+          one ignore rule ignored. Together they are what "restore everything this rule
+          caught in this import" asks for.
+        type: string
       note:
         type: string
       q:
@@ -1557,6 +1675,248 @@ paths:
       summary: Get cashflow tag distribution
       tags:
       - Transactions
+  /cashflow/ignore-rules:
+    get:
+      description: Returns every ignore rule of the signed-in account, newest first.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRulesResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List cashflow ignore rules
+      tags:
+      - Ignore rules
+    post:
+      consumes:
+      - application/json
+      description: Stores a rule that ignores matching transactions on arrival. It
+        takes effect on what is imported from then on; applying it to transactions
+        already in the ledger is a separate action.
+      parameters:
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/{rule_id}:
+    delete:
+      description: 'Removes a rule. Nothing it ignored is restored: those transactions
+        stay as they are and are put back one by one, like any other ignored row.'
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a cashflow ignore rule
+      tags:
+      - Ignore rules
+    put:
+      consumes:
+      - application/json
+      description: Rewrites what a rule matches on, or switches it off. Transactions
+        it already ignored keep their state — the edit says what the rule catches
+        from now on.
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/{rule_id}/apply:
+    post:
+      description: Ignores the transactions already in the ledger that the rule matches,
+        skipping rows that are ignored already and rows whose ignored state was decided
+        by hand.
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.ApplyIgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply a cashflow ignore rule to existing transactions
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/preview:
+    post:
+      consumes:
+      - application/json
+      description: Reports how many transactions a rule matches, how many applying
+        it would ignore, and a sample of the most recent matches.
+      parameters:
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRulePreviewResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preview a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/imports/{import_id}/ignored:
+    get:
+      description: Returns the transactions one import ignored automatically, grouped
+        under the rule that caught them, so a rule can be judged on its own harvest.
+      parameters:
+      - description: Import UUID
+        in: path
+        name: import_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.ImportIgnoredResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: What an import ignored, grouped by rule
+      tags:
+      - Ignore rules
   /cashflow/transactions:
     get:
       consumes:

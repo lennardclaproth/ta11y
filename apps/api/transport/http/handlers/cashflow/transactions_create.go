@@ -70,6 +70,42 @@ type CreateTransactionResponse struct {
 	Date        time.Time `json:"date"`
 	Tag         string    `json:"tag"`
 	Ignored     bool      `json:"ignored"`
+	// IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's
+	// rule did. The rule's name is resolved from the account's rules, not repeated here.
+	IgnoredByRuleID *uuid.UUID `json:"ignored_by_rule_id"`
+	// IgnoreOverridden says the ignored state was decided by hand, so no rule will
+	// change it again.
+	IgnoreOverridden bool `json:"ignore_overridden"`
+	// ImportID names the import the row arrived with, null for a manual entry.
+	ImportID *uuid.UUID `json:"import_id"`
+}
+
+// toTransactionResponse maps one cashflow transaction into its API shape. Every
+// cashflow response that carries transactions goes through it, so the ledger, the
+// rule preview and the import review never drift apart.
+func toTransactionResponse(tx *cashflow.Transaction) CreateTransactionResponse {
+	return CreateTransactionResponse{
+		ID:               tx.ID,
+		Description:      tx.Description,
+		Note:             tx.Note,
+		Source:           tx.Source,
+		AmountCents:      int64(tx.AmountCents),
+		Direction:        string(tx.Direction),
+		Date:             tx.Date,
+		Tag:              tx.Tag,
+		Ignored:          tx.Ignored,
+		IgnoredByRuleID:  tx.IgnoredByRuleID,
+		IgnoreOverridden: tx.IgnoreOverridden,
+		ImportID:         tx.ImportID,
+	}
+}
+
+func toTransactionResponses(transactions []*cashflow.Transaction) []CreateTransactionResponse {
+	out := make([]CreateTransactionResponse, 0, len(transactions))
+	for _, tx := range transactions {
+		out = append(out, toTransactionResponse(tx))
+	}
+	return out
 }
 
 // TransactionsResponse returns the manual cashflow create result.
@@ -139,20 +175,7 @@ func CreateTransactions(
 			return
 		}
 
-		data := make([]CreateTransactionResponse, 0, len(result.Transactions))
-		for _, tx := range result.Transactions {
-			data = append(data, CreateTransactionResponse{
-				ID:          tx.ID,
-				Description: tx.Description,
-				Note:        tx.Note,
-				Source:      tx.Source,
-				AmountCents: int64(tx.AmountCents),
-				Direction:   string(tx.Direction),
-				Date:        tx.Date,
-				Tag:         tx.Tag,
-				Ignored:     tx.Ignored,
-			})
-		}
+		data := toTransactionResponses(result.Transactions)
 
 		_ = httpx.JSONEncode(w, http.StatusCreated, TransactionsResponse{
 			CreatedCount: len(data),

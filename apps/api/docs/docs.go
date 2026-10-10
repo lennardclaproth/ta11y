@@ -963,6 +963,359 @@ const docTemplate = `{
                 }
             }
         },
+        "/cashflow/ignore-rules": {
+            "get": {
+                "description": "Returns every ignore rule of the signed-in account, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "List cashflow ignore rules",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRulesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Stores a rule that ignores matching transactions on arrival. It takes effect on what is imported from then on; applying it to transactions already in the ledger is a separate action.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Create a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/preview": {
+            "post": {
+                "description": "Reports how many transactions a rule matches, how many applying it would ignore, and a sample of the most recent matches.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Preview a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRulePreviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/{rule_id}": {
+            "put": {
+                "description": "Rewrites what a rule matches on, or switches it off. Transactions it already ignored keep their state — the edit says what the rule catches from now on.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Update a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes a rule. Nothing it ignored is restored: those transactions stay as they are and are put back one by one, like any other ignored row.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Delete a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/{rule_id}/apply": {
+            "post": {
+                "description": "Ignores the transactions already in the ledger that the rule matches, skipping rows that are ignored already and rows whose ignored state was decided by hand.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Apply a cashflow ignore rule to existing transactions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ApplyIgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/imports/{import_id}/ignored": {
+            "get": {
+                "description": "Returns the transactions one import ignored automatically, grouped under the rule that caught them, so a rule can be judged on its own harvest.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "What an import ignored, grouped by rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Import UUID",
+                        "name": "import_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ImportIgnoredResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/cashflow/transactions": {
             "get": {
                 "description": "Filter cashflow transactions with explicit field filters and optional fuzzy search over description, note, and tag.",
@@ -3367,6 +3720,17 @@ const docTemplate = `{
                 }
             }
         },
+        "cashflow.ApplyIgnoreRuleResponse": {
+            "type": "object",
+            "properties": {
+                "ignored_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "cashflow.CashflowMonthlyAnalyticsResponse": {
             "type": "object",
             "properties": {
@@ -3444,8 +3808,20 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "ignore_overridden": {
+                    "description": "IgnoreOverridden says the ignored state was decided by hand, so no rule will\nchange it again.",
+                    "type": "boolean"
+                },
                 "ignored": {
                     "type": "boolean"
+                },
+                "ignored_by_rule_id": {
+                    "description": "IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's\nrule did. The rule's name is resolved from the account's rules, not repeated here.",
+                    "type": "string"
+                },
+                "import_id": {
+                    "description": "ImportID names the import the row arrived with, null for a manual entry.",
+                    "type": "string"
                 },
                 "note": {
                     "type": "string"
@@ -3465,6 +3841,102 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/cashflow.CreateManualCashflowTransactionRequest"
+                    }
+                }
+            }
+        },
+        "cashflow.IgnoreRulePreviewResponse": {
+            "type": "object",
+            "properties": {
+                "matching": {
+                    "type": "integer"
+                },
+                "not_yet_ignored": {
+                    "type": "integer"
+                },
+                "sample": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CreateTransactionResponse"
+                    }
+                },
+                "scanned": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cashflow.IgnoreRuleRequest": {
+            "type": "object",
+            "properties": {
+                "contains": {
+                    "type": "string"
+                },
+                "direction": {
+                    "description": "Direction is empty for a rule that matches both directions.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled defaults to true when omitted: a rule is written to be used.",
+                    "type": "boolean"
+                },
+                "match_field": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is the bank the rule is limited to, empty for every bank.",
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.IgnoreRuleResponse": {
+            "type": "object",
+            "properties": {
+                "contains": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "direction": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ignored_total": {
+                    "description": "IgnoredTotal is how many transactions this rule has ignored since it was made.",
+                    "type": "integer"
+                },
+                "last_applied_at": {
+                    "type": "string"
+                },
+                "match_field": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.IgnoreRulesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
                     }
                 }
             }
@@ -3502,6 +3974,34 @@ const docTemplate = `{
                 },
                 "updated_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "cashflow.IgnoredRuleGroupResponse": {
+            "type": "object",
+            "properties": {
+                "rule": {
+                    "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CreateTransactionResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.ImportIgnoredResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.IgnoredRuleGroupResponse"
+                    }
                 }
             }
         },
@@ -4020,6 +4520,10 @@ const docTemplate = `{
         "importer.ImportResultResponse": {
             "type": "object",
             "properties": {
+                "auto_ignored": {
+                    "description": "AutoIgnored is how many of the imported rows an ignore rule recognised. They\nare counted in Imported too: they were imported, and then ignored.",
+                    "type": "integer"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -4409,6 +4913,13 @@ const docTemplate = `{
                 },
                 "hide_ignored": {
                     "type": "boolean"
+                },
+                "ignored_by_rule": {
+                    "type": "string"
+                },
+                "import_id": {
+                    "description": "ImportID narrows to the rows one import brought in, ImportedByRule to the rows\none ignore rule ignored. Together they are what \"restore everything this rule\ncaught in this import\" asks for.",
+                    "type": "string"
                 },
                 "note": {
                     "type": "string"
