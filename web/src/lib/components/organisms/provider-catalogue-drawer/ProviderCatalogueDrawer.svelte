@@ -4,6 +4,7 @@
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
+	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -15,7 +16,6 @@
 		searchProviderCatalogue,
 		startCatalogueSync
 	} from '$lib/services/marketdata';
-	import { toast } from '$lib/stores/toast.svelte';
 	import type { AdoptOutcome } from './provider-catalogue-drawer.types';
 
 	type Props = {
@@ -59,7 +59,11 @@
 	const SYNC_POLL_MS = 2000;
 
 	let startingSync = $state(false);
-	let syncError = $state<string | null>(null);
+	/**
+	 * What this drawer has to report, in its own band. The drawer is an overlay above the notice
+	 * region under the masthead, so a toast sent from here would be drawn behind its own scrim.
+	 */
+	let notice = $state<{ intent: NoticeIntent; message: string } | null>(null);
 	/** The run this drawer is following, so its outcome is announced exactly once. */
 	let watchedRunId = $state<string | null>(null);
 
@@ -83,7 +87,7 @@
 		outcomes = [];
 		selectedIds = [];
 		clearProviderNotice();
-		syncError = null;
+		notice = null;
 		void loadStatus();
 	});
 
@@ -124,9 +128,15 @@
 		if (!run || run.id !== watchedRunId || run.status === 'running') return;
 		watchedRunId = null;
 		if (run.status === 'completed') {
-			toast.success(`Catalogue resynced — ${run.rows_upserted.toLocaleString()} entries cached`);
+			notice = {
+				intent: 'success',
+				message: `Catalogue resynced — ${run.rows_upserted.toLocaleString()} entries cached`
+			};
 		} else {
-			syncError = run.last_error ?? 'The catalogue sync failed. Try again.';
+			notice = {
+				intent: 'error',
+				message: run.last_error ?? 'The catalogue sync failed. Try again.'
+			};
 		}
 	}
 
@@ -136,7 +146,7 @@
 	 */
 	async function startSync() {
 		startingSync = true;
-		syncError = null;
+		notice = null;
 		try {
 			const run = await startCatalogueSync({ source, pages: SEED_PAGES });
 			watchedRunId = run.id;
@@ -148,7 +158,10 @@
 				await loadStatus();
 				watchedRunId = status?.latest_sync?.id ?? null;
 			} else {
-				syncError = 'Could not start the catalogue sync. Check your connection and try again.';
+				notice = {
+					intent: 'error',
+					message: 'Could not start the catalogue sync. Check your connection and try again.'
+				};
 			}
 		} finally {
 			startingSync = false;
@@ -224,6 +237,7 @@
 
 		adopting = true;
 		error = null;
+		notice = null;
 		const results: AdoptOutcome[] = [];
 		const created: Listing[] = [];
 
@@ -254,7 +268,15 @@
 		outcomes = results;
 		selectedIds = [];
 		adopting = false;
-		if (created.length > 0) onAdopted?.(created);
+		if (created.length > 0) {
+			// The drawer stays open after adopting, so the confirmation is stated in it. On the page
+			// behind it, it would be covered by this drawer's own scrim.
+			notice = {
+				intent: 'success',
+				message: `Added ${created.length} listing${created.length === 1 ? '' : 's'}`
+			};
+			onAdopted?.(created);
+		}
 		// Re-run the search so adopted rows come back marked as tracked.
 		await searchLocal(offset);
 	}
@@ -266,7 +288,6 @@
 		return { intent: 'neutral' as const, label: 'Available' };
 	}
 
-	const addedCount = $derived(outcomes.filter((outcome) => outcome.status === 'added').length);
 	const failedOutcomes = $derived(outcomes.filter((outcome) => outcome.status === 'failed'));
 	const existingCount = $derived(outcomes.filter((outcome) => outcome.status === 'exists').length);
 </script>
@@ -312,9 +333,9 @@
 					{syncRunning ? 'Syncing…' : `Resync catalogue (${SEED_PAGES} requests)`}
 				</Button>
 			</div>
-			{#if syncError}
-				<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">
-					{syncError}
+			{#if notice}
+				<NoticeBand intent={notice.intent} surface="inset" gutter="dialog" class="-mx-5">
+					{notice.message}
 				</NoticeBand>
 			{/if}
 		</div>
@@ -352,9 +373,8 @@
 				role="status"
 				class="space-y-1 rounded-lg border border-slate-200 bg-taupe-50 p-3 text-sm"
 			>
-				{#if addedCount > 0}
-					<p class="text-slate-800">Added {addedCount} listing{addedCount === 1 ? '' : 's'}.</p>
-				{/if}
+				<!-- The added count is stated once, in the band above; this box carries what the band
+				     does not say. -->
 				{#if existingCount > 0}
 					<p class="text-slate-600">
 						{existingCount} already existed and {existingCount === 1 ? 'was' : 'were'} left unchanged.

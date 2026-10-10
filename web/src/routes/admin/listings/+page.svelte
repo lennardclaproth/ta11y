@@ -263,8 +263,9 @@
 
 <ProviderCatalogueDrawer
 	bind:open={catalogueOpen}
-	onAdopted={(created) => {
-		toast.success(`Added ${created.length} listing${created.length === 1 ? '' : 's'}`);
+	onAdopted={() => {
+		// The drawer stays open and confirms the adoption in its own band; here only the list behind
+		// it has to catch up.
 		void load();
 	}}
 />
