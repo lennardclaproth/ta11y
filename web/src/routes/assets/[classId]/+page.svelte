@@ -26,8 +26,9 @@
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { getAssetClassDetails } from '$lib/services/assets';
+	import { getAssetClassDetails, getHolding } from '$lib/services/assets';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { decimalStringToNumber, formatQuantity } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
@@ -51,7 +52,13 @@
 	const holdings = $derived(details?.holdings ?? []);
 	const manual = $derived(details?.assets ?? []);
 	const itemCount = $derived(holdings.length + manual.length);
-	const selected = $derived(holdings.find((h) => h.id === selectedId) ?? holdings[0] ?? null);
+	const summary = $derived(holdings.find((h) => h.id === selectedId) ?? holdings[0] ?? null);
+
+	// The class payload carries every holding's figures but not its purchases — those are one
+	// item's detail, not a class's. The article reads from the summary until the detail lands,
+	// so the figures appear with the rest of the page and only the table fills in after.
+	let detail = $state<AssetHolding | null>(null);
+	const selected = $derived(detail?.id === summary?.id ? (detail ?? summary) : summary);
 	const unit = $derived(selected ? selected.symbol.split('/')[0] || selected.name : '');
 	const series = $derived(selected?.series ?? []);
 	const purchases = $derived(selected?.purchases ?? []);
@@ -140,6 +147,29 @@
 		void load();
 	});
 
+	// Fetch the selected item's purchases, both when the selection changes and when the class is
+	// reloaded — a purchase that was just saved is exactly what this table has to show.
+	$effect(() => {
+		const id = summary?.id;
+		if (!id) {
+			detail = null;
+			return;
+		}
+		void loadDetail(id);
+	});
+
+	async function loadDetail(assetId: string) {
+		try {
+			const loaded = await getHolding(assetId);
+			// A slow response for an item the user has already navigated away from is stale.
+			if (loaded.id === untrack(() => summary?.id)) detail = loaded;
+		} catch {
+			// The figures come from the class payload and are already on screen; only the
+			// purchase list is missing, and the table says so on its own.
+			detail = null;
+		}
+	}
+
 	function openItem(id: string) {
 		selectedId = id;
 		view = 'item';
@@ -160,7 +190,7 @@
 
 {#snippet valueCell(row: HoldingPurchase)}
 	<Money
-		amount={Number.parseFloat(row.quantity) * decimalStringToNumber(selected?.price ?? '0')}
+		amount={decimalStringToNumber(row.quantity) * decimalStringToNumber(selected?.price ?? '0')}
 		currency="EUR"
 		size="sm"
 	/>

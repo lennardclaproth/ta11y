@@ -331,6 +331,7 @@
 							id={ctx.id}
 							bind:value={manualWorth}
 							ariaDescribedby={ctx.describedby}
+							intent={ctx.invalid ? 'error' : 'default'}
 						/>
 					{/snippet}
 				</FormField>
@@ -376,12 +377,17 @@
 
 			<div class="grid gap-3 sm:grid-cols-3">
 				<FormField label="Date" id="add-date" error={fieldErrors.date}>
-					<DatePicker
-						bind:value={purchaseDate}
-						max={today}
-						portal={false}
-						ariaLabel="Purchase date"
-					/>
+					{#snippet children(ctx)}
+						<DatePicker
+							id={ctx.id}
+							bind:value={purchaseDate}
+							max={today}
+							portal={false}
+							ariaLabel="Purchase date"
+							ariaDescribedby={ctx.describedby}
+							invalid={ctx.invalid}
+						/>
+					{/snippet}
 				</FormField>
 				<FormField
 					label="Quantity"

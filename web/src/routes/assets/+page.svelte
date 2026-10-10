@@ -126,6 +126,10 @@
 		detailsLoading = true;
 		try {
 			details = await getAssetClassDetails(classId);
+		} catch {
+			// The item was saved; only the refresh failed, so say that rather than let the
+			// drawer silently keep showing the figures from before it.
+			toast.error('Saved, but the class could not be refreshed');
 		} finally {
 			detailsLoading = false;
 		}

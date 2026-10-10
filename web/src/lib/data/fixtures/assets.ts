@@ -42,10 +42,12 @@ export const assetClasses: AssetClass[] = [
 		name: 'Crypto',
 		source: 'manual',
 		archived: false,
-		current_worth: '2980.250000',
-		last_change_at: '2026-06-15T20:00:00Z',
-		growth_pct: -8.7,
-		updated_at: '2026-06-15T20:00:00Z'
+		// Matches the holdings and the manual item in assetClassDetails['cls-crypto'] below,
+		// so the class row and the class page cannot disagree about the same class.
+		current_worth: '22400.000000',
+		last_change_at: '2026-06-17T20:00:00Z',
+		growth_pct: 14.2,
+		updated_at: '2026-06-17T20:00:00Z'
 	},
 	{
 		id: 'cls-realestate',

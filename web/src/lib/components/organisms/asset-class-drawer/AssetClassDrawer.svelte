@@ -44,12 +44,17 @@
 	// Which daily-priced item has its performance open; only one at a time, so the drawer stays
 	// a list you scan rather than a wall of figures.
 	let expandedId = $state<string | null>(null);
+	let shownClassId = $state<string | null>(null);
 
 	// A different class is a different set of items, so a row left open on the previous one
-	// would be a stale reading.
+	// would be a stale reading. Reloading the same class is not a different class: an item
+	// expanded before adding a purchase to it must stay expanded afterwards.
 	$effect(() => {
-		void details?.class.id;
-		expandedId = null;
+		const classId = details?.class.id ?? null;
+		if (classId !== shownClassId) {
+			shownClassId = classId;
+			expandedId = null;
+		}
 	});
 </script>
 
