@@ -10,19 +10,30 @@
 
 	type Props = {
 		month: MonthStanding;
+		/**
+		 * One track for a whole list, so rows whose goals differ stay comparable with the eye.
+		 * Left out for a single bar, which scales to its own goal.
+		 */
+		track?: number;
 		size?: ProgressBarSize;
 		/** Hide the caption where the surrounding card already spells the numbers out. */
 		caption?: boolean;
 		class?: string;
 	};
 
-	let { month, size = 'lg', caption = true, class: className = '' }: Props = $props();
+	let {
+		month,
+		track: sharedTrack,
+		size = 'lg',
+		caption = true,
+		class: className = ''
+	}: Props = $props();
 
 	const share = $derived(sharePercent(month));
 	// The track grows with the goal, so the marker always sits inside it and a month that
 	// overshot still reads as overshot -- a fixed track would pin every goal above half of
 	// your income against the right edge, where missed and met look the same.
-	const track = $derived(goalProgressTrack(month.goal_percent));
+	const track = $derived(sharedTrack ?? goalProgressTrack(month.goal_percent));
 	const markerLeft = $derived(`left: ${(month.goal_percent / track) * 100}%`);
 </script>
 

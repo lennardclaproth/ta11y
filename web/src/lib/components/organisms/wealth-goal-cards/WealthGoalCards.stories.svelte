@@ -22,12 +22,13 @@
 		result: MonthStanding['result'],
 		income: number,
 		contributed: number,
-		unassigned = 0
+		unassigned = 0,
+		goalPercent = 30
 	): MonthStanding => ({
 		month: key,
 		income_cents: s(income),
 		contributed_cents: s(contributed),
-		goal_percent: 30,
+		goal_percent: goalPercent,
 		result,
 		unassigned_count: unassigned
 	});
@@ -58,6 +59,21 @@
 <Story name="Monthly standing">
 	<AnalyticsCard title="Monthly standing">
 		<MonthlyStandingCard months={finished} />
+	</AnalyticsCard>
+</Story>
+
+<!--
+	After adjusting the goal the list holds two goals at once. Both months put aside 30% of
+	their income, so both bars have to be the same length -- the track is shared, not per row.
+-->
+<Story name="Monthly standing, goal adjusted">
+	<AnalyticsCard title="Monthly standing">
+		<MonthlyStandingCard
+			months={[
+				month('2026-06-01', 'missed', 5000, 1500, 0, 70),
+				month('2026-05-01', 'met', 5000, 1500, 0, 30)
+			]}
+		/>
 	</AnalyticsCard>
 </Story>
 

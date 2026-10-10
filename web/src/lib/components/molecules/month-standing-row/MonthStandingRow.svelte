@@ -12,6 +12,8 @@
 
 	type Props = {
 		month: MonthStanding;
+		/** The track shared by every row of the list, so bars stay comparable when goals differ. */
+		track?: number;
 		/** The rule above the row; the first row in a list does not get one. */
 		divider?: boolean;
 		/** Jump to the transactions of this month that carry no purpose yet. */
@@ -19,7 +21,7 @@
 		class?: string;
 	};
 
-	let { month, divider = true, onOpenUnassigned, class: className = '' }: Props = $props();
+	let { month, track, divider = true, onOpenUnassigned, class: className = '' }: Props = $props();
 
 	const label = $derived(monthLabelShort(month.month));
 	const share = $derived(sharePercent(month));
@@ -46,7 +48,7 @@
 	<div class="hidden items-center gap-3 sm:flex">
 		<span class="w-[4.5rem] shrink-0 text-sm text-slate-700">{label}</span>
 		<div class="min-w-0 flex-1">
-			<GoalProgress {month} size="sm" caption={false} />
+			<GoalProgress {month} {track} size="sm" caption={false} />
 		</div>
 		<span class="w-10 shrink-0 text-right text-sm text-slate-700 tabular-nums">{share}%</span>
 		<span class="w-24 shrink-0 text-right">
@@ -74,7 +76,7 @@
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="min-w-0 flex-1">
-				<GoalProgress {month} size="sm" caption={false} />
+				<GoalProgress {month} {track} size="sm" caption={false} />
 			</div>
 			<span class="shrink-0 text-xs text-slate-500 tabular-nums">{share}%</span>
 			<span class="shrink-0"><Money amount={contributed} currency="EUR" size="sm" /></span>

@@ -4,6 +4,10 @@
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import MonthStandingRow from '$lib/components/molecules/month-standing-row/MonthStandingRow.svelte';
+	import {
+		goalProgressScale,
+		goalProgressTrack
+	} from '$lib/components/molecules/goal-progress/goal-progress.variants';
 	import type { MonthStanding } from '$lib/api/types';
 
 	type Props = {
@@ -18,6 +22,13 @@
 	let showAllOnPhone = $state(false);
 
 	const hidden = $derived(Math.max(0, months.length - compactLimit));
+
+	// Adjusting your goal leaves different goals in the same list. One track for every row --
+	// the longest any of them needs -- keeps two rows with the same share the same length;
+	// per-row tracks would make the smaller goal look like the bigger effort.
+	const track = $derived(
+		Math.max(goalProgressScale, ...months.map((m) => goalProgressTrack(m.goal_percent)))
+	);
 </script>
 
 {#if months.length === 0}
@@ -27,7 +38,7 @@
 {:else}
 	{#each months as month, index (month.month)}
 		<div class={index >= compactLimit && !showAllOnPhone ? 'hidden sm:block' : ''}>
-			<MonthStandingRow {month} divider={index > 0} {onOpenUnassigned} />
+			<MonthStandingRow {month} {track} divider={index > 0} {onOpenUnassigned} />
 		</div>
 	{/each}
 	{#if hidden > 0 && !showAllOnPhone}
