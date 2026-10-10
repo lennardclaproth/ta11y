@@ -1,7 +1,6 @@
 package cashflow
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -138,10 +137,6 @@ func MarkPurposeByFilter(log logging.Logger, commands *cashflow.Commands) http.H
 
 		result, err := commands.MarkPurposeByFilter(r.Context(), accountID, filters, purpose)
 		if err != nil {
-			if errors.Is(err, cashflow.ErrInvalidPurpose) {
-				_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"purpose": err.Error()})
-				return
-			}
 			log.Error(r.Context(), "cashflow mark purpose filter: failed to update transactions", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to mark filtered cashflow transactions"})
 			return
