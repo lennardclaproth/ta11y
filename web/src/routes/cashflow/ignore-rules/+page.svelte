@@ -101,6 +101,13 @@
 	});
 
 	let previewTimer: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * Which check the page is still waiting for. Debouncing keeps one request per settled
+	 * word, not one at a time: two can be in flight, and the slower, older one must not
+	 * drop its count over the newer draft's — that count names what "Apply to existing"
+	 * is about to ignore.
+	 */
+	let previewSeq = 0;
 
 	function toRequest(value: IgnoreRuleDraft): IgnoreRuleRequest {
 		return {
@@ -120,6 +127,9 @@
 	 */
 	function schedulePreview(value: IgnoreRuleDraft | null) {
 		if (previewTimer) clearTimeout(previewTimer);
+		// Every new draft retires the answers still on their way, including when there is
+		// nothing left worth checking.
+		previewSeq += 1;
 		if (!value || value.contains.trim().length < MIN_CONTAINS_LENGTH) {
 			preview = null;
 			previewError = null;
@@ -128,17 +138,22 @@
 		}
 		previewLoading = true;
 		previewError = null;
-		previewTimer = setTimeout(() => void runPreview(value), PREVIEW_DEBOUNCE_MS);
+		const seq = previewSeq;
+		previewTimer = setTimeout(() => void runPreview(value, seq), PREVIEW_DEBOUNCE_MS);
 	}
 
-	async function runPreview(value: IgnoreRuleDraft) {
+	async function runPreview(value: IgnoreRuleDraft, seq: number) {
 		try {
-			preview = await previewIgnoreRule(toRequest(value));
+			const result = await previewIgnoreRule(toRequest(value));
+			if (seq !== previewSeq) return;
+			preview = result;
 		} catch {
+			if (seq !== previewSeq) return;
 			preview = null;
 			previewError = 'The check did not come back. Try again.';
 		} finally {
-			previewLoading = false;
+			// A retired check also leaves "checking…" alone: a newer one still owns it.
+			if (seq === previewSeq) previewLoading = false;
 		}
 	}
 
