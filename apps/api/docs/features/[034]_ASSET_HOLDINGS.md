@@ -1,6 +1,6 @@
-# [033] Daily-priced asset holdings
+# [034] Daily-priced asset holdings
 
-> **Feature ID:** 033 · **Area:** Core (user-facing) · **Status:** implemented
+> **Feature ID:** 034 · **Area:** Core (user-facing) · **Status:** implemented
 >
 > **Backend packages:** `internal/assets` · `internal/marketdata` · `internal/marketdata/alphavantage` · `transport/http/handlers/assets` · `transport/http/handlers/marketdata` · `internal/storage/sqlx_assets_store.go`
 >
@@ -97,7 +97,7 @@ write side) and `assets.snapshots.rebuilt`.
 | Instrument catalogue and adoption | `internal/marketdata/quotes.go` |
 | Alpha Vantage fetcher + supported crypto | `internal/marketdata/alphavantage/` |
 | Purchases, derived/manual mutations, linked items | `internal/storage/sqlx_assets_store.go` |
-| Schema (`items.listing_id`, `assets.purchases`) | `apps/api/migrations/{postgres,sqlite}/20261009120000_asset_holdings.sql` |
+| Schema (`items.listing_id`, `assets.purchases`) | `apps/api/migrations/{postgres,sqlite}/20261010130000_asset_holdings.sql` |
 | HTTP | `transport/http/handlers/assets/holding.go` · `transport/http/handlers/marketdata/quotes.go` |
 | Holdings sync before snapshot rebuild | `transport/messaging/handlers/assets/snapshots_rebuild_requested.go` |
 

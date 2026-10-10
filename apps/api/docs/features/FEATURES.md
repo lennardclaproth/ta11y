@@ -21,7 +21,8 @@ top bar is navigation only. To the right of it sits your overview: the signed-in
 worth with its change over the selected period, one period choice, and sign out — open in the
 masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
 charts and the table of whichever page you are on and stays put when you change page; admin pages
-have no charts and no period. Actions that recompute a chart, such as rebuilding the portfolio,
+have no charts and no period, and Recurring looks back over your whole history, so it has none
+either. Actions that recompute a chart, such as rebuilding the portfolio,
 hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
 importing, acting on a selection — lives in the ledger header above the table.
 
@@ -96,6 +97,26 @@ import of the same file add the old row alongside it.
 
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
+### Recurring items [033]
+Users see their subscriptions, fixed costs and recurring income in one place: to or from
+whom, how often (monthly, quarterly or yearly), how the amount moved over time, and when the
+next one is expected. An item is created by pointing cashflow transactions at it — a new item
+or an existing one — or by confirming a pattern ta11y found in the account's history. Nothing
+becomes an item without that confirmation, and a dismissed suggestion is not offered again.
+
+Once an item is confirmed, the rows of a later cashflow import that match it (same
+counterparty, same direction, an amount within a quarter of the last one) are linked to it, so
+a recurring payment is pointed at once rather than after every statement. A row that does not
+belong is unlinked in the item; the transaction itself stays in Cashflow. Ending an item is a
+date, not a delete: from the chosen month it is no longer expected and nothing new is linked,
+while everything before it keeps its history.
+
+Items are unrelated to tags and the ignored status: marking changes neither, so the tag
+distribution and monthly totals on Cashflow do not move. ta11y reports the amounts as they
+were charged and labels none of them expensive, and raises no notification anywhere.
+
+→ Details: [Recurring items](%5B033%5D_RECURRING_ITEMS.md)
+
 ### Portfolio management
 Users read portfolio snapshots, current positions, and transaction history, add manual
 portfolio transactions, and request asynchronous portfolio rebuilds that recompute
@@ -143,7 +164,7 @@ user sets. Purchases (date, quantity, unit price) drive its worth from the instr
 daily price, back to the first purchase, so it counts in net worth without daily upkeep.
 Crypto is quoted in euro by Alpha Vantage; metals have no euro source and stay manual.
 
-→ Details: [Daily-priced asset holdings](%5B033%5D_ASSET_HOLDINGS.md)
+→ Details: [Daily-priced asset holdings](%5B034%5D_ASSET_HOLDINGS.md)
 
 ### Realtime updates (WebSocket)
 Clients subscribe to an account-scoped WebSocket (`/ws/accounts/{account_id}`) and receive
