@@ -49,6 +49,9 @@
 	</div>
 </Story>
 
+<!-- Push the sticky one first, then **Trigger 4 notices**: the cap counts and drops only the bands
+     that count down, so the sticky one is still there afterwards — `duration: 0` means it goes when
+     someone dismisses it and not before. -->
 <Story name="Auto-dismiss vs sticky" asChild>
 	<NoticeBandRegion />
 	<div class="flex flex-wrap gap-2 p-2">
@@ -59,6 +62,7 @@
 		>
 			Sticky (duration 0)
 		</Button>
+		<Button variant="outline" intent="secondary" onclick={stack}>Trigger 4 notices</Button>
 	</div>
 </Story>
 

@@ -23,10 +23,12 @@ export interface ToastOptions {
 
 const DEFAULT_DURATION = 4500;
 /**
- * How many notices exist at once. A band sits in the page flow, so every extra one pushes the
- * content down; beyond a few at a time the jump costs more than the notice is worth. The cap lives
- * here rather than in the region so a notice can never count down unseen: past this many, the
- * oldest is dismissed — timer and all — the moment a newer one arrives.
+ * How many auto-dismissing notices exist at once. A band sits in the page flow, so every extra one
+ * pushes the content down; beyond a few at a time the jump costs more than the notice is worth. The
+ * cap lives here rather than in the region so a notice can never count down unseen: past this many,
+ * the oldest is dismissed — timer and all — the moment a newer one arrives. A notice with
+ * `duration: 0` is outside the cap: it was asked to stay until someone dismisses it, and that is
+ * exactly the kind that has to be read before it goes.
  */
 const MAX_ITEMS = 3;
 
@@ -56,9 +58,11 @@ function push(intent: NoticeIntent, message: string, options: ToastOptions = {})
 		duration
 	};
 	// Newest on top, and the oldest beyond the cap goes rather than waiting for a turn it would
-	// have spent its timer on.
+	// have spent its timer on. Only the ones that count down are counted and dropped — a sticky
+	// notice stays until it is dismissed, as its `duration` promises.
 	items = [next, ...items];
-	for (const stale of items.slice(MAX_ITEMS)) dismiss(stale.id);
+	const expiring = items.filter((item) => item.duration > 0);
+	for (const stale of expiring.slice(MAX_ITEMS)) dismiss(stale.id);
 	if (duration > 0) {
 		timers[id] = setTimeout(() => dismiss(id), duration);
 	}
