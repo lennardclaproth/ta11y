@@ -218,3 +218,34 @@ export interface RevealProviderAPIKeyResponse {
 	id: string;
 	api_key: string;
 }
+
+/**
+ * One instrument an asset item can be linked to for daily pricing. Mirrors
+ * `handlers.QuoteResponse`.
+ *
+ * `listing_id`, `price` and `price_date` are only filled in once someone tracks the
+ * instrument: before that there is no price history to read. An instrument no
+ * provider quotes in euro comes back with `selectable: false` and a `reason`, so the
+ * picker can show why it cannot be used instead of hiding it.
+ */
+export interface Quote {
+	symbol: string;
+	name: string;
+	kind: string;
+	currency: string;
+	listing_id?: string | null;
+	price?: string | null;
+	/** "YYYY-MM-DD". */
+	price_date?: string | null;
+	selectable: boolean;
+	reason?: string;
+}
+
+/** `GET /marketdata/quotes` returns a bare array of quotes. */
+export type QuotesResponse = Quote[];
+
+/** Query filters for `GET /marketdata/quotes`. */
+export interface QuotesQuery {
+	q?: string;
+	limit?: number;
+}

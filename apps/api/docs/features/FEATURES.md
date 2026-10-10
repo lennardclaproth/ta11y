@@ -158,6 +158,14 @@ always reflects the latest portfolio value.
 
 → Details: [Assets](%5B024%5D_ASSETS.md)
 
+### Daily-priced asset holdings
+An asset item can be linked to a daily-priced instrument instead of carrying a worth the
+user sets. Purchases (date, quantity, unit price) drive its worth from the instrument's
+daily price, back to the first purchase, so it counts in net worth without daily upkeep.
+Crypto is quoted in euro by Alpha Vantage; metals have no euro source and stay manual.
+
+→ Details: [Daily-priced asset holdings](%5B034%5D_ASSET_HOLDINGS.md)
+
 ### Realtime updates (WebSocket)
 Clients subscribe to an account-scoped WebSocket (`/ws/accounts/{account_id}`) and receive
 push notifications when long-running work finishes — import completed, portfolio rebuilt,

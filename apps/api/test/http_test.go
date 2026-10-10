@@ -62,4 +62,44 @@ func TestHTTPEndpoints(t *testing.T) {
 			t.Fatalf("POST /accounts with blank name: want 400, got %d: %s", status, body)
 		}
 	})
+
+	// The daily-priced instrument catalogue is static and costs no provider request, so it
+	// answers on a fresh database. The blocked rows are the point: an instrument with no euro
+	// source is offered unselectable with its reason rather than left out.
+	t.Run("search daily-priced quotes", func(t *testing.T) {
+		status, body := ts.get(t, "/marketdata/quotes")
+		if status != http.StatusOK {
+			t.Fatalf("GET /marketdata/quotes: want 200, got %d: %s", status, body)
+		}
+		var quotes []struct {
+			Symbol     string `json:"symbol"`
+			Currency   string `json:"currency"`
+			Selectable bool   `json:"selectable"`
+			Reason     string `json:"reason"`
+		}
+		if err := json.Unmarshal(body, &quotes); err != nil {
+			t.Fatalf("decode quotes: %v (body=%s)", err, body)
+		}
+
+		var selectable, blocked int
+		for _, quote := range quotes {
+			if quote.Selectable {
+				selectable++
+				if quote.Currency != "EUR" {
+					t.Errorf("selectable quote %s is quoted in %s, not EUR", quote.Symbol, quote.Currency)
+				}
+				continue
+			}
+			blocked++
+			if quote.Reason == "" {
+				t.Errorf("blocked quote %s carries no reason", quote.Symbol)
+			}
+		}
+		if selectable == 0 {
+			t.Errorf("expected at least one selectable instrument (body=%s)", body)
+		}
+		if blocked == 0 {
+			t.Errorf("expected the metals to be offered blocked (body=%s)", body)
+		}
+	})
 }

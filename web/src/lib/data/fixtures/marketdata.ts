@@ -1,5 +1,5 @@
 import { numberToScaled as s } from '$lib/api/money';
-import type { EOD, Listing } from '$lib/api/types';
+import type { EOD, Listing, Quote } from '$lib/api/types';
 
 /** Listing master data. Symbols/ids line up with the portfolio fixtures. */
 export const listings: Listing[] = [
@@ -118,3 +118,62 @@ export const eodByListing: Record<string, EOD[]> = {
 	'lst-aapl': eodSeries('lst-aapl', 'AAPL', 188.0),
 	'lst-asml': eodSeries('lst-asml', 'ASML', 632.0)
 };
+
+/**
+ * Daily-priced instruments the holdings picker offers. Crypto is quoted in euro and
+ * therefore selectable; the metals are listed blocked with their reason, which is the
+ * cut this feature was shaped around rather than an oversight. An instrument nobody
+ * tracks yet has no listing and so no price.
+ */
+export const quotes: Quote[] = [
+	{
+		symbol: 'BTC/EUR',
+		name: 'Bitcoin',
+		kind: 'CRYPTO',
+		currency: 'EUR',
+		listing_id: 'lst-btc-eur',
+		price: '64000.000000',
+		price_date: '2026-06-17',
+		selectable: true
+	},
+	{
+		symbol: 'ETH/EUR',
+		name: 'Ethereum',
+		kind: 'CRYPTO',
+		currency: 'EUR',
+		listing_id: 'lst-eth-eur',
+		price: '2200.000000',
+		price_date: '2026-06-15',
+		selectable: true
+	},
+	{
+		symbol: 'SOL/EUR',
+		name: 'Solana',
+		kind: 'CRYPTO',
+		currency: 'EUR',
+		selectable: true
+	},
+	{
+		symbol: 'ADA/EUR',
+		name: 'Cardano',
+		kind: 'CRYPTO',
+		currency: 'EUR',
+		selectable: true
+	},
+	{
+		symbol: 'XAU',
+		name: 'Gold (troy ounce)',
+		kind: 'METAL',
+		currency: 'USD',
+		selectable: false,
+		reason: 'Priced in US dollars. Track gold as a manual item for now.'
+	},
+	{
+		symbol: 'XAG',
+		name: 'Silver (troy ounce)',
+		kind: 'METAL',
+		currency: 'USD',
+		selectable: false,
+		reason: 'Priced in US dollars. Track silver as a manual item for now.'
+	}
+];

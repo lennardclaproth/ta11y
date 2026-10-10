@@ -27,6 +27,7 @@ import (
 	portfolioparsers "github.com/lennardclaproth/ta11y/internal/importer/portfolio/parsers"
 	"github.com/lennardclaproth/ta11y/internal/logging"
 	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata/alphavantage"
 	"github.com/lennardclaproth/ta11y/internal/marketdata/marketstack"
 	"github.com/lennardclaproth/ta11y/internal/notify"
 	"github.com/lennardclaproth/ta11y/internal/portfolio"
@@ -82,6 +83,7 @@ type application struct {
 	assetsQueries  *assets.Queries
 	assetsBuilder  *assets.Builder
 	assetsSyncer   *assets.Syncer
+	assetsHoldings *assets.HoldingsSyncer
 
 	importerCommands   *importer.Commands
 	importerQueries    *importer.Queries
@@ -89,6 +91,7 @@ type application struct {
 	marketDataQueries  *marketdata.Queries
 	marketDataCatalog  *marketdata.Catalogue
 	marketDataCreds    *marketdata.Credentials
+	marketDataQuotes   *marketdata.Quotes
 }
 
 func main() {
@@ -216,13 +219,20 @@ func buildApplication(
 	fileStore := files.NewDisk(cfg.DiskStorage.BasePath)
 
 	marketStackClient := marketstack.NewMarketStackClient(marketDataStore, marketdata.ProviderMarketStack)
+	alphaVantageClient := alphavantage.NewClient(marketDataStore, marketdata.ProviderAlphaVantage)
 	marketDataSyncer := marketdata.NewSyncer(marketDataStore, map[marketdata.Source]marketdata.EODFetcher{
-		marketdata.SourceMarketStack: marketStackClient,
+		marketdata.SourceMarketStack:  marketStackClient,
+		marketdata.SourceAlphaVantage: alphaVantageClient,
 	})
 	marketDataCommands := marketdata.NewCommands(marketDataStore, marketDataSyncer)
 	marketDataQueries := marketdata.NewQueries(marketDataStore, marketDataSyncer)
 	marketDataCatalog := marketdata.NewCatalogue(marketDataStore, map[marketdata.Source]marketdata.TickerSearcher{
 		marketdata.SourceMarketStack: marketStackClient,
+	})
+	// Only sources that can actually fetch a daily price in euro offer quotes, so
+	// MarketStack -- which the app uses for listed equities -- is deliberately absent.
+	marketDataQuotes := marketdata.NewQuotes(marketDataStore, marketDataQueries, marketDataCommands, map[marketdata.Source]marketdata.QuoteCatalogue{
+		marketdata.SourceAlphaVantage: alphaVantageClient,
 	})
 	marketDataCreds := marketdata.NewCredentials(marketDataStore)
 
@@ -239,10 +249,11 @@ func buildApplication(
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
 	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
-	assetsQueries := assets.NewQueries(assetsStore)
+	assetsQueries := assets.NewQueries(assetsStore, marketDataQueries)
 	assetsBuilder := assets.NewBuilder(assetsStore, assetsStore)
 	assetsSyncer := assets.NewSyncer(portfolioQueries, assetsBuilder, assetsStore, assetsStore)
-	assetsCommands := assets.NewCommands(assetsStore, assetsStore, *accountQueries, assetsStore, assetsStore, bus)
+	assetsHoldings := assets.NewHoldingsSyncer(assetsStore, marketDataQueries, assetsStore)
+	assetsCommands := assets.NewCommands(assetsStore, assetsStore, *accountQueries, assetsStore, assetsStore, marketDataQuotes, bus)
 	fileQueries := files.NewQueries(fileStore)
 
 	cashflowProcessor := importercashflow.NewProcessor(vendorQueries, fileQueries, cashflowparsers.CreateCsvParser, cashflowCommands)
@@ -291,6 +302,7 @@ func buildApplication(
 		assetsQueries:  assetsQueries,
 		assetsBuilder:  assetsBuilder,
 		assetsSyncer:   assetsSyncer,
+		assetsHoldings: assetsHoldings,
 
 		importerCommands:   importerCommands,
 		importerQueries:    importerQueries,
@@ -298,6 +310,7 @@ func buildApplication(
 		marketDataQueries:  marketDataQueries,
 		marketDataCatalog:  marketDataCatalog,
 		marketDataCreds:    marketDataCreds,
+		marketDataQuotes:   marketDataQuotes,
 	}
 }
 
@@ -326,7 +339,7 @@ func registerEventHandlers(bus eventbus.Bus, app *application) error {
 	if err := subscribe(bus, portfolio.TopicRebuilt, notify.NewPortfolioRebuiltHandler(app.hub).Handle); err != nil {
 		return err
 	}
-	if err := subscribe(bus, assets.TopicSnapshotsRebuildRequested, assetsevents.NewSnapshotsRebuildRequestedHandler(app.assetsBuilder, bus, app.log).Handle); err != nil {
+	if err := subscribe(bus, assets.TopicSnapshotsRebuildRequested, assetsevents.NewSnapshotsRebuildRequestedHandler(app.assetsHoldings, app.assetsBuilder, bus, app.log).Handle); err != nil {
 		return err
 	}
 	if err := subscribe(bus, assets.TopicSnapshotsRebuilt, notify.NewAssetsSnapshotsRebuiltHandler(app.hub).Handle); err != nil {
@@ -389,6 +402,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("GET /marketdata/listings", marketdatahttp.GetListings(app.log, app.marketDataQueries))
 	protected("GET /marketdata/listings/search", marketdatahttp.SearchListings(app.log, app.marketDataQueries))
 	protected("GET /marketdata/eods", marketdatahttp.GetEOD(app.log, app.marketDataQueries))
+	protected("GET /marketdata/quotes", marketdatahttp.SearchQuotes(app.log, app.marketDataQuotes))
 	adminOnly("POST /marketdata/listing", marketdatahttp.CreateListing(app.log, app.marketDataCommands))
 	adminOnly("PATCH /marketdata/listing", marketdatahttp.UpdateListingFields(app.log, app.marketDataCommands))
 	adminOnly("DELETE /marketdata/listing/{listing_id}", marketdatahttp.DeleteListing(app.log, app.marketDataCommands))
@@ -436,8 +450,13 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("GET /assets/classes/{class_id}", assethttp.GetClassDetails(app.log, *app.assetsQueries))
 	protected("DELETE /assets/classes/{class_id}", assethttp.DeleteClass(app.log, *app.assetsCommands))
 	protected("POST /assets", assethttp.CreateAsset(app.log, *app.assetsCommands))
+	protected("POST /assets/holdings", assethttp.CreateHolding(app.log, *app.assetsCommands))
 	protected("PUT /assets/{asset_id}/worth", assethttp.SetAssetWorth(app.log, *app.assetsCommands))
 	protected("PUT /assets/{asset_id}/adjust", assethttp.AdjustAssetWorth(app.log, *app.assetsCommands))
+	// Reading one holding hangs off /assets/holdings rather than /assets/{asset_id}/holding:
+	// the latter is ambiguous against /assets/classes/{class_id} and makes the mux panic.
+	protected("GET /assets/holdings/{asset_id}", assethttp.GetHolding(app.log, *app.assetsQueries))
+	protected("POST /assets/{asset_id}/purchases", assethttp.AddPurchase(app.log, *app.assetsCommands))
 	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
 }
 

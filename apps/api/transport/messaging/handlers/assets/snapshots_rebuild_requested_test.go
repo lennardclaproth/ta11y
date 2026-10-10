@@ -44,7 +44,7 @@ func TestSnapshotsRebuildRequestedRebuildsAndAnnounces(t *testing.T) {
 	defer func() { _ = sub.Close() }()
 
 	builder := assets.NewBuilder(fakeBuilderStore{}, immediateUOW{})
-	handler := NewSnapshotsRebuildRequestedHandler(builder, bus, nil)
+	handler := NewSnapshotsRebuildRequestedHandler(nil, builder, bus, nil)
 
 	accID := uuid.New()
 	if err := handler.Handle(context.Background(), assets.SnapshotsRebuildRequested{AccID: accID}, eventbus.Metadata{}); err != nil {

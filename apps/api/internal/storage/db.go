@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -49,6 +51,7 @@ const (
 	TableAssetClasses    = "classes"
 	TableAssetItems      = "items"
 	TableAssetMutations  = "mutations"
+	TableAssetPurchases  = "purchases"
 	TableAssetSnapshot   = "snapshots"
 
 	TableRecurringItems      = "recurring_items"
@@ -70,7 +73,7 @@ func NewDB(connStr string, connType ConnectionType) *DB {
 		err error
 	)
 	if connType == Sqlite {
-		db, err = sql.Open("sqlite", connStr)
+		db, err = sql.Open("sqlite", sqliteDSN(connStr))
 	} else {
 		db, err = apmsql.Open(string(connType), connStr)
 	}
@@ -81,6 +84,23 @@ func NewDB(connStr string, connType ConnectionType) *DB {
 	sqlxDB := sqlx.NewDb(db, string(connType))
 
 	return &DB{DB: sqlxDB}
+}
+
+// sqliteBusyTimeout is how long a SQLite connection waits for a lock before it
+// gives up. SQLite locks the whole database for a write, and the event handlers
+// write on their own pooled connections while a request reads on another; with
+// the default timeout of zero the loser fails instantly with SQLITE_BUSY instead
+// of waiting out a write that takes milliseconds. Postgres needs no equivalent.
+const sqliteBusyTimeout = 5 * time.Second
+
+// sqliteDSN adds the busy timeout to a SQLite connection string, preserving any
+// parameters the configured string already carries.
+func sqliteDSN(connStr string) string {
+	separator := "?"
+	if strings.Contains(connStr, "?") {
+		separator = "&"
+	}
+	return fmt.Sprintf("%s%s_pragma=busy_timeout(%d)", connStr, separator, sqliteBusyTimeout.Milliseconds())
 }
 
 func qualifyTable(db *DB, schema, table string) string {

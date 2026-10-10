@@ -60,6 +60,14 @@ definitions:
         items:
           $ref: '#/definitions/assets.ClassGrowthPointResponse'
         type: array
+      holdings:
+        description: |-
+          Holdings are the class's daily-priced items. They are reported apart from
+          Assets because they carry a quantity, a price and a purchase history that an
+          item with a hand-set worth has no equivalent of.
+        items:
+          $ref: '#/definitions/assets.HoldingResponse'
+        type: array
       mutations:
         items:
           $ref: '#/definitions/assets.MutationResponse'
@@ -121,7 +129,81 @@ definitions:
       name:
         type: string
     type: object
+  assets.CreateHoldingRequest:
+    properties:
+      class_id:
+        type: string
+      name:
+        type: string
+      purchase:
+        $ref: '#/definitions/assets.PurchaseRequest'
+      symbol:
+        type: string
+    type: object
+  assets.CreateHoldingResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   assets.DeleteClassRequest:
+    type: object
+  assets.HoldingResponse:
+    properties:
+      avg_unit_price:
+        type: string
+      class_id:
+        type: string
+      class_name:
+        type: string
+      id:
+        type: string
+      instrument_name:
+        type: string
+      name:
+        type: string
+      paid:
+        type: string
+      price:
+        type: string
+      price_carried_forward:
+        type: boolean
+      price_date:
+        description: |-
+          PriceDate is absent while no price is known yet. PriceCarriedForward says the
+          known price is older than today, so the valuation reuses it.
+        type: string
+      purchases:
+        items:
+          $ref: '#/definitions/assets.PurchaseResponse'
+        type: array
+      quantity:
+        type: string
+      series:
+        items:
+          $ref: '#/definitions/assets.HoldingValuePointResponse'
+        type: array
+      symbol:
+        description: |-
+          Symbol and instrument_name are empty when the listing behind the item has
+          gone missing; the item still reports the worth it last derived.
+        type: string
+      unrealized:
+        type: string
+      unrealized_pct:
+        type: number
+      value:
+        type: string
+    type: object
+  assets.HoldingValuePointResponse:
+    properties:
+      date:
+        type: string
+      paid:
+        type: string
+      value:
+        type: string
     type: object
   assets.MutationResponse:
     properties:
@@ -146,6 +228,28 @@ definitions:
       note:
         type: string
       previous_worth:
+        type: string
+    type: object
+  assets.PurchaseRequest:
+    properties:
+      date:
+        type: string
+      quantity:
+        type: string
+      unit_price:
+        type: string
+    type: object
+  assets.PurchaseResponse:
+    properties:
+      date:
+        type: string
+      id:
+        type: string
+      paid:
+        type: string
+      quantity:
+        type: string
+      unit_price:
         type: string
     type: object
   assets.SetAssetWorthRequest:
@@ -781,6 +885,33 @@ definitions:
       used:
         type: integer
     type: object
+  handlers.QuoteResponse:
+    properties:
+      currency:
+        type: string
+      kind:
+        type: string
+      listing_id:
+        type: string
+      name:
+        type: string
+      price:
+        description: |-
+          Price and PriceDate are only present for an instrument someone already
+          tracks; an untracked one has no price history yet.
+        type: string
+      price_date:
+        type: string
+      reason:
+        type: string
+      selectable:
+        description: |-
+          Selectable is false for an instrument no provider quotes in euro. Reason
+          then carries the explanation the picker shows on the blocked row.
+        type: boolean
+      symbol:
+        type: string
+    type: object
   handlers.RevealProviderAPIKeyResponse:
     properties:
       api_key:
@@ -1267,6 +1398,52 @@ paths:
       summary: Adjust asset worth
       tags:
       - assets
+  /assets/{asset_id}/purchases:
+    post:
+      consumes:
+      - application/json
+      description: Records another acquisition of an item linked to a daily price.
+        The item's whole worth history is rebuilt from its purchases afterwards.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: Purchase payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/assets.PurchaseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/assets.PurchaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add purchase to daily-priced item
+      tags:
+      - assets
   /assets/{asset_id}/worth:
     put:
       consumes:
@@ -1512,6 +1689,90 @@ paths:
               type: string
             type: object
       summary: Get asset class details
+      tags:
+      - assets
+  /assets/holdings:
+    post:
+      consumes:
+      - application/json
+      description: Adds an asset item linked to a daily-priced instrument together
+        with its first purchase. The item's worth is derived from its purchases and
+        the instrument's daily price, so it carries no worth of its own and cannot
+        be set or adjusted by hand.
+      parameters:
+      - description: Create holding payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/assets.CreateHoldingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/assets.CreateHoldingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create daily-priced asset item
+      tags:
+      - assets
+  /assets/holdings/{asset_id}:
+    get:
+      consumes:
+      - application/json
+      description: Returns a daily-priced item with its quantity, what was paid, the
+        latest known price, the value-against-paid series since the first purchase,
+        and the purchases behind it.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/assets.HoldingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get daily-priced asset item
       tags:
       - assets
   /assets/snapshots:
@@ -3219,6 +3480,47 @@ paths:
       summary: Reveal a provider API key
       tags:
       - providers
+  /marketdata/quotes:
+    get:
+      consumes:
+      - application/json
+      description: Returns the instruments an asset item can be linked to for daily
+        pricing, selectable ones first. An instrument no configured provider quotes
+        in euro is returned unselectable with the reason attached rather than omitted.
+        This never calls a provider.
+      parameters:
+      - description: Case-insensitive partial query over symbol and name
+        in: query
+        name: q
+        type: string
+      - description: Page size (max 50, default 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.QuoteResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search daily-priced instruments
+      tags:
+      - marketdata
   /portfolio/positions:
     get:
       consumes:

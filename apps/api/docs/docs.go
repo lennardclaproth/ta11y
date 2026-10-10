@@ -492,6 +492,126 @@ const docTemplate = `{
                 }
             }
         },
+        "/assets/holdings": {
+            "post": {
+                "description": "Adds an asset item linked to a daily-priced instrument together with its first purchase. The item's worth is derived from its purchases and the instrument's daily price, so it carries no worth of its own and cannot be set or adjusted by hand.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Create daily-priced asset item",
+                "parameters": [
+                    {
+                        "description": "Create holding payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/assets.CreateHoldingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/assets.CreateHoldingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/assets/holdings/{asset_id}": {
+            "get": {
+                "description": "Returns a daily-priced item with its quantity, what was paid, the latest known price, the value-against-paid series since the first purchase, and the purchases behind it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Get daily-priced asset item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Asset item ID",
+                        "name": "asset_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/assets.HoldingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/assets/snapshots": {
             "get": {
                 "description": "Returns account-level daily total worth snapshot points.",
@@ -593,6 +713,74 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/assets/{asset_id}/purchases": {
+            "post": {
+                "description": "Records another acquisition of an item linked to a daily price. The item's whole worth history is rebuilt from its purchases afterwards.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Add purchase to daily-priced item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Asset item ID",
+                        "name": "asset_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Purchase payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/assets.PurchaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/assets.PurchaseResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -3144,6 +3332,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/marketdata/quotes": {
+            "get": {
+                "description": "Returns the instruments an asset item can be linked to for daily pricing, selectable ones first. An instrument no configured provider quotes in euro is returned unselectable with the reason attached rather than omitted. This never calls a provider.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "marketdata"
+                ],
+                "summary": "Search daily-priced instruments",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive partial query over symbol and name",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (max 50, default 50)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.QuoteResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/portfolio/positions": {
             "get": {
                 "description": "Returns portfolio positions for the given account and include_closed filter.",
@@ -3788,6 +4034,13 @@ const docTemplate = `{
                         "$ref": "#/definitions/assets.ClassGrowthPointResponse"
                     }
                 },
+                "holdings": {
+                    "description": "Holdings are the class's daily-priced items. They are reported apart from\nAssets because they carry a quantity, a price and a purchase history that an\nitem with a hand-set worth has no equivalent of.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/assets.HoldingResponse"
+                    }
+                },
                 "mutations": {
                     "type": "array",
                     "items": {
@@ -3883,8 +4136,114 @@ const docTemplate = `{
                 }
             }
         },
+        "assets.CreateHoldingRequest": {
+            "type": "object",
+            "properties": {
+                "class_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "purchase": {
+                    "$ref": "#/definitions/assets.PurchaseRequest"
+                },
+                "symbol": {
+                    "type": "string"
+                }
+            }
+        },
+        "assets.CreateHoldingResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "assets.DeleteClassRequest": {
             "type": "object"
+        },
+        "assets.HoldingResponse": {
+            "type": "object",
+            "properties": {
+                "avg_unit_price": {
+                    "type": "string"
+                },
+                "class_id": {
+                    "type": "string"
+                },
+                "class_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "instrument_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "paid": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "string"
+                },
+                "price_carried_forward": {
+                    "type": "boolean"
+                },
+                "price_date": {
+                    "description": "PriceDate is absent while no price is known yet. PriceCarriedForward says the\nknown price is older than today, so the valuation reuses it.",
+                    "type": "string"
+                },
+                "purchases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/assets.PurchaseResponse"
+                    }
+                },
+                "quantity": {
+                    "type": "string"
+                },
+                "series": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/assets.HoldingValuePointResponse"
+                    }
+                },
+                "symbol": {
+                    "description": "Symbol and instrument_name are empty when the listing behind the item has\ngone missing; the item still reports the worth it last derived.",
+                    "type": "string"
+                },
+                "unrealized": {
+                    "type": "string"
+                },
+                "unrealized_pct": {
+                    "type": "number"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "assets.HoldingValuePointResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "paid": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
         },
         "assets.MutationResponse": {
             "type": "object",
@@ -3920,6 +4279,40 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "previous_worth": {
+                    "type": "string"
+                }
+            }
+        },
+        "assets.PurchaseRequest": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "string"
+                },
+                "unit_price": {
+                    "type": "string"
+                }
+            }
+        },
+        "assets.PurchaseResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "paid": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "string"
+                },
+                "unit_price": {
                     "type": "string"
                 }
             }
@@ -4863,6 +5256,40 @@ const docTemplate = `{
                 },
                 "used": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.QuoteResponse": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "listing_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "description": "Price and PriceDate are only present for an instrument someone already\ntracks; an untracked one has no price history yet.",
+                    "type": "string"
+                },
+                "price_date": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "selectable": {
+                    "description": "Selectable is false for an instrument no provider quotes in euro. Reason\nthen carries the explanation the picker shows on the blocked row.",
+                    "type": "boolean"
+                },
+                "symbol": {
+                    "type": "string"
                 }
             }
         },

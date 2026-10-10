@@ -280,6 +280,24 @@ func getEODResult(
 	}, nil
 }
 
+// LatestEOD returns the most recent stored end-of-day row for a listing, or
+// (nil, nil) when it has none.
+//
+// Unlike GetEODByListing this never triggers a provider sync: callers use it to
+// label a price with the day it belongs to, and a read that quietly spends a
+// provider request would make rendering a page cost quota.
+func (q *Queries) LatestEOD(ctx context.Context, listingID uuid.UUID) (*EOD, error) {
+	limit, offset := 1, 0
+	rows, err := q.qs.GetEODForListing(ctx, listingID, nil, nil, &limit, &offset, string(sorting.DESC))
+	if err != nil {
+		return nil, fmt.Errorf("latest eod for listing %s: %w", listingID, err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
 // Split is a share multiplier applied to a holding on a given date: a factor of 4
 // means one share became four.
 type Split struct {

@@ -26,10 +26,13 @@ func (s *recordingAssetsStore) CreateMutation(_ context.Context, _ *assets.Mutat
 	return nil
 }
 func (s *recordingAssetsStore) DeleteClass(_ context.Context, _ uuid.UUID) error { return nil }
+func (s *recordingAssetsStore) CreatePurchase(_ context.Context, _ *assets.Purchase) error {
+	return nil
+}
 
 func TestAccountCreatedCreatesAssetsProjection(t *testing.T) {
 	store := &recordingAssetsStore{}
-	commands := assets.NewCommands(store, nil, account.Queries{}, nil, nil, nil)
+	commands := assets.NewCommands(store, nil, account.Queries{}, nil, nil, nil, nil)
 	handler := NewAccountCreatedHandler(commands, nil)
 
 	accID := uuid.New()
