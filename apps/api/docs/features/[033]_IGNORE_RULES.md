@@ -201,9 +201,11 @@ that caused it; an unknown rule → 404; store errors → 500.
 - **Counters.** A successful apply adds its count to the rule's `ignored_total` and stamps
   `last_applied_at`. Editing a rule never resets them.
 - **A failed rules pass.** If applying the rules after an import's insert fails, the import
-  is marked failed and still reports `total_rows` / `imported` / `duplicates`: the rows are
-  in the ledger and nothing was ignored, so the counters travel with the failure rather
-  than leaving the person to guess which rows are unreviewed.
+  is marked failed and still reports `total_rows` / `imported` / `duplicates` /
+  `auto_ignored`: the rows are in the ledger, and the rules that ran before the failure have
+  already ignored theirs, so every counter travels with the failure rather than leaving the
+  person to guess which rows are unreviewed. The pass stops at the failing rule; the ones
+  after it never ran, and applying them to the ledger afterwards is the way back.
 
 ## Events
 

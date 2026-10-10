@@ -14,6 +14,9 @@ type ruleStore struct {
 	rules   []*IgnoreRule
 	applied []appliedRule
 	perRule int
+	// failOn is the rule whose application fails, standing for a pass that breaks down
+	// after earlier rules have already committed what they ignored.
+	failOn *uuid.UUID
 }
 
 type appliedRule struct {
@@ -47,6 +50,9 @@ func (s *ruleStore) DeleteIgnoreRule(_ context.Context, _, id uuid.UUID) (int, e
 }
 
 func (s *ruleStore) ApplyIgnoreRule(_ context.Context, rule *IgnoreRule, importID *uuid.UUID) (int, error) {
+	if s.failOn != nil && *s.failOn == rule.ID {
+		return 0, errors.New("store is unreachable")
+	}
 	s.applied = append(s.applied, appliedRule{ruleID: rule.ID, importID: importID})
 	return s.perRule, nil
 }
@@ -147,6 +153,35 @@ func TestApplyIgnoreRulesToImportSkipsDisabledRules(t *testing.T) {
 	// of scope until the person asks for it.
 	if store.applied[0].importID == nil || *store.applied[0].importID != importID {
 		t.Fatalf("expected the application to be scoped to the import, got %+v", store.applied[0].importID)
+	}
+}
+
+func TestApplyIgnoreRulesToImportReportsWhatEarlierRulesIgnored(t *testing.T) {
+	// Each rule commits on its own, so a pass that breaks down halfway leaves the rows
+	// of the rules before it ignored. That count has to travel with the error: an import
+	// reporting nothing was ignored while rows did leave the monthly totals is the one
+	// thing the counter exists to prevent.
+	accID := uuid.New()
+	importID := uuid.New()
+
+	first := NewIgnoreRule(accID, draft(t, "Credit card"))
+	broken := NewIgnoreRule(accID, draft(t, "Round-up"))
+	last := NewIgnoreRule(accID, draft(t, "Transfer to savings"))
+
+	store := &ruleStore{rules: []*IgnoreRule{first, broken, last}, perRule: 4, failOn: &broken.ID}
+	commands := NewCommands(nil, nil, store, store, nil)
+
+	ignored, err := commands.ApplyIgnoreRulesToImport(context.Background(), accID, importID)
+	if err == nil {
+		t.Fatal("expected the failing rule to surface as an error")
+	}
+	if ignored != 4 {
+		t.Fatalf("ignored = %d, want the 4 rows the rule before the failure ignored", ignored)
+	}
+	// The pass stops at the failure: the rules after it never ran, which is what makes
+	// applying them to the ledger afterwards the way back.
+	if len(store.applied) != 1 || store.applied[0].ruleID != first.ID {
+		t.Fatalf("expected only the rule before the failure to have been applied, got %+v", store.applied)
 	}
 }
 
