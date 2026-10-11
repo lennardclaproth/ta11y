@@ -32,6 +32,7 @@
 	import { scaledToNumber } from '$lib/api/money';
 	import { recurringMonthTick } from '$lib/api/recurring';
 	import { chartColors } from '$lib/charts/theme';
+	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 	import { parseQuery, serializeQuery, type QuerySchema } from '$lib/url/routeQuery';
 	import { pushQuery } from '$lib/url/queryState';
 	import type {
@@ -42,6 +43,8 @@
 		RecurringSuggestion,
 		RecurringTransaction
 	} from '$lib/api/types';
+
+	type Notice = { intent: NoticeIntent; message: string };
 
 	const schema: QuerySchema = {
 		q: { type: 'string' },
@@ -68,6 +71,12 @@
 	let itemLoading = $state(false);
 	let itemError = $state<string | null>(null);
 	let unlinking = $state<string | null>(null);
+
+	// Unlinking, confirming and dismissing leave their drawer open, and a drawer draws its own
+	// scrim over the notice region under the masthead. So those outcomes are reported in the
+	// drawer they were started from rather than as a toast nobody would see.
+	let itemNotice = $state<Notice | null>(null);
+	let suggestionsNotice = $state<Notice | null>(null);
 
 	let endOpen = $state(false);
 	let ending = $state(false);
@@ -175,6 +184,7 @@
 	async function openItem(row: RecurringItem) {
 		item = null;
 		itemError = null;
+		itemNotice = null;
 		itemLoading = true;
 		itemOpen = true;
 		try {
@@ -191,11 +201,11 @@
 		unlinking = transaction.id;
 		try {
 			await unlinkRecurringTransaction(item.id, transaction.id);
-			toast.success('Transaction unlinked — it stays in Cashflow');
+			itemNotice = { intent: 'success', message: 'Transaction unlinked — it stays in Cashflow' };
 			item = await getRecurringItem(item.id);
 			void load();
 		} catch {
-			toast.error('Could not unlink the transaction');
+			itemNotice = { intent: 'error', message: 'Could not unlink the transaction' };
 		} finally {
 			unlinking = null;
 		}
@@ -234,10 +244,13 @@
 				rhythm
 			});
 			suggestions = suggestions.filter((entry) => entry.match_key !== suggestion.match_key);
-			toast.success(`${name} added, with ${suggestion.matches} transactions`);
+			suggestionsNotice = {
+				intent: 'success',
+				message: `${name} added, with ${suggestion.matches} transactions`
+			};
 			void load();
 		} catch {
-			toast.error('Could not confirm this suggestion');
+			suggestionsNotice = { intent: 'error', message: 'Could not confirm this suggestion' };
 		} finally {
 			pendingSuggestion = null;
 		}
@@ -251,9 +264,12 @@
 				direction: suggestion.direction
 			});
 			suggestions = suggestions.filter((entry) => entry.match_key !== suggestion.match_key);
-			toast.info('Dismissed — this pattern will not be suggested again');
+			suggestionsNotice = {
+				intent: 'info',
+				message: 'Dismissed — this pattern will not be suggested again'
+			};
 		} catch {
-			toast.error('Could not dismiss this suggestion');
+			suggestionsNotice = { intent: 'error', message: 'Could not dismiss this suggestion' };
 		} finally {
 			pendingSuggestion = null;
 		}
@@ -372,7 +388,13 @@
 			{/snippet}
 			{#snippet actions()}
 				{#if known && suggestions.length > 0}
-					<Button variant="ruled" onclick={() => (suggestionsOpen = true)}>
+					<Button
+						variant="ruled"
+						onclick={() => {
+							suggestionsNotice = null;
+							suggestionsOpen = true;
+						}}
+					>
 						<Icon icon="heroicons:light-bulb" />
 						Review suggestions ({suggestions.length})
 					</Button>
@@ -409,6 +431,8 @@
 	loading={suggestionsLoading}
 	error={suggestionsError}
 	pending={pendingSuggestion}
+	notice={suggestionsNotice}
+	onDismissNotice={() => (suggestionsNotice = null)}
 	onConfirm={handleConfirm}
 	onDismiss={handleDismiss}
 />
@@ -419,6 +443,8 @@
 	loading={itemLoading}
 	error={itemError}
 	{unlinking}
+	notice={itemNotice}
+	onDismissNotice={() => (itemNotice = null)}
 	onUnlink={handleUnlink}
 	onEnd={() => {
 		endError = null;

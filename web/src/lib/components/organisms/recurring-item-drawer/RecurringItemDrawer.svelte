@@ -22,6 +22,7 @@
 		rhythmLabels
 	} from '$lib/api/recurring';
 	import { cashflowOriginLabel } from '$lib/api/transactions';
+	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringItemDetail, RecurringTransaction } from '$lib/api/types';
 
 	type Props = {
@@ -31,6 +32,12 @@
 		error?: string | null;
 		/** The transaction id currently being unlinked, if any. */
 		unlinking?: string | null;
+		/**
+		 * What an action taken here reported. This drawer stays open afterwards and covers the notice
+		 * region under the masthead with its own scrim, so the outcome is stated in the drawer itself.
+		 */
+		notice?: { intent: NoticeIntent; message: string } | null;
+		onDismissNotice?: () => void;
 		onUnlink?: (transaction: RecurringTransaction) => void;
 		onEnd?: () => void;
 		onClose?: () => void;
@@ -42,6 +49,8 @@
 		loading = false,
 		error = null,
 		unlinking = null,
+		notice = null,
+		onDismissNotice,
 		onUnlink,
 		onEnd,
 		onClose
@@ -88,6 +97,21 @@
 			</div>
 		{/if}
 	{/snippet}
+
+	{#if notice}
+		<!-- No timer behind this band, so it is dismissible: the drawer stays open and the outcome
+		     waits for the reader rather than for a countdown nobody can see. -->
+		<NoticeBand
+			intent={notice.intent}
+			surface="inset"
+			gutter="dialog"
+			class="-mx-5 -mt-4 mb-4"
+			dismissible
+			onDismiss={onDismissNotice}
+		>
+			{notice.message}
+		</NoticeBand>
+	{/if}
 
 	{#if loading}
 		<div class="flex flex-col gap-3">

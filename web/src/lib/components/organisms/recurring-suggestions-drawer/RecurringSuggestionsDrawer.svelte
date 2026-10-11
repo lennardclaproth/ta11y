@@ -18,6 +18,7 @@
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
 	import { recurringDirectionLabel, rhythmLabels } from '$lib/api/recurring';
+	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringRhythm, RecurringSuggestion } from '$lib/api/types';
 
 	type Props = {
@@ -27,6 +28,12 @@
 		error?: string | null;
 		/** The match key currently being confirmed or dismissed, if any. */
 		pending?: string | null;
+		/**
+		 * What confirming or dismissing reported. This drawer stays open afterwards and covers the
+		 * notice region under the masthead with its own scrim, so the outcome is stated here.
+		 */
+		notice?: { intent: NoticeIntent; message: string } | null;
+		onDismissNotice?: () => void;
 		onConfirm?: (suggestion: RecurringSuggestion, name: string, rhythm: RecurringRhythm) => void;
 		onDismiss?: (suggestion: RecurringSuggestion) => void;
 	};
@@ -37,6 +44,8 @@
 		loading = false,
 		error = null,
 		pending = null,
+		notice = null,
+		onDismissNotice,
 		onConfirm,
 		onDismiss
 	}: Props = $props();
@@ -77,6 +86,21 @@
 </script>
 
 <Drawer bind:open title="Suggestions from your history" width="max-w-lg">
+	{#if notice}
+		<!-- No timer behind this band, so it is dismissible: the drawer stays open while you work
+		     through the list, and the outcome waits for the reader. -->
+		<NoticeBand
+			intent={notice.intent}
+			surface="inset"
+			gutter="dialog"
+			class="-mx-5 -mt-4 mb-4"
+			dismissible
+			onDismiss={onDismissNotice}
+		>
+			{notice.message}
+		</NoticeBand>
+	{/if}
+
 	<Text size="sm" tone="muted" class="mb-4">
 		Patterns found in transactions you have not ignored. Nothing is added until you confirm it, and
 		a dismissed suggestion does not come back.
