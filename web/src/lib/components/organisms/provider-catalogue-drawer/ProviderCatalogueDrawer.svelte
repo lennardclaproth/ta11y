@@ -196,13 +196,14 @@
 	}
 
 	/**
-	 * A search the user asked for. The outcome box reports one adopted batch, so it is dropped
-	 * here and not in `searchLocal`: `adoptSelection` calls that itself, right after filling the
-	 * box, to bring the adopted rows back marked as tracked.
+	 * A search the user asked for. The band and the outcome box report the same adopted batch, so
+	 * they are dropped together here and not in `searchLocal`: `adoptSelection` calls that itself,
+	 * right after filling both, to bring the adopted rows back marked as tracked.
 	 */
 	function startSearch() {
 		if (!query.trim()) return;
 		outcomes = [];
+		notice = null;
 		void searchLocal(0);
 	}
 
@@ -214,6 +215,7 @@
 	async function askProvider() {
 		if (!query.trim()) return;
 		outcomes = [];
+		notice = null;
 		askingProvider = true;
 		error = null;
 		try {
@@ -347,8 +349,9 @@
 				</Button>
 			</div>
 			{#if notice}
-				<!-- The band has no timer, so it is dismissible: a confirmation that outlived the search
-				     it belonged to can be put away without waiting for the drawer to close. -->
+				<!-- The band has no timer, so it is dismissible: a confirmation can be put away without
+				     waiting for the drawer to close. A new search clears it along with the outcome box,
+				     so neither reports a batch that has nothing to do with the rows on screen. -->
 				<NoticeBand
 					intent={notice.intent}
 					surface="inset"
