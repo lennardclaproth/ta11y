@@ -8,6 +8,7 @@
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -95,12 +96,7 @@
 			<Skeleton width="40%" />
 		</div>
 	{:else if error}
-		<p
-			class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-			role="alert"
-		>
-			{error}
-		</p>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 	{:else if item}
 		<AnalyticsCard title="Amount over time">
 			{#if amounts.length > 1}

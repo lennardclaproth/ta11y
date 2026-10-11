@@ -13,6 +13,7 @@
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
@@ -91,12 +92,7 @@
 			{/each}
 		</div>
 	{:else if error}
-		<p
-			class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-			role="alert"
-		>
-			{error}
-		</p>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 	{:else if suggestions.length === 0}
 		<p class="py-8 text-center text-sm text-slate-500">
 			No patterns found in your history right now. Mark a transaction in Cashflow to start an item
