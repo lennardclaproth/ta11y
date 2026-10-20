@@ -97,10 +97,11 @@ export interface CreateManualPortfolioTransactionRequest {
 
 /**
  * What happened to the rebuild a portfolio write asked for. The write itself succeeded in
- * every case; the outcome only says whether positions, performance and net worth have
- * caught up with it yet.
+ * every case. `started` means positions, performance and net worth are being recalculated
+ * in the background, announced by a `portfolio.rebuilt` event when done; `skipped` means
+ * nothing was scheduled.
  */
-export type PortfolioRebuildOutcome = 'completed' | 'in_progress' | 'skipped' | 'failed';
+export type PortfolioRebuildOutcome = 'started' | 'skipped';
 
 /** `POST /portfolio/transactions/manual` — mirrors `portfolio.ManualPortfolioTransactionResponse`. */
 export interface ManualPortfolioTransactionResponse extends PortfolioTransaction {
@@ -108,21 +109,24 @@ export interface ManualPortfolioTransactionResponse extends PortfolioTransaction
 }
 
 /**
- * `POST /portfolio/transactions/date` request — mirrors
- * `portfolio.ChangePortfolioTransactionDateRequest`. Only manually entered transactions can
- * be moved, and only to today or earlier.
+ * `PUT /portfolio/transactions/{transaction_id}` — mirrors
+ * `portfolio.UpdatePortfolioTransactionRequest`. Replaces what was entered for a manual
+ * transaction under the same rules as creating one; the vendor stays as it was. Imported
+ * transactions are refused.
  */
-export interface ChangePortfolioTransactionDateRequest {
-	id: string;
+export interface UpdatePortfolioTransactionRequest {
 	/** "YYYY-MM-DD". */
 	occurred_at: string;
+	type: PortfolioTransactionType;
+	listing_id?: string;
+	amount: string;
+	quantity?: string;
+	description?: string;
 }
 
-/** `POST /portfolio/transactions/date` — mirrors `portfolio.ChangePortfolioTransactionDateResponse`. */
-export interface ChangePortfolioTransactionDateResponse {
+/** `DELETE /portfolio/transactions/{transaction_id}` — mirrors `portfolio.DeletePortfolioTransactionResponse`. */
+export interface DeletePortfolioTransactionResponse {
 	id: string;
-	/** RFC3339 timestamp. */
-	occurred_at: string;
 	rebuild: PortfolioRebuildOutcome;
 }
 

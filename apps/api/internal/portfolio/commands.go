@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
 )
@@ -19,6 +20,8 @@ type Commands struct {
 	mdq marketdata.Queries
 	vq  vendor.Queries
 	rb  rebuilder
+
+	rebuilds *rebuildQueue
 }
 
 // CommandStore persists portfolio accounts and transactions.
@@ -27,6 +30,12 @@ type CommandStore interface {
 	CreateTransaction(ctx context.Context, tx *Transaction) error
 	CreateTransactions(ctx context.Context, txs []*Transaction) (int, error)
 	UpdateTransactionOccurredAt(ctx context.Context, accountID, id uuid.UUID, occurredAt time.Time, checksum string) (int, error)
+	// UpdateManualTransaction stores the edited content of a manual transaction and
+	// reports how many rows changed; imported rows are never touched.
+	UpdateManualTransaction(ctx context.Context, tx *Transaction) (int, error)
+	// DeleteManualTransaction removes a manual transaction and reports how many rows went;
+	// imported rows are never touched.
+	DeleteManualTransaction(ctx context.Context, accountID, id uuid.UUID) (int, error)
 }
 
 // TransactionReader reads the single transactions a write has to inspect first.
@@ -44,85 +53,42 @@ type rebuilder interface {
 
 // RebuildOutcome reports what happened to the rebuild a write asked for. The write has
 // already succeeded in every case -- the outcome only says whether the positions,
-// performance and net worth on screen have caught up with it yet.
+// performance and net worth on screen are being brought up to date.
 type RebuildOutcome string
 
 const (
-	// RebuildCompleted means the rebuild ran and the account is up to date.
-	RebuildCompleted RebuildOutcome = "completed"
-	// RebuildInProgress means another rebuild held the lock, so this one did not run.
-	RebuildInProgress RebuildOutcome = "in_progress"
-	// RebuildSkipped means there was nothing to rebuild yet, or no rebuilder is wired.
+	// RebuildStarted means a rebuild was scheduled in the background. It is followed by a
+	// portfolio.rebuilt event once the account has caught up with this write.
+	RebuildStarted RebuildOutcome = "started"
+	// RebuildSkipped means no rebuilder is wired, so nothing was scheduled.
 	RebuildSkipped RebuildOutcome = "skipped"
-	// RebuildFailed means the rebuild was attempted and errored; Err carries the reason.
-	RebuildFailed RebuildOutcome = "failed"
 )
 
 // RebuildResult reports the outcome of the rebuild a write asked for.
 type RebuildResult struct {
 	Outcome RebuildOutcome
-	Err     error
 }
 
 // NewCommands constructs the portfolio write-side use cases. The rebuilder may be nil,
-// in which case manual writes report their rebuild as skipped.
-func NewCommands(cs CommandStore, qs TransactionReader, mdq marketdata.Queries, vq vendor.Queries, rb rebuilder) *Commands {
-	return &Commands{cs: cs, qs: qs, mdq: mdq, vq: vq, rb: rb}
+// in which case manual writes report their rebuild as skipped; log records background
+// rebuilds that fail and may be nil.
+func NewCommands(cs CommandStore, qs TransactionReader, mdq marketdata.Queries, vq vendor.Queries, rb rebuilder, log logging.Logger) *Commands {
+	c := &Commands{cs: cs, qs: qs, mdq: mdq, vq: vq, rb: rb}
+	if rb != nil {
+		c.rebuilds = newRebuildQueue(rb, log)
+	}
+	return c
 }
 
-const (
-	// rebuildReportTimeout caps how long a write waits for the rebuild it asked for before
-	// it answers. It stays under the transport's 30s write timeout, so the response to a
-	// write that did succeed still reaches the client.
-	rebuildReportTimeout = 20 * time.Second
-	// rebuildTimeout bounds a detached rebuild so one that hangs cannot hold the build lock
-	// for the lifetime of the process.
-	rebuildTimeout = 30 * time.Minute
-)
-
-// rebuild asks for a rebuild and classifies the outcome. A rebuild that cannot run is
-// not a failed write: the transaction is stored either way and the caller reports that
-// the portfolio has not caught up.
+// rebuild schedules a background rebuild for a write that changed the account's
+// transactions. The write answers without waiting: a full rebuild can take seconds, and
+// the portfolio.rebuilt event tells clients when the account has caught up.
 func (c *Commands) rebuild(ctx context.Context, accountID uuid.UUID) RebuildResult {
-	if c.rb == nil {
+	if c.rebuilds == nil {
 		return RebuildResult{Outcome: RebuildSkipped}
 	}
-
-	// The rebuild deliberately outlives the request. Build clears the account's positions
-	// before it recomputes them, so a client that navigates away mid-write would otherwise
-	// leave the account emptied until someone rebuilds by hand.
-	buildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rebuildTimeout)
-	done := make(chan error, 1)
-	go func() {
-		defer cancel()
-		done <- c.rb.Build(buildCtx, accountID)
-	}()
-
-	// Waiting out a long rebuild would run past the write timeout and lose the response.
-	// Reporting that it is still running keeps the reply inside the window and leaves the
-	// existing rebuild action as the way out.
-	reportCtx, stopWaiting := context.WithTimeout(ctx, rebuildReportTimeout)
-	defer stopWaiting()
-
-	select {
-	case err := <-done:
-		return classifyRebuild(err)
-	case <-reportCtx.Done():
-		return RebuildResult{Outcome: RebuildInProgress}
-	}
-}
-
-func classifyRebuild(err error) RebuildResult {
-	switch {
-	case err == nil:
-		return RebuildResult{Outcome: RebuildCompleted}
-	case errors.Is(err, ErrBuildInProgress):
-		return RebuildResult{Outcome: RebuildInProgress}
-	case errors.Is(err, ErrPortfolioNoSnapshots), errors.Is(err, ErrAccountNotFound):
-		return RebuildResult{Outcome: RebuildSkipped}
-	default:
-		return RebuildResult{Outcome: RebuildFailed, Err: err}
-	}
+	c.rebuilds.request(ctx, accountID)
+	return RebuildResult{Outcome: RebuildStarted}
 }
 
 type ManualTransactionInput struct {
@@ -136,6 +102,9 @@ type ManualTransactionInput struct {
 	Description *string
 }
 
+// ManualTransactionCreateResult is what a manual write produced: the stored transaction,
+// the listing it names, its signed amount and the outcome of the rebuild it asked for.
+// UpdateTransaction answers with it too.
 type ManualTransactionCreateResult struct {
 	Transaction  *Transaction
 	ListingID    *uuid.UUID
@@ -219,59 +188,19 @@ func (c *Commands) CreateTransaction(ctx context.Context, input ManualTransactio
 		return nil, ErrManualVendorTypeNotSupported
 	}
 
-	occurredAt, err := parseOccurredAt(input.OccurredAt)
+	data, listingID, err := c.manualTransactionData(ctx, string(v.Name), manualFields{
+		OccurredAt:  input.OccurredAt,
+		Type:        input.Type,
+		ListingID:   input.ListingID,
+		Amount:      input.Amount,
+		Quantity:    input.Quantity,
+		Description: input.Description,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	txType, err := parseManualType(input.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	amount, err := parseDecimalString(input.Amount, ErrManualInvalidAmount)
-	if err != nil {
-		return nil, err
-	}
-	if txType == TxCash {
-		if amount == 0 {
-			return nil, ErrManualCashAmountMustBeNonZero
-		}
-	} else if amount <= 0 {
-		return nil, ErrManualNonCashAmountMustBePos
-	}
-
-	quantity, err := parseManualQuantity(txType, input.Quantity)
-	if err != nil {
-		return nil, err
-	}
-
-	listingID, isin, symbol, err := c.resolveManualListing(ctx, txType, input.ListingID)
-	if err != nil {
-		return nil, err
-	}
-
-	unitPrice := 0.0
-	if txType == TxBuy || txType == TxSell {
-		unitPrice = amount / quantity
-	}
-
-	description := ""
-	if input.Description != nil {
-		description = strings.TrimSpace(*input.Description)
-	}
-
-	tx, err := NewManualTransaction(TransactionData{
-		Source:      string(v.Name),
-		OccurredAt:  occurredAt,
-		ISIN:        isin,
-		Symbol:      symbol,
-		Description: description,
-		Type:        txType,
-		Quantity:    quantity,
-		Price:       unitPrice,
-		Amount:      amount,
-	}, input.AccountID)
+	tx, err := NewManualTransaction(data, input.AccountID)
 	if err != nil {
 		return nil, fmt.Errorf("manual transaction: create transaction: %w", err)
 	}
@@ -291,6 +220,178 @@ func (c *Commands) CreateTransaction(ctx context.Context, input ManualTransactio
 		SignedAmount: signedAmount,
 		Rebuild:      c.rebuild(ctx, input.AccountID),
 	}, nil
+}
+
+// manualFields are the parts of a manual transaction a person types in. Create and edit
+// share them so both paths enforce the same rules.
+type manualFields struct {
+	OccurredAt  string
+	Type        string
+	ListingID   *uuid.UUID
+	Amount      string
+	Quantity    *string
+	Description *string
+}
+
+// manualTransactionData validates manual fields and resolves the listing into the
+// TransactionData a manual transaction is built from, along with the listing it names.
+func (c *Commands) manualTransactionData(ctx context.Context, source string, f manualFields) (TransactionData, *uuid.UUID, error) {
+	occurredAt, err := parseOccurredAt(f.OccurredAt)
+	if err != nil {
+		return TransactionData{}, nil, err
+	}
+
+	txType, err := parseManualType(f.Type)
+	if err != nil {
+		return TransactionData{}, nil, err
+	}
+
+	amount, err := parseDecimalString(f.Amount, ErrManualInvalidAmount)
+	if err != nil {
+		return TransactionData{}, nil, err
+	}
+	if txType == TxCash {
+		if amount == 0 {
+			return TransactionData{}, nil, ErrManualCashAmountMustBeNonZero
+		}
+	} else if amount <= 0 {
+		return TransactionData{}, nil, ErrManualNonCashAmountMustBePos
+	}
+
+	quantity, err := parseManualQuantity(txType, f.Quantity)
+	if err != nil {
+		return TransactionData{}, nil, err
+	}
+
+	listingID, isin, symbol, err := c.resolveManualListing(ctx, txType, f.ListingID)
+	if err != nil {
+		return TransactionData{}, nil, err
+	}
+
+	unitPrice := 0.0
+	if txType == TxBuy || txType == TxSell {
+		unitPrice = amount / quantity
+	}
+
+	description := ""
+	if f.Description != nil {
+		description = strings.TrimSpace(*f.Description)
+	}
+
+	return TransactionData{
+		Source:      source,
+		OccurredAt:  occurredAt,
+		ISIN:        isin,
+		Symbol:      symbol,
+		Description: description,
+		Type:        txType,
+		Quantity:    quantity,
+		Price:       unitPrice,
+		Amount:      amount,
+	}, listingID, nil
+}
+
+// ManualTransactionUpdateInput replaces what was entered for one manual transaction. The
+// vendor it was entered under is not part of it and stays as it was.
+type ManualTransactionUpdateInput struct {
+	AccountID   uuid.UUID
+	ID          uuid.UUID
+	OccurredAt  string
+	Type        string
+	ListingID   *uuid.UUID
+	Amount      string
+	Quantity    *string
+	Description *string
+}
+
+// UpdateTransaction replaces the fields of one manually entered transaction under the same
+// rules as creating one, then asks for a rebuild because the edited row changes the stream
+// positions and snapshots are computed from. Imported transactions are refused: they stay
+// as the statement records them, and their checksum is what recognises them on re-import.
+func (c *Commands) UpdateTransaction(ctx context.Context, input ManualTransactionUpdateInput) (*ManualTransactionCreateResult, error) {
+	current, err := c.editableTransaction(ctx, input.AccountID, input.ID)
+	if err != nil {
+		return nil, fmt.Errorf("update transaction: %w", err)
+	}
+
+	data, listingID, err := c.manualTransactionData(ctx, current.Source, manualFields{
+		OccurredAt:  input.OccurredAt,
+		Type:        input.Type,
+		ListingID:   input.ListingID,
+		Amount:      input.Amount,
+		Quantity:    input.Quantity,
+		Description: input.Description,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Built as a fresh manual transaction so the checksum follows the edited content the
+	// same way it does on create; only the identity of the row is carried over.
+	edited, err := NewManualTransaction(data, input.AccountID)
+	if err != nil {
+		return nil, fmt.Errorf("update transaction: %w", err)
+	}
+	edited.ID = current.ID
+	edited.CreatedAt = current.CreatedAt
+
+	clash, err := c.qs.TransactionByChecksum(ctx, input.AccountID, edited.Checksum)
+	if err != nil {
+		return nil, fmt.Errorf("update transaction: check for duplicate: %w", err)
+	}
+	if clash != nil && clash.ID != current.ID {
+		return nil, fmt.Errorf("update transaction: %w", ErrDuplicateTransaction)
+	}
+
+	updated, err := c.cs.UpdateManualTransaction(ctx, edited)
+	if err != nil {
+		return nil, fmt.Errorf("update transaction: %w", err)
+	}
+	if updated == 0 {
+		return nil, fmt.Errorf("update transaction: %w", ErrTransactionNotFound)
+	}
+
+	return &ManualTransactionCreateResult{
+		Transaction:  edited,
+		ListingID:    listingID,
+		SignedAmount: SignedAmountForRead(edited.Type, edited.Quantity, edited.AmountCents.Float64()),
+		Rebuild:      c.rebuild(ctx, input.AccountID),
+	}, nil
+}
+
+// DeleteTransaction removes one manually entered transaction, then asks for a rebuild.
+// Imported transactions are refused: removing one would only last until the same
+// statement is uploaded again.
+func (c *Commands) DeleteTransaction(ctx context.Context, accountID, id uuid.UUID) (RebuildResult, error) {
+	if _, err := c.editableTransaction(ctx, accountID, id); err != nil {
+		return RebuildResult{}, fmt.Errorf("delete transaction: %w", err)
+	}
+	deleted, err := c.cs.DeleteManualTransaction(ctx, accountID, id)
+	if err != nil {
+		return RebuildResult{}, fmt.Errorf("delete transaction: %w", err)
+	}
+	if deleted == 0 {
+		return RebuildResult{}, fmt.Errorf("delete transaction: %w", ErrTransactionNotFound)
+	}
+	return c.rebuild(ctx, accountID), nil
+}
+
+// editableTransaction returns the account's transaction when it was entered by hand.
+func (c *Commands) editableTransaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error) {
+	if c.qs == nil {
+		return nil, fmt.Errorf("no transaction reader configured")
+	}
+	current, err := c.qs.Transaction(ctx, accountID, id)
+	if err != nil {
+		return nil, fmt.Errorf("fetch transaction: %w", err)
+	}
+	if current == nil {
+		return nil, ErrTransactionNotFound
+	}
+	if !current.IsManual() {
+		return nil, ErrTransactionNotEditable
+	}
+	return current, nil
 }
 
 func (c *Commands) resolveManualListing(ctx context.Context, txType TransactionType, listingID *uuid.UUID) (*uuid.UUID, *string, *string, error) {

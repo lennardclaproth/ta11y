@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,14 +28,16 @@ type Builder struct {
 
 type PositionStore interface {
 	GetLastSnapshot(ctx context.Context, positionID uuid.UUID) (*PositionSnapshot, error)
-	CreatePositionSnapshot(ctx context.Context, snap *PositionSnapshot) error
+	CreatePositionSnapshots(ctx context.Context, snaps []*PositionSnapshot) error
 	CreateMany(ctx context.Context, positions []*Position) error
 	UpdatePositions(ctx context.Context, transactions []Transaction) error
 }
 
 type PortfolioStore interface {
-	CreatePortfolioSnapshot(ctx context.Context, snap *PortfolioSnapshot) error
+	CreatePortfolioSnapshots(ctx context.Context, snaps []*PortfolioSnapshot) error
 	Clean(ctx context.Context, accID uuid.UUID) error
+	// Do runs fn in one database transaction that the stores join through its context.
+	Do(ctx context.Context, fn func(txCtx context.Context) error) error
 }
 
 type TransactionStore interface {
@@ -208,9 +212,6 @@ func (b *Builder) buildPositionSnapshots(
 		if err != nil {
 			return nil, fmt.Errorf("build position snapshots: new snapshot: %w", err)
 		}
-		if err := b.pss.CreatePositionSnapshot(ctx, snap); err != nil {
-			return nil, fmt.Errorf("build position snapshots: create snapshot: %w", err)
-		}
 		prevSnapshot = snap
 		snapshots = append(snapshots, snap)
 	}
@@ -301,7 +302,7 @@ func (b *Builder) buildPositions(ctx context.Context, accID uuid.UUID) ([]*Posit
 	for _, pos := range allPositions {
 		listing, err := b.mdq.ListingByIdentity(ctx, normalizedID(pos.ISIN), normalizedID(pos.Symbol))
 		if err == nil && listing != nil {
-			pos.ListingID = &listing.ID
+			pos.linkToListing(listing)
 		}
 		posList = append(posList, pos)
 	}
@@ -319,20 +320,15 @@ func (b *Builder) buildPositions(ctx context.Context, accID uuid.UUID) ([]*Posit
 
 // Build builds the portfolio based on the transactions.
 func (b *Builder) Build(ctx context.Context, accID uuid.UUID) (err error) {
-	// Acquire lock on account
+	// The lock is taken outside the transaction below, so a concurrent rebuild sees it
+	// straight away rather than once this one commits.
 	acquired, err := b.lk.TryAcquireBuildLock(ctx, accID)
 	if err != nil {
 		return fmt.Errorf("portfolio build failed to acquire build lock: %w", err)
 	}
-	if err != nil {
-		return fmt.Errorf("portfolio build failed to clean: %w", err)
-	}
 	if !acquired {
 		return ErrBuildInProgress
 	}
-	// Clean up existing snapshots and positions for this account, since we're
-	// doing a full rebuild. Only do this after we have acquired the lock.
-	err = b.pfs.Clean(ctx, accID)
 	defer func() {
 		// Ensure we always clear the syncing flag, even if the request context is canceled.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -347,57 +343,113 @@ func (b *Builder) Build(ctx context.Context, accID uuid.UUID) (err error) {
 			}
 		}
 	}()
-	// Build the positions
+
+	// The rebuild replaces the account's positions and snapshots wholesale, so it runs as
+	// one transaction: readers keep the previous result until it commits, and a rebuild
+	// that fails or is cut short leaves that result in place instead of a half-built one.
+	var noSnapshots bool
+	if err := b.pfs.Do(ctx, func(txCtx context.Context) error {
+		built, err := b.rebuild(txCtx, accID)
+		noSnapshots = !built
+		return err
+	}); err != nil {
+		return err
+	}
+	// Nothing priced is still a finished rebuild: the cleared positions are committed so
+	// they no longer show, and the caller learns there is nothing to chart.
+	if noSnapshots {
+		return ErrPortfolioNoSnapshots
+	}
+	b.publishRebuilt(ctx, accID)
+	return nil
+}
+
+// rebuild clears and recomputes the account's positions and snapshots. It reports false
+// when no position produced a snapshot, in which case only the cleared state is written.
+func (b *Builder) rebuild(ctx context.Context, accID uuid.UUID) (bool, error) {
+	if err := b.pfs.Clean(ctx, accID); err != nil {
+		return false, fmt.Errorf("portfolio build failed to clean: %w", err)
+	}
 	positions, err := b.buildPositions(ctx, accID)
 	if err != nil {
-		return fmt.Errorf("portfolio build failed to build positions: %w", err)
+		return false, fmt.Errorf("portfolio build failed to build positions: %w", err)
 	}
-	// Build the position snapshots for all positions and store them
 	var positionSnapshots []*PositionSnapshot
 	for _, ps := range positions {
 		snapshots, err := b.buildPositionSnapshots(ctx, accID, ps)
 		if err != nil {
-			return fmt.Errorf("portfolio build failed to build position snapshots for position %s: %w", ps.ID, err)
+			return false, fmt.Errorf("portfolio build failed to build position snapshots for position %s: %w", ps.ID, err)
 		}
 		positionSnapshots = append(positionSnapshots, snapshots...)
 	}
 	if len(positionSnapshots) == 0 {
-		return ErrPortfolioNoSnapshots
+		return false, nil
 	}
-	// Loop through days and build portfolio snapshots
-	startDate := positionSnapshots[0].OccurredAt
-	endExclusive := date.StartOfDayUTC(time.Now())
-	idx := 0 // set iterator for iterating through snapshots because there ca be multiple snapshots in one day
+	if err := b.pss.CreatePositionSnapshots(ctx, positionSnapshots); err != nil {
+		return false, fmt.Errorf("portfolio build failed to persist position snapshots: %w", err)
+	}
+	snapshots := aggregatePortfolioSnapshots(accID, positionSnapshots, date.StartOfDayUTC(time.Now()))
+	if err := b.pfs.CreatePortfolioSnapshots(ctx, snapshots); err != nil {
+		return false, fmt.Errorf("portfolio build failed to persist portfolio snapshots: %w", err)
+	}
+	return true, nil
+}
+
+// linkToListing attaches the position to its listing. Statement rows often identify an
+// instrument by ISIN alone, so a position without a symbol takes the listing's ticker.
+func (p *Position) linkToListing(listing *marketdata.Listing) {
+	p.ListingID = &listing.ID
+	if p.Symbol != nil && strings.TrimSpace(*p.Symbol) != "" {
+		return
+	}
+	if symbol := strings.TrimSpace(listing.Symbol); symbol != "" {
+		p.Symbol = &symbol
+	}
+}
+
+// aggregatePortfolioSnapshots builds one account snapshot per day, from the earliest
+// position snapshot up to endExclusive. Position snapshots arrive grouped per position, so
+// they are ordered by day first. Each position then contributes its most recent snapshot on
+// or before that day: a position without a snapshot that day carries forward, and a closed
+// position keeps its realized result, income and costs at zero market value.
+func aggregatePortfolioSnapshots(
+	accID uuid.UUID,
+	positionSnapshots []*PositionSnapshot,
+	endExclusive time.Time,
+) []*PortfolioSnapshot {
+	if len(positionSnapshots) == 0 {
+		return nil
+	}
+	ordered := make([]*PositionSnapshot, len(positionSnapshots))
+	copy(ordered, positionSnapshots)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].OccurredAt.Before(ordered[j].OccurredAt)
+	})
+
+	latest := make(map[uuid.UUID]*PositionSnapshot)
+	var positionOrder []uuid.UUID
+	var snapshots []*PortfolioSnapshot
 	var prevSnapshot *PortfolioSnapshot
-	var prevPss []*PositionSnapshot
-	for d := date.StartOfDayUTC(startDate); d.Before(endExclusive); d = d.AddDate(0, 0, 1) {
+	idx := 0
+	for d := date.StartOfDayUTC(ordered[0].OccurredAt); d.Before(endExclusive); d = d.AddDate(0, 0, 1) {
 		dayEnd := date.EndOfDayUTC(d)
-		var pss []*PositionSnapshot
-		// Consume snapshots of this day
-		for idx < len(positionSnapshots) && !positionSnapshots[idx].OccurredAt.UTC().After(dayEnd) {
-			pss = append(pss, positionSnapshots[idx])
+		for idx < len(ordered) && !ordered[idx].OccurredAt.UTC().After(dayEnd) {
+			ps := ordered[idx]
+			if _, seen := latest[ps.PositionID]; !seen {
+				positionOrder = append(positionOrder, ps.PositionID)
+			}
+			latest[ps.PositionID] = ps
 			idx++
 		}
-		// set pss prevPss if no snapshots are in this day, to carry forward values
-		if len(pss) == 0 {
-			pss = prevPss
+		pss := make([]*PositionSnapshot, 0, len(positionOrder))
+		for _, id := range positionOrder {
+			pss = append(pss, latest[id])
 		}
-		// Build portfolio snapshot
-		snap := NewPortfolioSnapshot(
-			accID,
-			d,
-			0,
-			pss,
-			prevSnapshot,
-		)
-		if err := b.pfs.CreatePortfolioSnapshot(ctx, snap); err != nil {
-			return fmt.Errorf("portfolio build failed to persist portfolio snapshot: %w", err)
-		}
+		snap := NewPortfolioSnapshot(accID, d, 0, pss, prevSnapshot)
+		snapshots = append(snapshots, snap)
 		prevSnapshot = snap
-		prevPss = pss
 	}
-	b.publishRebuilt(ctx, accID)
-	return nil
+	return snapshots
 }
 
 // publishRebuilt announces that an account's portfolio was rebuilt. It is a

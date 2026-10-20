@@ -60,6 +60,9 @@ type Transaction struct {
 type TransactionWithListingID struct {
 	Transaction
 	ListingID *uuid.UUID `db:"listing_id"`
+	// ListingSymbol is the symbol of the listing the transaction's position is linked to.
+	// It stands in for Symbol on rows that carry only an ISIN, as imported rows usually do.
+	ListingSymbol *string `db:"listing_symbol"`
 }
 
 type CsvParser interface {
@@ -227,9 +230,10 @@ func newTransaction(
 }
 
 // IsManual reports whether the transaction was entered by hand rather than imported.
-// Only manual transactions may be moved to another date: the checksum that recognises a
-// re-imported row carries its date, so moving an imported row would make the next import
-// of the same file insert it again.
+// Only manual transactions may be moved to another date, edited or deleted: the checksum
+// that recognises a re-imported row carries what the statement says, so changing an imported
+// row would make the next import of the same file insert it again, and a deleted one would
+// simply come back.
 func (t *Transaction) IsManual() bool {
 	return t.Origin == TransactionOriginManual
 }

@@ -4,7 +4,7 @@
 >
 > **Backend packages:** `internal/importer` · `internal/cashflow` · `internal/portfolio` · `internal/marketdata` · `transport/http/handlers/importer`
 >
-> **Frontend:** `web/src/lib/components/organisms/import-dialog` · `web/src/lib/components/molecules/activity-trail` · `web/src/lib/services/importer.ts`
+> **Frontend:** `web/src/lib/components/organisms/import-dialog` · `web/src/lib/components/organisms/cashflow-import-dialog` · `web/src/lib/components/molecules/activity-trail` · `web/src/lib/services/importer.ts`
 >
 > **Related features:** [002] CSV imports · [009] Cashflow · [013] Portfolio · [005] Market data · [001] Realtime updates
 
@@ -13,7 +13,8 @@
 A monthly broker account statement is one file with two audiences: the money movements
 belong in Cashflow, the trades belong in Portfolio. This feature makes that one
 handling — an import panel reachable from both pages — and makes repeating it safe,
-because consecutive exports overlap.
+because consecutive exports overlap. A bank statement (ING, N26) has one audience,
+Cashflow, and gets its own panel there.
 
 ## Domain
 
@@ -70,7 +71,13 @@ its headers are not the ones that export carries (`parsers.ErrMissingHeader`). T
 deserves a different answer than a generic failure — a different file, not a retry — so
 the panel says so and reports that nothing was changed. Nothing else is classified that
 way: a read failure on the server stays a generic failure, which is the one the user can
-usefully retry.
+usefully retry. The DEGIRO and N26 parsers check their headers; ING requires `Date`,
+`Name / Description`, `Debit/credit` and `Amount (EUR)` (a leading byte order mark is
+stripped first).
+
+`failed` counts the rows an ING or N26 statement contains but its parser could not read
+— a bad date, amount or direction. The cashflow `CsvParser` yields every row with its
+error rather than dropping it, and the processor counts it while importing the rest.
 
 The stored upload is removed once an import reaches a terminal state: the rows have
 been taken over by the target feature and nothing reads the file again.
@@ -87,6 +94,14 @@ The performance step reports that the rebuild *started*, not that it finished: t
 rebuild is kicked off by the completed portfolio import ([013]) and runs on its own, so
 the panel does not claim a finish it cannot observe.
 
+**Bank statements.** **Import CSV** on Cashflow opens `organisms/cashflow-import-dialog`
+instead: a bank account (vendors of type `bank`) and a file, posted to
+`POST /imports/cashflow` only. Its trail is File → Cashflow → Recurring; the recurring
+step reports that matching *started*, because linking rows to confirmed recurring items
+([033]) runs on `import.completed`. A file the bank's parser refuses goes back to the form
+as the wrong export. A link in the panel hands a DEGIRO statement to the brokerage panel.
+Portfolio's **Import CSV** still opens the brokerage panel directly.
+
 ## Code map
 
 | Path | Responsibility |
@@ -95,18 +110,26 @@ the panel does not claim a finish it cannot observe.
 | `internal/importer/queries.go` | Read side: one import's result, `FailureReason` |
 | `internal/importer/{cashflow,portfolio}/processor.go` | Stamp the sequence; classify a header mismatch as the wrong export |
 | `internal/importer/{cashflow,portfolio}/parsers/errors.go` | `ErrMissingHeader` — the one parse failure that means "wrong file" |
+| `internal/importer/cashflow/parsers/{ing,n26}.go` | Bank statement parsers; unreadable rows are yielded with their error |
 | `internal/cashflow/transaction.go`, `internal/portfolio/transaction.go` | Checksum over content + sequence |
 | `internal/marketdata/queries.go` | `ListingByIdentity` — exact ISIN, else exact symbol |
 | `internal/portfolio/builder.go` | Position → listing linking on every rebuild |
 | `internal/portfolio/queries.go` | `UnlinkedProducts` for one import |
 | `transport/http/handlers/importer/get.go` | `GET /imports/{import_id}` |
-| `web/src/lib/components/organisms/import-dialog/` | The panel |
+| `web/src/lib/components/organisms/import-dialog/` | The brokerage panel |
+| `web/src/lib/components/organisms/cashflow-import-dialog/` | The bank statement panel |
 | `web/src/lib/services/importer.mock.ts` | Fixture-mode stand-in for the pipeline |
 
 ## Gaps / not implemented
 
-- **Only DEGIRO.** ING and N26 have cashflow parsers but no portfolio parser, so the
-  panel offers brokerage vendors only.
+- **Only DEGIRO for brokerage.** ING and N26 have cashflow parsers only, so they are
+  offered in the bank statement panel and not in the brokerage one.
+- **DEGIRO rows that do not parse are not counted.** Both DEGIRO parsers still skip such a
+  row, so `failed` stays 0 for a brokerage import; only ING and N26 count them.
+- **ING reads the English export only.** The Dutch headers (`Datum`, `Af Bij`, …) are
+  refused as the wrong file.
+- **No count of recurring links.** The import result does not say how many rows were
+  linked to a recurring item, so the panel only says that matching started.
 - **No import history.** The result is not retrievable once the panel is closed —
   `GET /imports/{import_id}` needs the id, and nothing lists past imports.
 - **No post-processing.** Imported rows cannot be edited, merged, or rolled back.

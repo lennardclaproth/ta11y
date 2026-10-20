@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
@@ -18,7 +19,13 @@
 	import Select from '$lib/components/atoms/select/Select.svelte';
 	import Alert from '$lib/components/molecules/alert/Alert.svelte';
 	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
-	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
+	import PortfolioTransactionDrawer from '$lib/components/organisms/portfolio-transaction-drawer/PortfolioTransactionDrawer.svelte';
+	import FooterBar from '$lib/components/organisms/footer-bar/FooterBar.svelte';
+	import {
+		portfolioTransactionTypeOptions,
+		typeNeedsListing,
+		typeNeedsQuantity
+	} from '$lib/components/organisms/portfolio-transaction-drawer/portfolio-transaction-drawer.types';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
 	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
@@ -27,10 +34,12 @@
 		getPortfolioSnapshots,
 		listPortfolioTransactions,
 		createManualPortfolioTransaction,
-		changePortfolioTransactionDate,
+		updatePortfolioTransaction,
+		deletePortfolioTransaction,
 		rebuildPortfolio
 	} from '$lib/services/portfolio';
 	import { listVendors } from '$lib/services/vendors';
+	import { connectRealtime } from '$lib/services/realtime';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore } from '$lib/stores/period.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -47,12 +56,17 @@
 		PortfolioSnapshotPoint,
 		PortfolioTransaction,
 		PortfolioTransactionType,
+		PortfolioTransactionsQuery,
+		UpdatePortfolioTransactionRequest,
 		Vendor
 	} from '$lib/api/types';
 
 	let positions = $state<PortfolioPosition[]>([]);
 	let snapshots = $state<PortfolioSnapshotPoint[]>([]);
 	let transactions = $state<PortfolioTransaction[]>([]);
+	let txLimit = $state(25);
+	let txOffset = $state(0);
+	let txTotal = $state(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let tab = $state('positions');
@@ -88,13 +102,20 @@
 
 	let detailRow = $state<PortfolioTransaction | null>(null);
 	let detailOpen = $state(false);
-	let detailDate = $state('');
-	let savingDate = $state(false);
-	let dateError = $state<string | null>(null);
+	// Bumped on every open, so reopening the same row gives a fresh form rather than one
+	// carrying discarded edits or the values from before the last save.
+	let detailOpenCount = $state(0);
+	let savingDetail = $state(false);
+	let deletingDetail = $state(false);
+	let detailError = $state<string | null>(null);
 
-	// Set when a write was saved but its rebuild did not finish, so what is on screen (positions,
-	// performance, net worth) still reflects the previous result.
-	let stale = $state<{ date: string; outcome: PortfolioRebuildOutcome } | null>(null);
+	// Set while the background rebuild a write started is running, so what is on screen
+	// (positions, performance, net worth) is known to still be the previous result. Cleared
+	// by the portfolio.rebuilt event that refreshes the page.
+	let updating = $state(false);
+	// When the last portfolio.rebuilt event arrived. A small account can finish rebuilding
+	// before the write's response is handled, and that write must not then raise the banner.
+	let lastRebuiltAt = 0;
 
 	const tabs = [
 		{ value: 'positions', label: 'Positions' },
@@ -107,18 +128,11 @@
 		{ value: 'all', label: 'All' }
 	];
 
-	const txTypeOptions = [
-		{ value: 'BUY', label: 'Buy' },
-		{ value: 'SELL', label: 'Sell' },
-		{ value: 'DIVIDEND', label: 'Dividend' },
-		{ value: 'TAX', label: 'Tax' },
-		{ value: 'FEE', label: 'Fee' },
-		{ value: 'CASH', label: 'Cash' }
-	];
+	const txTypeOptions = [...portfolioTransactionTypeOptions];
 
 	// Backend rules: non-CASH types require a listing; BUY/SELL additionally require a quantity.
-	const needsListing = $derived(txType !== 'CASH');
-	const needsQuantity = $derived(txType === 'BUY' || txType === 'SELL');
+	const needsListing = $derived(typeNeedsListing(txType));
+	const needsQuantity = $derived(typeNeedsQuantity(txType));
 	const vendorOptions = $derived(vendors.map((v) => ({ value: v.id, label: v.name })));
 
 	const monthShort = (iso: string) =>
@@ -171,7 +185,7 @@
 		if (tab === 'positions') {
 			return `${visiblePositions.length} ${visiblePositions.length === 1 ? 'position' : 'positions'}`;
 		}
-		return `${transactions.length} ${transactions.length === 1 ? 'row' : 'rows'}`;
+		return `${txTotal} ${txTotal === 1 ? 'row' : 'rows'}`;
 	});
 
 	// An empty list after a search is a different situation from an account with no positions.
@@ -209,20 +223,14 @@
 				positions = [];
 				return;
 			}
-			const [snaps, txs] = await Promise.all([
+			const [snaps] = await Promise.all([
 				getPortfolioSnapshots({
 					from: from || undefined,
 					to: to || undefined
 				}),
-				listPortfolioTransactions({
-					limit: 25,
-					q: transactionQuery || undefined,
-					from: from || undefined,
-					to: to || undefined
-				})
+				loadTransactions()
 			]);
 			snapshots = snaps;
-			transactions = txs.data;
 			await loadPositions();
 		} catch {
 			error = 'Failed to load portfolio';
@@ -231,16 +239,54 @@
 		}
 	}
 
-	// Reload (zooming the value chart, filtering transactions) on date/search change; also initial load.
+	// One page of transactions. Paging calls this on its own, so turning a page does not
+	// reload the chart and positions above it.
+	let transactionsRequest = 0;
+	async function loadTransactions(): Promise<void> {
+		// Paging and a full reload can overlap; only the latest request may write the table.
+		const request = ++transactionsRequest;
+		const result = await listPortfolioTransactions({
+			// FooterBar only offers the page sizes the API accepts.
+			limit: txLimit as PortfolioTransactionsQuery['limit'],
+			offset: txOffset,
+			q: transactionQuery || undefined,
+			from: from || undefined,
+			to: to || undefined
+		});
+		if (request !== transactionsRequest) return;
+		txTotal = result.pagination.total;
+		// Deleting the last row of the last page leaves the offset past the end; step back to
+		// the page that now holds the final rows instead of showing an empty table.
+		const lastPageOffset = Math.max(0, Math.floor((txTotal - 1) / txLimit) * txLimit);
+		if (result.data.length === 0 && txOffset > lastPageOffset) {
+			txOffset = lastPageOffset;
+			return loadTransactions();
+		}
+		transactions = result.data;
+	}
+
+	async function changeTransactionsPage() {
+		try {
+			await loadTransactions();
+		} catch {
+			toast.error('Failed to load transactions');
+		}
+	}
+
+	// Reload (zooming the value chart, filtering transactions) on date/search change; also initial
+	// load. A different period or search starts the transactions from their first page.
 	$effect(() => {
 		void from;
 		void to;
 		void transactionQuery;
+		txOffset = 0;
 		void loadAll();
 	});
 
 	$effect(() => {
-		// Reads `includeClosed` synchronously, so it reloads positions when the toggle changes.
+		// `loadPositions` reads `includeClosed` only after an await, where the effect no longer
+		// tracks it, so it is read here to reload positions when the status filter changes.
+		void includeClosed;
 		void loadPositions();
 	});
 
@@ -264,7 +310,7 @@
 		if (vendors.length > 0) return;
 		try {
 			const all = await listVendors();
-			vendors = all.filter((v) => v.active && v.type === 'portfolio');
+			vendors = all.filter((v) => v.active && v.type === 'brokerage');
 			if (vendors.length > 0) vendorId = vendors[0].id;
 		} catch {
 			// Leave the vendor list empty; the form will warn on submit.
@@ -293,6 +339,7 @@
 		txError = null;
 		try {
 			await accountStore.ensureLoaded();
+			const sentAt = Date.now();
 			const created = await createManualPortfolioTransaction({
 				vendor_id: vendorId,
 				occurred_at: txDate,
@@ -304,7 +351,7 @@
 			});
 			txOpen = false;
 			toast.success('Transaction added');
-			noteRebuild(created.rebuild, txDate);
+			noteRebuild(created.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
 			txError = createMessage(err, txDate);
@@ -316,34 +363,89 @@
 
 	function openDetail(row: PortfolioTransaction) {
 		detailRow = row;
-		detailDate = row.occurred_at.slice(0, 10);
-		dateError = null;
+		detailError = null;
+		detailOpenCount += 1;
 		detailOpen = true;
 	}
 
-	async function handleDateChange(date: string) {
+	// A 404 naming the transaction (not the listing) means it was removed elsewhere.
+	function isMissingTransaction(err: unknown): boolean {
+		return (
+			err instanceof ApiError &&
+			err.status === 404 &&
+			typeof err.body === 'object' &&
+			err.body !== null &&
+			'transaction_id' in err.body
+		);
+	}
+
+	async function handleDetailSave(body: UpdatePortfolioTransactionRequest) {
 		const row = detailRow;
 		if (!row) return;
-		savingDate = true;
-		dateError = null;
+		savingDetail = true;
+		detailError = null;
 		try {
-			const result = await changePortfolioTransactionDate({ id: row.id, occurred_at: date });
+			const sentAt = Date.now();
+			const result = await updatePortfolioTransaction(row.id, body);
 			detailOpen = false;
-			toast.success(`Moved to ${formatDisplayDate(date)}`);
-			noteRebuild(result.rebuild, date);
+			toast.success('Transaction updated');
+			noteRebuild(result.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
-			dateError = dateChangeMessage(err, date);
+			detailError = editMessage(err, body.occurred_at);
+			if (isMissingTransaction(err)) void loadAll();
 		} finally {
-			savingDate = false;
+			savingDetail = false;
 		}
 	}
 
-	// A write that was not followed by a finished rebuild leaves the page showing the previous
-	// result, so it says so and keeps the existing rebuild action as the way out.
-	function noteRebuild(outcome: PortfolioRebuildOutcome, date: string) {
-		stale = outcome === 'completed' || outcome === 'skipped' ? null : { date, outcome };
+	async function handleDetailDelete() {
+		const row = detailRow;
+		if (!row) return;
+		const day = row.occurred_at.slice(0, 10);
+		deletingDetail = true;
+		detailError = null;
+		try {
+			const sentAt = Date.now();
+			const result = await deletePortfolioTransaction(row.id);
+			detailOpen = false;
+			toast.success('Transaction deleted');
+			noteRebuild(result.rebuild, sentAt);
+			void loadAll();
+		} catch (err) {
+			detailError = editMessage(err, day);
+			if (isMissingTransaction(err)) void loadAll();
+		} finally {
+			deletingDetail = false;
+		}
 	}
+
+	// A write answers before its rebuild runs, so until the rebuild reports back the page
+	// says that positions, performance and net worth are still being brought up to date.
+	function noteRebuild(outcome: PortfolioRebuildOutcome, sentAt: number) {
+		updating = outcome === 'started' && lastRebuiltAt < sentAt;
+	}
+
+	// A finished rebuild, whoever started it, is announced over the account socket; that is
+	// when the page catches up with the writes made on it.
+	onMount(() => {
+		let realtime: { disconnect: () => void } | null = null;
+		void accountStore.ensureLoaded().then(() => {
+			if (!accountStore.hasAccount) return;
+			realtime = connectRealtime({
+				accountId: accountStore.activeId,
+				events: ['portfolio.rebuilt'],
+				onEvent: () => {
+					lastRebuiltAt = Date.now();
+				},
+				onRefresh: () => {
+					updating = false;
+					void loadAll();
+				}
+			});
+		});
+		return () => realtime?.disconnect();
+	});
 
 	const genericWriteMessage = 'Could not save the transaction. Try again.';
 
@@ -364,7 +466,7 @@
 	}
 
 	// The two paths share statuses but not their meaning: a 422 on the create is an unsupported
-	// vendor type, on a date change it is a row that came from an import.
+	// vendor type, on an edit or delete it is a row that came from an import.
 	function createMessage(err: unknown, date: string): string {
 		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
 		if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
@@ -373,10 +475,19 @@
 		return genericWriteMessage;
 	}
 
-	function dateChangeMessage(err: unknown, date: string): string {
+	function editMessage(err: unknown, date: string): string {
 		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
 		if (err instanceof ApiError && err.status === 422) {
-			return 'This transaction came from an import, so it keeps its statement date.';
+			return 'This transaction came from an import, so it stays as the statement records it.';
+		}
+		if (isMissingTransaction(err)) {
+			return 'This transaction no longer exists; the list has been refreshed.';
+		}
+		if (err instanceof ApiError && err.status === 404) {
+			return 'That listing no longer exists. Pick another one.';
+		}
+		if (err instanceof ApiError && err.status === 400) {
+			return fieldMessage(err) ?? genericWriteMessage;
 		}
 		return genericWriteMessage;
 	}
@@ -387,7 +498,7 @@
 		try {
 			await accountStore.ensureLoaded();
 			await rebuildPortfolio();
-			stale = null;
+			updating = false;
 			toast.success('Portfolio rebuild started');
 			void loadAll();
 		} catch {
@@ -478,27 +589,10 @@
 			</div>
 		{/snippet}
 
-		{#if stale}
-			<Alert intent="warning" title="Portfolio not updated yet">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<span>
-						The transaction was saved on {formatDisplayDate(stale.date)}, but
-						{stale.outcome === 'in_progress'
-							? 'a rebuild was already running'
-							: 'the rebuild did not finish'}. Positions, performance and net worth still show the
-						previous result.
-					</span>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						shape="default"
-						loading={rebuilding}
-						onclick={() => void handleRebuild()}
-					>
-						Rebuild portfolio
-					</Button>
-				</div>
+		{#if updating}
+			<Alert intent="info" title="Updating your portfolio">
+				The transaction is saved. Positions, performance and net worth are being recalculated, and
+				this page refreshes as soon as that is done.
 			</Alert>
 		{/if}
 
@@ -583,7 +677,17 @@
 							value: (r: PortfolioTransaction) => r.amount
 						}
 					]}
-				/>
+				>
+					{#snippet footer()}
+						<FooterBar
+							total={txTotal}
+							bind:limit={txLimit}
+							bind:offset={txOffset}
+							onPageChange={() => void changeTransactionsPage()}
+							onLimitChange={() => void changeTransactionsPage()}
+						/>
+					{/snippet}
+				</DataTable>
 			{/if}
 		</div>
 	</PageContentTemplate>
@@ -669,31 +773,19 @@
 	{/snippet}
 </Dialog>
 
-{#snippet detailFields()}
-	{#if detailRow}
-		<div class="flex items-center justify-between gap-3 py-3">
-			<dt class="text-sm text-slate-500">Amount</dt>
-			<dd class="text-sm text-slate-800">{detailRow.amount}</dd>
-		</div>
-		<div class="flex items-center justify-between gap-3 py-3">
-			<dt class="text-sm text-slate-500">Quantity</dt>
-			<dd class="text-sm text-slate-800">{detailRow.quantity}</dd>
-		</div>
-	{/if}
-{/snippet}
-
 {#if detailRow}
-	<TransactionDetailDrawer
-		bind:open={detailOpen}
-		title={detailRow.symbol ?? detailRow.description ?? 'Transaction'}
-		originLabel={portfolioOriginLabel(detailRow)}
-		subtitle={detailRow.type}
-		editable={isManualPortfolioTransaction(detailRow)}
-		bind:date={detailDate}
-		originalDate={detailRow.occurred_at.slice(0, 10)}
-		saving={savingDate}
-		error={dateError}
-		onSave={handleDateChange}
-		details={detailFields}
-	/>
+	<!-- Keyed on every open so each one starts from the row as stored, not from earlier edits. -->
+	{#key detailOpenCount}
+		<PortfolioTransactionDrawer
+			bind:open={detailOpen}
+			transaction={detailRow}
+			editable={isManualPortfolioTransaction(detailRow)}
+			originLabel={portfolioOriginLabel(detailRow)}
+			saving={savingDetail}
+			deleting={deletingDetail}
+			error={detailError}
+			onSave={handleDetailSave}
+			onDelete={handleDetailDelete}
+		/>
+	{/key}
 {/if}
