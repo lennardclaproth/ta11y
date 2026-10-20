@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 	"github.com/lennardclaproth/ta11y/internal/marketdata"
 	"github.com/lennardclaproth/ta11y/internal/money"
 	"github.com/lennardclaproth/ta11y/internal/sorting"
@@ -46,11 +47,13 @@ type HoldingsSyncer struct {
 	hs  HoldingsStore
 	mdq *marketdata.Queries
 	uow UnitOfWork
+	log logging.Logger
 }
 
-// NewHoldingsSyncer constructs the daily-priced holdings syncer.
-func NewHoldingsSyncer(hs HoldingsStore, mdq *marketdata.Queries, uow UnitOfWork) *HoldingsSyncer {
-	return &HoldingsSyncer{hs: hs, mdq: mdq, uow: uow}
+// NewHoldingsSyncer constructs the daily-priced holdings syncer. The logger may be
+// nil, in which case a listing that cannot be read is revalued silently.
+func NewHoldingsSyncer(hs HoldingsStore, mdq *marketdata.Queries, uow UnitOfWork, log logging.Logger) *HoldingsSyncer {
+	return &HoldingsSyncer{hs: hs, mdq: mdq, uow: uow, log: log}
 }
 
 // SyncAccount rebuilds the derived mutations for every daily-priced item in the
@@ -132,7 +135,12 @@ func (s *HoldingsSyncer) pricesForHolding(
 	if err != nil {
 		// A listing that cannot be read leaves the holding valued at what was paid
 		// for it (see holdingValue); that is stale, but it is not zero, and it does
-		// not fail a rebuild that the rest of the account depends on.
+		// not fail a rebuild that the rest of the account depends on. It is logged
+		// because nothing else reports a history rewritten back to cost.
+		if s.log != nil {
+			s.log.Warn(ctx, "sync holdings: prices unavailable, holding valued at what was paid",
+				"listing_id", listingID, "error", err)
+		}
 		return nil, nil
 	}
 	series := make(map[string]money.Price, len(result.Data))

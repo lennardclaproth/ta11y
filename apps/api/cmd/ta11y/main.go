@@ -252,7 +252,7 @@ func buildApplication(
 	assetsQueries := assets.NewQueries(assetsStore, marketDataQueries)
 	assetsBuilder := assets.NewBuilder(assetsStore, assetsStore)
 	assetsSyncer := assets.NewSyncer(portfolioQueries, assetsBuilder, assetsStore, assetsStore)
-	assetsHoldings := assets.NewHoldingsSyncer(assetsStore, marketDataQueries, assetsStore)
+	assetsHoldings := assets.NewHoldingsSyncer(assetsStore, marketDataQueries, assetsStore, log)
 	assetsCommands := assets.NewCommands(assetsStore, assetsStore, *accountQueries, assetsStore, assetsStore, marketDataQuotes, bus)
 	fileQueries := files.NewQueries(fileStore)
 
