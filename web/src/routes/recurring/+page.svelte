@@ -197,18 +197,27 @@
 	}
 
 	async function handleUnlink(transaction: RecurringTransaction) {
-		if (!item) return;
+		const current = item;
+		if (!current) return;
 		unlinking = transaction.id;
+		// Only the unlink itself decides what the band says. Reading the item back is a refresh,
+		// not part of the outcome: letting it fail into the same catch would report "could not
+		// unlink" for a transaction that is already gone.
 		try {
-			await unlinkRecurringTransaction(item.id, transaction.id);
-			itemNotice = { intent: 'success', message: 'Transaction unlinked — it stays in Cashflow' };
-			item = await getRecurringItem(item.id);
-			void load();
+			await unlinkRecurringTransaction(current.id, transaction.id);
 		} catch {
 			itemNotice = { intent: 'error', message: 'Could not unlink the transaction' };
-		} finally {
 			unlinking = null;
+			return;
 		}
+		itemNotice = { intent: 'success', message: 'Transaction unlinked — it stays in Cashflow' };
+		try {
+			item = await getRecurringItem(current.id);
+		} catch {
+			// The band already reports the unlink; the drawer reads the item again when it is reopened.
+		}
+		void load();
+		unlinking = null;
 	}
 
 	async function handleEnd(month: string) {
