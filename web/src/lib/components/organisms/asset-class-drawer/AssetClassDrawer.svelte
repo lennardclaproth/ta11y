@@ -58,7 +58,29 @@
 	});
 </script>
 
-<Drawer bind:open title={details?.class.name ?? 'Asset class'} width="max-w-lg" {onClose}>
+<!-- Drawer tests whether a footer snippet was passed, not whether it renders anything, so
+     the content is a snippet of its own and only becomes the prop when there is something
+     to put in it. Otherwise an empty ruled bar sits under the drawer while it loads. -->
+{#snippet footerActions()}
+	{#if onOpenClass}
+		<Button variant="outline" intent="secondary" shape="default" onclick={onOpenClass}>
+			Open class page<Icon icon="heroicons:arrow-right" size="sm" />
+		</Button>
+	{/if}
+	{#if onAddItem}
+		<Button shape="default" onclick={onAddItem}>
+			<Icon icon="heroicons:plus" size="sm" />Add item
+		</Button>
+	{/if}
+{/snippet}
+
+<Drawer
+	bind:open
+	title={details?.class.name ?? 'Asset class'}
+	width="max-w-lg"
+	{onClose}
+	footer={details && !loading && !error && (onOpenClass || onAddItem) ? footerActions : undefined}
+>
 	{#snippet header()}
 		{#if details && holdings.length > 0}
 			<Text as="p" size="sm" tone="muted">
@@ -173,18 +195,4 @@
 		<p class="text-sm text-slate-500">Select an asset class to see details.</p>
 	{/if}
 
-	{#snippet footer()}
-		{#if details && !loading && !error}
-			{#if onOpenClass}
-				<Button variant="outline" intent="secondary" shape="default" onclick={onOpenClass}>
-					Open class page<Icon icon="heroicons:arrow-right" size="sm" />
-				</Button>
-			{/if}
-			{#if onAddItem}
-				<Button shape="default" onclick={onAddItem}>
-					<Icon icon="heroicons:plus" size="sm" />Add item
-				</Button>
-			{/if}
-		{/if}
-	{/snippet}
 </Drawer>
