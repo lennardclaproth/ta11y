@@ -13,7 +13,8 @@ import (
 
 // Queries exposes read-side cashflow use cases.
 type Queries struct {
-	qs QueryStore
+	qs   QueryStore
+	irqs IgnoreRuleQueryStore
 }
 
 // QueryStore reads cashflow transactions and analytics.
@@ -27,8 +28,8 @@ type QueryStore interface {
 }
 
 // NewQueries creates cashflow read-side use cases.
-func NewQueries(qs QueryStore) *Queries {
-	return &Queries{qs: qs}
+func NewQueries(qs QueryStore, ruleQueryStore IgnoreRuleQueryStore) *Queries {
+	return &Queries{qs: qs, irqs: ruleQueryStore}
 }
 
 // AnalyticsFilter describes the filters used for cashflow analytics queries.
@@ -109,12 +110,18 @@ type TransactionListQuery struct {
 	Description string
 	Note        string
 	Source      string
+	// SourceExact narrows to one bank by name rather than by text it contains.
+	SourceExact string
 	Direction   *CashFlowDirection
 	Tags        []string
 	Untagged    bool
 	HideIgnored bool
-	From        *time.Time
-	To          *time.Time
+	// ImportID narrows the page to the rows one import brought in.
+	ImportID *uuid.UUID
+	// IgnoredByRuleID narrows the page to the rows one ignore rule ignored.
+	IgnoredByRuleID *uuid.UUID
+	From            *time.Time
+	To              *time.Time
 }
 
 // TransactionListResult contains a page of cashflow transactions and the total match count.

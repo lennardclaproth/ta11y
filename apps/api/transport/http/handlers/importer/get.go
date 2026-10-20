@@ -36,8 +36,11 @@ type ImportResultResponse struct {
 	Imported   int       `json:"imported"`
 	Duplicates int       `json:"duplicates"`
 	Failed     int       `json:"failed"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	// AutoIgnored is how many of the imported rows an ignore rule recognised. They
+	// are counted in Imported too: they were imported, and then ignored.
+	AutoIgnored int       `json:"auto_ignored"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// UnlinkedProducts is empty until a portfolio import has completed.
 	UnlinkedProducts []UnlinkedProductResponse `json:"unlinked_products"`
 }
@@ -96,6 +99,7 @@ func toImportResultResponse(result *importer.ImportResult) ImportResultResponse 
 		Imported:         imp.Imported,
 		Duplicates:       imp.Duplicates,
 		Failed:           imp.Failed,
+		AutoIgnored:      imp.AutoIgnored,
 		CreatedAt:        imp.CreatedAt,
 		UpdatedAt:        imp.UpdatedAt,
 		UnlinkedProducts: products,

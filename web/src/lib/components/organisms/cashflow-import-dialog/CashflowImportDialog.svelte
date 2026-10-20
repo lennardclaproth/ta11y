@@ -42,9 +42,17 @@
 		onFinished?: () => void;
 		/** Called when the user switches to the brokerage import for a DEGIRO statement. */
 		onBrokerageImport?: () => void;
+		/** Called with the import id when the user goes to review what it ignored. */
+		onReviewIgnored?: (importId: string) => void;
 	};
 
-	let { open = $bindable(false), vendors = [], onFinished, onBrokerageImport }: Props = $props();
+	let {
+		open = $bindable(false),
+		vendors = [],
+		onFinished,
+		onBrokerageImport,
+		onReviewIgnored
+	}: Props = $props();
 
 	/** How often an import in flight is re-read. Processing is detached, so it only arrives by asking. */
 	const POLL_MS = 1000;
@@ -74,6 +82,7 @@
 	const status = $derived<DestinationStatus>(
 		!result || result.status === 'failed' ? 'failed' : result.failed > 0 ? 'partial' : 'completed'
 	);
+	const autoIgnored = $derived(result?.auto_ignored ?? 0);
 	const everythingKnown = $derived(
 		result?.status === 'completed' &&
 			result.total_rows > 0 &&
@@ -317,6 +326,28 @@
 					<Text as="p" size="sm" tone="muted" class="mt-2">{message}</Text>
 				{/if}
 			</section>
+
+			<!-- Rows an ignore rule caught are out of the totals without anybody reading
+			     them, so the review that shows which rule did it is offered right here. -->
+			{#if autoIgnored > 0}
+				<Alert intent="info" title="{autoIgnored} rows were ignored automatically">
+					Your ignore rules recognised them, so they are out of your monthly totals.
+					<Button
+						size="sm"
+						variant="outline"
+						intent="secondary"
+						shape="default"
+						class="mt-2"
+						onclick={() => {
+							const id = result?.import_id;
+							close();
+							if (id) onReviewIgnored?.(id);
+						}}
+					>
+						Review what was ignored
+					</Button>
+				</Alert>
+			{/if}
 
 			{#if recurringStarted}
 				<Text as="p" size="sm" tone="muted">

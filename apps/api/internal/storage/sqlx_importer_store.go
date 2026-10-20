@@ -69,7 +69,7 @@ func (s *SQLXImporterStore) UpdateState(ctx context.Context, imp *importer.Impor
 		UPDATE %s
 		SET status = :status, status_msg = :status_msg, duplicates = :duplicates,
 			total_rows = :total_rows, imported = :imported, failed = :failed,
-			updated_at = :updated_at
+			auto_ignored = :auto_ignored, updated_at = :updated_at
 		WHERE id = :id
 	`, s.tableName)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, imp); err != nil {

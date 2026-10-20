@@ -97,6 +97,26 @@ func TestProcess_RemovesTheUploadWhenItFails(t *testing.T) {
 	}
 }
 
+func TestProcess_KeepsTheCountersOfAFailedImport(t *testing.T) {
+	// A cashflow import whose ignore-rule pass fails has already inserted its rows, and
+	// the rules that ran before the failure have already taken rows out of the monthly
+	// totals. The counters a failing processor reports therefore have to be written as
+	// they are, or the import review would claim nothing was ignored while rows were.
+	imp := pendingImport()
+	result := ProcessResult{TotalRows: 40, Imported: 30, Duplicates: 10, AutoIgnored: 7}
+	commands := processCommands(imp, stubProcessor{result: result, err: fmt.Errorf("apply ignore rules: boom")}, &recordingRemover{})
+
+	if err := commands.Process(context.Background(), imp.ID); err == nil {
+		t.Fatalf("expected the processing error to be returned")
+	}
+	if imp.Status != ImportStatusFailed {
+		t.Fatalf("status = %q, want %q", imp.Status, ImportStatusFailed)
+	}
+	if imp.Imported != 30 || imp.Duplicates != 10 || imp.AutoIgnored != 7 {
+		t.Fatalf("imported=%d duplicates=%d auto_ignored=%d, want the counters the processor reported", imp.Imported, imp.Duplicates, imp.AutoIgnored)
+	}
+}
+
 func TestProcess_LeavesAnImportThatIsNotPendingAlone(t *testing.T) {
 	// Redelivery must not re-run work or delete an upload a live run still needs.
 	imp := pendingImport()

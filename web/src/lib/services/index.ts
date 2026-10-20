@@ -1,5 +1,6 @@
 export * from './account';
 export * from './cashflow';
+export * from './ignoreRules';
 export * from './recurring';
 export * from './portfolio';
 export * from './assets';
