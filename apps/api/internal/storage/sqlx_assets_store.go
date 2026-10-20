@@ -131,8 +131,12 @@ func (s *SQLXAssetsStore) UpdateClass(ctx context.Context, class *assets.Class) 
 // DeleteAsset the children are deleted explicitly, because SQLite runs without
 // foreign-key enforcement and would otherwise leave them behind: the snapshot
 // builder reads mutations per account, so an orphan keeps counting towards net
-// worth with no way back to it.
+// worth with no way back to it. Its items are locked first, for the reason lockItem
+// documents: a delete of one of those items takes its row before its children too.
 func (s *SQLXAssetsStore) DeleteClass(ctx context.Context, classID uuid.UUID) error {
+	if err := s.lockClassItems(ctx, classID); err != nil {
+		return err
+	}
 	purchases := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE item_id IN (SELECT id FROM %s WHERE class_id = ?)`,
 		s.purchasesTable, s.itemsTable,
@@ -344,8 +348,13 @@ func (s *SQLXAssetsStore) UpdateAsset(ctx context.Context, asset *assets.Asset) 
 }
 
 // DeleteAsset removes an item with its mutations and purchases. The children are
-// deleted explicitly because SQLite runs without foreign-key enforcement.
+// deleted explicitly because SQLite runs without foreign-key enforcement. The item row
+// is locked first to keep the order lockItem documents, even though this path ends up
+// removing it.
 func (s *SQLXAssetsStore) DeleteAsset(ctx context.Context, assetID uuid.UUID) error {
+	if err := s.lockItem(ctx, assetID); err != nil {
+		return err
+	}
 	for _, table := range []string{s.mutationsTable, s.purchasesTable} {
 		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE item_id = ?`, table))
 		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID); err != nil {
@@ -425,6 +434,10 @@ func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutati
 // sees the row that is gone. SQLite has no FOR UPDATE and needs none: _txlock=immediate
 // serialises writers already. A missing item is left to the delete, which removes
 // nothing and reports the same error as before.
+//
+// Locking order: every path that touches an item's mutations or purchases takes the
+// item row first, never the other way around. Two paths that take the same two rows in
+// opposite order deadlock, so a new delete has to keep this order rather than invert it.
 func (s *SQLXAssetsStore) lockItem(ctx context.Context, assetID uuid.UUID) error {
 	if s.db.DriverName() == string(Sqlite) {
 		return nil
@@ -436,6 +449,20 @@ func (s *SQLXAssetsStore) lockItem(ctx context.Context, assetID uuid.UUID) error
 			return nil
 		}
 		return fmt.Errorf("assets store: lock item: %w", err)
+	}
+	return nil
+}
+
+// lockClassItems takes the item rows of a class the way lockItem takes a single one, in
+// a fixed order so two classes that share nothing cannot wait on each other.
+func (s *SQLXAssetsStore) lockClassItems(ctx context.Context, classID uuid.UUID) error {
+	if s.db.DriverName() == string(Sqlite) {
+		return nil
+	}
+	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE class_id = ? ORDER BY id FOR UPDATE`, s.itemsTable))
+	var ids []uuid.UUID
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &ids, query, classID); err != nil {
+		return fmt.Errorf("assets store: lock class items: %w", err)
 	}
 	return nil
 }

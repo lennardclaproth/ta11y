@@ -235,6 +235,8 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   an item keeps at least one change (`ErrLastMutation`, raised by the store in the statement
   that removes the row, after a `FOR UPDATE` on the item — read committed would otherwise let
   two deletes of the same item empty a history between them; SQLite serialises writers itself).
+  Every store path that touches an item's changes or purchases takes the item row first —
+  deleting an item or a class included — so two of them can never deadlock on a reversed order.
   Only items in a `MANUAL` class can be renamed, deleted or have their history edited.
 - **A stored change holds its own result.** `new_worth` is always `amount` applied to
   `previous_worth` (`worthAfter` in `mutation.go`), on creation and on edit alike. The replay's
