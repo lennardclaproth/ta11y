@@ -132,8 +132,9 @@ func (c *Commands) DeleteMutation(ctx context.Context, accID, assetID, mutationI
 		if err != nil {
 			return err
 		}
-		// The store counts in the same statement that removes the row, so two deletes
-		// cannot each see a second change left and together empty the item's history.
+		// The store locks the item and counts in the same statement that removes the
+		// row, so two deletes cannot each see a second change left and together empty
+		// the item's history.
 		if err := c.cs.DeleteMutation(txCtx, asset.ID, mutation.ID); err != nil {
 			return err
 		}
@@ -211,7 +212,7 @@ func (c *Commands) DeletePurchase(ctx context.Context, accID, assetID, purchaseI
 		if err != nil {
 			return err
 		}
-		// The store counts in the same statement that removes the row; see DeleteMutation.
+		// The store locks the item and counts in the removing statement; see DeleteMutation.
 		return c.cs.DeletePurchase(txCtx, asset.ID, purchase.ID)
 	}); err != nil {
 		return fmt.Errorf("delete purchase: %w", err)

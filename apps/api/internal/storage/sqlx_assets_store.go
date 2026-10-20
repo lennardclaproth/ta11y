@@ -417,14 +417,41 @@ func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutati
 	return nil
 }
 
+// lockItem serialises the deletes below per item.
+//
+// Postgres runs read committed, so two transactions removing a different row of the
+// same item share no lock: both count a second row left and both succeed. Taking the
+// item row first makes the second wait for the first to commit, after which its count
+// sees the row that is gone. SQLite has no FOR UPDATE and needs none: _txlock=immediate
+// serialises writers already. A missing item is left to the delete, which removes
+// nothing and reports the same error as before.
+func (s *SQLXAssetsStore) lockItem(ctx context.Context, assetID uuid.UUID) error {
+	if s.db.DriverName() == string(Sqlite) {
+		return nil
+	}
+	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE id = ? FOR UPDATE`, s.itemsTable))
+	var id uuid.UUID
+	if err := s.db.GetExecutor(ctx).QueryRowxContext(ctx, query, assetID).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("assets store: lock item: %w", err)
+	}
+	return nil
+}
+
 // DeleteMutation removes one mutation while the item keeps another.
 //
 // The count is part of the statement rather than a read the caller acts on: a read
 // followed by a delete is not isolated from a second delete, and two of them could
 // each see a second change left and together remove both. Whether an item is left
 // without a history is exactly what ErrLastMutation exists to prevent, so the
-// condition belongs where the row is removed.
+// condition belongs where the row is removed, behind the item lock that makes two
+// deletes of the same item take turns.
 func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, assetID, mutationID uuid.UUID) error {
+	if err := s.lockItem(ctx, assetID); err != nil {
+		return err
+	}
 	query := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
 		s.mutationsTable, s.mutationsTable,
@@ -550,8 +577,11 @@ func (s *SQLXAssetsStore) UpdatePurchase(ctx context.Context, purchase *assets.P
 }
 
 // DeletePurchase removes one purchase while the item keeps another; see
-// DeleteMutation for why the count sits in the statement.
+// DeleteMutation for why the count sits in the statement and the item is locked first.
 func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, assetID, purchaseID uuid.UUID) error {
+	if err := s.lockItem(ctx, assetID); err != nil {
+		return err
+	}
 	query := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
 		s.purchasesTable, s.purchasesTable,

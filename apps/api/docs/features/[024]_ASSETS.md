@@ -233,8 +233,9 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   `current_worth`. That is what makes back-dated and corrected changes land in the right place.
   An item's first change must be a `SET` (`ErrOpeningNotSet`). An edit keeps the change's kind;
   an item keeps at least one change (`ErrLastMutation`, raised by the store in the statement
-  that removes the row, so two deletes cannot empty a history between them). Only items in a
-  `MANUAL` class can be renamed, deleted or have their history edited.
+  that removes the row, after a `FOR UPDATE` on the item — read committed would otherwise let
+  two deletes of the same item empty a history between them; SQLite serialises writers itself).
+  Only items in a `MANUAL` class can be renamed, deleted or have their history edited.
 - **A stored change holds its own result.** `new_worth` is always `amount` applied to
   `previous_worth` (`worthAfter` in `mutation.go`), on creation and on edit alike. The replay's
   legacy-row recognition reads both fields, so a row that carried the old worth next to a new
