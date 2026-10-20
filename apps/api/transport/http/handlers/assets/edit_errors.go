@@ -28,6 +28,7 @@ var invalidEdits = []error{
 	assets.ErrOpeningNotSet,
 	assets.ErrPurchaseQuantityInvalid,
 	assets.ErrPurchaseUnitPriceInvalid,
+	assets.ErrPurchaseCostOutOfRange,
 	assets.ErrPurchaseDateInFuture,
 }
 

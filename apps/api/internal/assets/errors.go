@@ -14,6 +14,7 @@ var (
 	ErrAssetDailyPriced         = errors.New("asset worth follows a daily price and cannot be set by hand")
 	ErrPurchaseQuantityInvalid  = errors.New("purchase quantity must be greater than zero")
 	ErrPurchaseUnitPriceInvalid = errors.New("purchase unit price cannot be negative")
+	ErrPurchaseCostOutOfRange   = errors.New("purchase quantity times unit price is out of range")
 	ErrPurchaseDateInFuture     = errors.New("purchase date cannot be in the future")
 	ErrPurchaseNotFound         = errors.New("purchase not found")
 	ErrLastPurchase             = errors.New("a daily-priced item keeps at least one purchase; delete the item instead")

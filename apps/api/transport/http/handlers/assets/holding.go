@@ -2,6 +2,7 @@ package assets
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,10 +29,13 @@ func (r PurchaseRequest) validate(problems map[string]string, prefix string) {
 	if _, err := time.Parse(time.DateOnly, r.Date); err != nil {
 		problems[prefix+"date"] = "date must be in YYYY-MM-DD format"
 	}
+	// ParseFloat accepts "NaN", "Inf" and "1e300"; none of those are caught by a
+	// comparison with zero, and all three end up as a negative worth once multiplied
+	// into a price.
 	quantity, err := strconv.ParseFloat(strings.TrimSpace(r.Quantity), 64)
-	if err != nil {
+	if err != nil || math.IsNaN(quantity) || math.IsInf(quantity, 0) {
 		problems[prefix+"quantity"] = "quantity must be a valid decimal string"
-	} else if quantity <= 0 {
+	} else if quantity <= 0 || quantity > assets.MaxPurchaseQuantity {
 		problems[prefix+"quantity"] = "quantity must be greater than zero"
 	}
 	unitPrice, err := money.ParsePrice(r.UnitPrice)
@@ -182,6 +186,7 @@ func CreateHolding(log logging.Logger, commands assets.Commands) http.Handler {
 			return
 		case errors.Is(err, assets.ErrPurchaseQuantityInvalid) ||
 			errors.Is(err, assets.ErrPurchaseUnitPriceInvalid) ||
+			errors.Is(err, assets.ErrPurchaseCostOutOfRange) ||
 			errors.Is(err, assets.ErrPurchaseDateInFuture):
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"purchase": err.Error()})
 			return
@@ -247,6 +252,7 @@ func AddPurchase(log logging.Logger, commands assets.Commands) http.Handler {
 			return
 		case errors.Is(err, assets.ErrPurchaseQuantityInvalid) ||
 			errors.Is(err, assets.ErrPurchaseUnitPriceInvalid) ||
+			errors.Is(err, assets.ErrPurchaseCostOutOfRange) ||
 			errors.Is(err, assets.ErrPurchaseDateInFuture):
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"purchase": err.Error()})
 			return

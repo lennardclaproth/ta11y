@@ -1,12 +1,18 @@
 package assets
 
 import (
+	"math"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/date"
 	"github.com/lennardclaproth/ta11y/internal/money"
 )
+
+// MaxPurchaseQuantity bounds one recorded amount. Everything derived from a holding
+// is quantity times a price, so an amount far beyond any real holding does not read
+// as a large number but overflows money.Price into a negative one.
+const MaxPurchaseQuantity = 1e12
 
 // Purchase is one recorded acquisition of a daily-priced item: how much was bought
 // on which day, and what was paid per unit.
@@ -36,11 +42,19 @@ func NewPurchase(
 	quantity float64,
 	unitPrice money.Price,
 ) (*Purchase, error) {
-	if quantity <= 0 {
+	// ParseFloat accepts "NaN" and "Inf", and neither is caught by a comparison with
+	// zero, so finiteness is checked before the range.
+	if math.IsNaN(quantity) || math.IsInf(quantity, 0) {
+		return nil, ErrPurchaseQuantityInvalid
+	}
+	if quantity <= 0 || quantity > MaxPurchaseQuantity {
 		return nil, ErrPurchaseQuantityInvalid
 	}
 	if unitPrice < 0 {
 		return nil, ErrPurchaseUnitPriceInvalid
+	}
+	if _, err := money.NewPrice(unitPrice.Float64() * quantity); err != nil {
+		return nil, ErrPurchaseCostOutOfRange
 	}
 	day := date.StartOfDayUTC(purchasedOn)
 	if day.After(date.StartOfDayUTC(time.Now().UTC())) {

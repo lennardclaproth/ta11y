@@ -20,7 +20,14 @@ func NewPrice(amount float64) (Price, error) {
 		return 0, ErrInvalidPrice
 	}
 
-	return Price(math.Round(amount * float64(Scale))), nil
+	scaled := math.Round(amount * float64(Scale))
+	// A float64 past the int64 range does not saturate on conversion, it wraps to a
+	// large negative Price.
+	if scaled >= float64(math.MaxInt64) {
+		return 0, ErrInvalidPrice
+	}
+
+	return Price(scaled), nil
 }
 
 func (p Price) Float64() float64 {

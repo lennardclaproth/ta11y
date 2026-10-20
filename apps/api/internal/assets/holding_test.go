@@ -2,6 +2,7 @@ package assets_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -24,6 +25,10 @@ func TestNewPurchaseValidates(t *testing.T) {
 		{name: "valid", date: yesterday, quantity: 0.5, unitPrice: money.Price(100_00)},
 		{name: "zero quantity", date: yesterday, quantity: 0, unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseQuantityInvalid},
 		{name: "negative quantity", date: yesterday, quantity: -1, unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseQuantityInvalid},
+		{name: "not a number", date: yesterday, quantity: math.NaN(), unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseQuantityInvalid},
+		{name: "infinite quantity", date: yesterday, quantity: math.Inf(1), unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseQuantityInvalid},
+		{name: "quantity beyond the bound", date: yesterday, quantity: 1e300, unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseQuantityInvalid},
+		{name: "cost out of range", date: yesterday, quantity: assets.MaxPurchaseQuantity, unitPrice: money.Price(100_000_000), wantErr: assets.ErrPurchaseCostOutOfRange},
 		{name: "negative unit price", date: yesterday, quantity: 1, unitPrice: money.Price(-1), wantErr: assets.ErrPurchaseUnitPriceInvalid},
 		{name: "future date", date: time.Now().UTC().AddDate(0, 0, 1), quantity: 1, unitPrice: money.Price(100_00), wantErr: assets.ErrPurchaseDateInFuture},
 	}
