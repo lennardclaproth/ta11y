@@ -48,10 +48,18 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 
 	running := make(map[uuid.UUID]money.Price, len(items))
 	worth := make(map[uuid.UUID]money.Price, len(items))
+	// The class total moves with the one item that just changed, so it is carried
+	// forward rather than summed over every item again for every row. A class with
+	// daily-priced items carries one derived row per item per day, which made the
+	// walk cost items times rows.
+	total := money.Price(0)
 	changed := make([]*Mutation, 0)
 	for i := range ordered {
 		m := ordered[i]
 		if derived[m.AssetID] {
+			if counted[m.AssetID] {
+				total += m.NewWorth - running[m.AssetID]
+			}
 			running[m.AssetID] = m.NewWorth
 			continue
 		}
@@ -77,15 +85,11 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 				next = previous + amount
 			}
 		}
+		if counted[m.AssetID] {
+			total += next - previous
+		}
 		running[m.AssetID] = next
 		worth[m.AssetID] = next
-
-		var total money.Price
-		for id, value := range running {
-			if counted[id] {
-				total += value
-			}
-		}
 
 		if amountFixed || m.PreviousWorth != previous || m.NewWorth != next || m.ClassTotalWorth != total {
 			m.PreviousWorth = previous
