@@ -235,6 +235,10 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   an item keeps at least one change (`ErrLastMutation`, raised by the store in the statement
   that removes the row, so two deletes cannot empty a history between them). Only items in a
   `MANUAL` class can be renamed, deleted or have their history edited.
+- **A stored change holds its own result.** `new_worth` is always `amount` applied to
+  `previous_worth` (`worthAfter` in `mutation.go`), on creation and on edit alike. The replay's
+  legacy-row recognition reads both fields, so a row that carried the old worth next to a new
+  amount could match that signature by accident and lose the user's correction.
 - **Class growth %** is computed from inception: `(latest − first) / |first| × 100` using the
   earliest and latest mutation `class_total_worth`.
 - **Total snapshots (`Builder.RebuildAll`).** Mutations are read ascending; per class the last

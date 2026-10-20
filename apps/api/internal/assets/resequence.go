@@ -79,11 +79,7 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 				m.Amount = delta
 				amountFixed = true
 			}
-			if m.Direction != nil && *m.Direction == ChangeDirectionDecrease {
-				next = previous - amount
-			} else {
-				next = previous + amount
-			}
+			next = worthAfter(m.ChangeType, m.Direction, amount, previous)
 		}
 		if counted[m.AssetID] {
 			total += next - previous
@@ -108,9 +104,11 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 // carrying that through every later change and the class total. The change is read
 // from where it was actually written, and the row is rewritten with it.
 //
-// The signature is exact: a row written this way satisfies
-// amount = previous_worth + new_worth, a correct one amount = new_worth -
-// previous_worth. Those coincide only when previous_worth is zero, which is excluded.
+// The signature is exact for a row that holds its own result: one written this way
+// satisfies amount = previous_worth + new_worth, a correct one amount = new_worth -
+// previous_worth, and those coincide only when previous_worth is zero, which is
+// excluded. It says nothing about a row whose worth no longer matches its amount, so
+// every writer keeps the two in step -- see worthAfter.
 func legacyAdjustAmount(m Mutation) (money.Price, bool) {
 	if m.ChangeType != ChangeTypeAdjust || m.Direction == nil || *m.Direction != ChangeDirectionIncrease {
 		return 0, false

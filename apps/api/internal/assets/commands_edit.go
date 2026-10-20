@@ -108,6 +108,11 @@ func (c *Commands) UpdateMutation(ctx context.Context, accID, assetID, mutationI
 		if mutation.ChangeType == ChangeTypeAdjust {
 			mutation.Direction = edit.Direction
 		}
+		// The replay recomputes the figures, but it reads them first to recognise a row
+		// written before NewMutation was corrected. A row left holding the old worth
+		// next to the new amount can match that signature by accident, and the user's
+		// amount would be silently replaced; keeping the worth in step rules that out.
+		mutation.NewWorth = worthAfter(mutation.ChangeType, mutation.Direction, mutation.Amount, mutation.PreviousWorth)
 		if err := c.cs.UpdateMutation(txCtx, mutation); err != nil {
 			return err
 		}

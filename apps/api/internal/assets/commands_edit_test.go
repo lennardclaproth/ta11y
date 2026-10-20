@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/account"
 	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 // editGetter serves one class and one of its items, as the store would.
@@ -92,6 +93,71 @@ func TestDeleteMutationKeepsTheLastChange(t *testing.T) {
 	err := commands.DeleteMutation(context.Background(), owner, getter.asset.ID, getter.class.Mutations[0].ID)
 	if !errors.Is(err, assets.ErrLastMutation) {
 		t.Fatalf("want ErrLastMutation, got %v", err)
+	}
+}
+
+// recordingStore keeps the last row written per worth change, so a test can read
+// back what the replay left behind.
+type recordingStore struct {
+	fakeAssetsStore
+	rows map[uuid.UUID]assets.Mutation
+}
+
+func (r *recordingStore) UpdateMutation(_ context.Context, m *assets.Mutation) error {
+	r.rows[m.ID] = *m
+	return nil
+}
+
+// A correction whose amount happens to equal the row's previous worth plus its worth
+// so far carries the signature of a change written before NewMutation was corrected.
+// The replay must not read it as one: it would take the stored worth for the amount
+// and shrink the user's correction without saying so.
+func TestUpdateMutationKeepsAnAmountThatLooksLikeALegacyRow(t *testing.T) {
+	owner := uuid.New()
+	euros := func(units int64) money.Price { return money.Price(units * money.Scale) }
+	onDay := func(value string) time.Time {
+		parsed, err := time.ParseInLocation(time.DateOnly, value, time.UTC)
+		if err != nil {
+			t.Fatalf("parse day %q: %v", value, err)
+		}
+		return parsed
+	}
+	increase := assets.ChangeDirectionIncrease
+
+	class := &assets.Class{ID: uuid.New(), AccountID: owner, Name: "Savings", Source: assets.ClassSourceManual}
+	asset := &assets.Asset{ID: uuid.New(), ClassID: class.ID, AccountID: owner, Name: "Cash", Class: class}
+	class.Assets = []assets.Asset{*asset}
+	deposit := assets.Mutation{
+		ID: uuid.New(), AssetID: asset.ID, ClassID: class.ID, ChangeType: assets.ChangeTypeAdjust,
+		Direction: &increase, Amount: euros(300), PreviousWorth: euros(1_000), NewWorth: euros(1_300),
+		ClassTotalWorth: euros(1_300), EffectiveDate: onDay("2026-02-01"),
+	}
+	class.Mutations = []assets.Mutation{
+		{
+			ID: uuid.New(), AssetID: asset.ID, ClassID: class.ID, ChangeType: assets.ChangeTypeSet,
+			Amount: euros(1_000), NewWorth: euros(1_000), ClassTotalWorth: euros(1_000),
+			EffectiveDate: onDay("2026-01-01"),
+		},
+		deposit,
+	}
+
+	store := &recordingStore{rows: make(map[uuid.UUID]assets.Mutation)}
+	aq := account.NewQueries(fakeAccountStore{exists: true})
+	commands := assets.NewCommands(store, editGetter{class: class, asset: asset}, *aq, inlineUoW{}, nil, nil, nil)
+
+	// 2300 is exactly the previous worth plus the worth the row carried.
+	edit := assets.MutationEdit{Amount: euros(2_300), Direction: &increase, EffectiveDate: onDay("2026-02-01")}
+	if err := commands.UpdateMutation(context.Background(), owner, asset.ID, deposit.ID, edit); err != nil {
+		t.Fatalf("update worth change: %v", err)
+	}
+
+	written, ok := store.rows[deposit.ID]
+	if !ok {
+		t.Fatal("the corrected worth change was never written")
+	}
+	if written.Amount != euros(2_300) || written.PreviousWorth != euros(1_000) || written.NewWorth != euros(3_300) {
+		t.Fatalf("want 2300 taking 1000 -> 3300, got %v taking %v -> %v",
+			written.Amount, written.PreviousWorth, written.NewWorth)
 	}
 }
 
