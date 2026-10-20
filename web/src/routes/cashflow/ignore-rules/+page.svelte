@@ -86,7 +86,7 @@
 		// the existing rules already name, so editing one never loses its own scope.
 		void listVendors()
 			.then((all) => {
-				vendorNames = all.filter((v) => v.active && v.type === 'cashflow').map((v) => v.name);
+				vendorNames = all.filter((v) => v.active && v.type === 'bank').map((v) => v.name);
 			})
 			.catch(() => undefined);
 	});
