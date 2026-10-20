@@ -32,7 +32,7 @@
 	import { scaledToNumber } from '$lib/api/money';
 	import { recurringMonthTick } from '$lib/api/recurring';
 	import { chartColors } from '$lib/charts/theme';
-	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import { parseQuery, serializeQuery, type QuerySchema } from '$lib/url/routeQuery';
 	import { pushQuery } from '$lib/url/queryState';
 	import type {
@@ -43,8 +43,6 @@
 		RecurringSuggestion,
 		RecurringTransaction
 	} from '$lib/api/types';
-
-	type Notice = { intent: NoticeIntent; message: string };
 
 	const schema: QuerySchema = {
 		q: { type: 'string' },
@@ -75,8 +73,8 @@
 	// Unlinking, confirming and dismissing leave their drawer open, and a drawer draws its own
 	// scrim over the notice region under the masthead. So those outcomes are reported in the
 	// drawer they were started from rather than as a toast nobody would see.
-	let itemNotice = $state<Notice | null>(null);
-	let suggestionsNotice = $state<Notice | null>(null);
+	let itemNotice = $state<NoticeMessage | null>(null);
+	let suggestionsNotice = $state<NoticeMessage | null>(null);
 
 	let endOpen = $state(false);
 	let ending = $state(false);

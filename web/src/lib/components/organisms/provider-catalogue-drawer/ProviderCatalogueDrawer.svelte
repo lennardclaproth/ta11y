@@ -4,7 +4,7 @@
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
-	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -63,7 +63,7 @@
 	 * What this drawer has to report, in its own band. The drawer is an overlay above the notice
 	 * region under the masthead, so a toast sent from here would be drawn behind its own scrim.
 	 */
-	let notice = $state<{ intent: NoticeIntent; message: string } | null>(null);
+	let notice = $state<NoticeMessage | null>(null);
 	/** The run this drawer is following, so its outcome is announced exactly once. */
 	let watchedRunId = $state<string | null>(null);
 

@@ -18,7 +18,7 @@
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
 	import { recurringDirectionLabel, rhythmLabels } from '$lib/api/recurring';
-	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringRhythm, RecurringSuggestion } from '$lib/api/types';
 
 	type Props = {
@@ -32,7 +32,7 @@
 		 * What confirming or dismissing reported. This drawer stays open afterwards and covers the
 		 * notice region under the masthead with its own scrim, so the outcome is stated here.
 		 */
-		notice?: { intent: NoticeIntent; message: string } | null;
+		notice?: NoticeMessage | null;
 		onDismissNotice?: () => void;
 		onConfirm?: (suggestion: RecurringSuggestion, name: string, rhythm: RecurringRhythm) => void;
 		onDismiss?: (suggestion: RecurringSuggestion) => void;

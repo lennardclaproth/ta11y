@@ -22,7 +22,7 @@
 		rhythmLabels
 	} from '$lib/api/recurring';
 	import { cashflowOriginLabel } from '$lib/api/transactions';
-	import type { NoticeIntent } from '$lib/components/molecules/notice-band/notice-band.types';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringItemDetail, RecurringTransaction } from '$lib/api/types';
 
 	type Props = {
@@ -36,7 +36,7 @@
 		 * What an action taken here reported. This drawer stays open afterwards and covers the notice
 		 * region under the masthead with its own scrim, so the outcome is stated in the drawer itself.
 		 */
-		notice?: { intent: NoticeIntent; message: string } | null;
+		notice?: NoticeMessage | null;
 		onDismissNotice?: () => void;
 		onUnlink?: (transaction: RecurringTransaction) => void;
 		onEnd?: () => void;
