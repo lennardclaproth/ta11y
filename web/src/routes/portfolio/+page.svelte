@@ -113,6 +113,8 @@
 	let savingDetail = $state(false);
 	let deletingDetail = $state(false);
 	let detailError = $state<string | null>(null);
+	// Save and Delete report in the same band, so the heading says which of the two was refused.
+	let detailErrorTitle = $state('This transaction was not changed');
 
 	// Set while the background rebuild a write started is running, so what is on screen
 	// (positions, performance, net worth) is known to still be the previous result. Cleared
@@ -402,7 +404,8 @@
 			noteRebuild(result.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
-			detailError = editMessage(err, body.occurred_at);
+			detailError = editMessage(err, body.occurred_at, genericWriteMessage);
+			detailErrorTitle = 'This transaction was not changed';
 			if (isMissingTransaction(err)) void loadAll();
 		} finally {
 			savingDetail = false;
@@ -423,7 +426,8 @@
 			noteRebuild(result.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
-			detailError = editMessage(err, day);
+			detailError = editMessage(err, day, genericDeleteMessage);
+			detailErrorTitle = 'This transaction was not deleted';
 			if (isMissingTransaction(err)) void loadAll();
 		} finally {
 			deletingDetail = false;
@@ -458,6 +462,7 @@
 	});
 
 	const genericWriteMessage = 'Could not save the transaction. Try again.';
+	const genericDeleteMessage = 'Could not delete the transaction. Try again.';
 
 	function duplicateMessage(date: string): string {
 		return `A transaction with the same listing and amount already exists on ${formatDisplayDate(date)}. Pick another day.`;
@@ -485,7 +490,9 @@
 		return genericWriteMessage;
 	}
 
-	function editMessage(err: unknown, date: string): string {
+	// An edit and a delete share these statuses but not the sentence that is left when none of them
+	// matches, so the caller hands in the one that names the button it was pressed on.
+	function editMessage(err: unknown, date: string, generic: string): string {
 		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
 		if (err instanceof ApiError && err.status === 422) {
 			return 'This transaction came from an import, so it stays as the statement records it.';
@@ -497,9 +504,9 @@
 			return 'That listing no longer exists. Pick another one.';
 		}
 		if (err instanceof ApiError && err.status === 400) {
-			return fieldMessage(err) ?? genericWriteMessage;
+			return fieldMessage(err) ?? generic;
 		}
-		return genericWriteMessage;
+		return generic;
 	}
 
 	async function handleRebuild() {
@@ -803,6 +810,7 @@
 			saving={savingDetail}
 			deleting={deletingDetail}
 			error={detailError}
+			errorTitle={detailErrorTitle}
 			onSave={handleDetailSave}
 			onDelete={handleDetailDelete}
 		/>

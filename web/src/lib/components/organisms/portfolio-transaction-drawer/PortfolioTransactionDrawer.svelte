@@ -43,6 +43,11 @@
 		deleting?: boolean;
 		/** Refused save or delete, in words the reader can act on. */
 		error?: string | null;
+		/**
+		 * What the refusal was about, as the caller knows it: Save and Delete share this one band,
+		 * and a heading has to name the button that was pressed.
+		 */
+		errorTitle?: string;
 		onSave?: (body: UpdatePortfolioTransactionRequest) => void;
 		onDelete?: () => void;
 		onClose?: () => void;
@@ -57,6 +62,7 @@
 		saving = false,
 		deleting = false,
 		error = null,
+		errorTitle = 'This transaction was not changed',
 		onSave,
 		onDelete,
 		onClose
@@ -175,7 +181,7 @@
 				intent="error"
 				surface="inset"
 				gutter="dialog"
-				title="This transaction was not changed"
+				title={errorTitle}
 				class="-mx-5"
 			>
 				{error}

@@ -291,7 +291,8 @@ table row.
 - **In a modal or form** — a refused save stays where it happened: per field through `FormField`, or
   as a band full-bleed under the dialog header. The entry is preserved, and no toast repeats it. A
   band's `title` states that something failed, so it belongs to a real refusal; a validation message
-  that stops the form before it is sent is said on its own.
+  that stops the form before it is sent is said on its own. Where one band serves two actions, the
+  title and the message name the one that was pressed — a refused delete does not report a change.
 
 The band's text lines up with the text of its container through `gutter` (`page`, `panel`, `dialog`,
 `none`), and `surface` picks the sheet it is printed on (`paper` on the taupe canvas and in a muted
