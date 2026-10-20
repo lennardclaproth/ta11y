@@ -26,7 +26,9 @@ func (f fakeAccountStore) GetByEmail(_ context.Context, _ string) (*account.Acco
 func (f fakeAccountStore) List(_ context.Context) ([]*account.Account, error) { return nil, nil }
 
 // fakeAssetsStore is a no-op assets command store; persistence is not under test.
-type fakeAssetsStore struct{}
+// lastRow is what the two delete methods report, which is where the "an item keeps
+// at least one" guard lives: the store counts in the statement that removes the row.
+type fakeAssetsStore struct{ lastRow error }
 
 func (fakeAssetsStore) CreateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
 func (fakeAssetsStore) CreateAccount(_ context.Context, _ *assets.Account) error   { return nil }
@@ -39,9 +41,10 @@ func (fakeAssetsStore) CreatePurchase(_ context.Context, _ *assets.Purchase) err
 func (fakeAssetsStore) UpdateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
 func (fakeAssetsStore) DeleteAsset(_ context.Context, _ uuid.UUID) error           { return nil }
 func (fakeAssetsStore) UpdateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
-func (fakeAssetsStore) DeleteMutation(_ context.Context, _ uuid.UUID) error        { return nil }
 func (fakeAssetsStore) UpdatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
-func (fakeAssetsStore) DeletePurchase(_ context.Context, _ uuid.UUID) error        { return nil }
+
+func (f fakeAssetsStore) DeleteMutation(_ context.Context, _, _ uuid.UUID) error { return f.lastRow }
+func (f fakeAssetsStore) DeletePurchase(_ context.Context, _, _ uuid.UUID) error { return f.lastRow }
 
 // TestCreateClassPublishesSnapshotsRebuildRequested verifies the constructor
 // wires the bus and that a mutation publishes the rebuild-requested event.

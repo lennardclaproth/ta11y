@@ -34,11 +34,11 @@ func (s *recordingAssetsStore) DeleteAsset(_ context.Context, _ uuid.UUID) error
 func (s *recordingAssetsStore) UpdateMutation(_ context.Context, _ *assets.Mutation) error {
 	return nil
 }
-func (s *recordingAssetsStore) DeleteMutation(_ context.Context, _ uuid.UUID) error { return nil }
+func (s *recordingAssetsStore) DeleteMutation(_ context.Context, _, _ uuid.UUID) error { return nil }
 func (s *recordingAssetsStore) UpdatePurchase(_ context.Context, _ *assets.Purchase) error {
 	return nil
 }
-func (s *recordingAssetsStore) DeletePurchase(_ context.Context, _ uuid.UUID) error { return nil }
+func (s *recordingAssetsStore) DeletePurchase(_ context.Context, _, _ uuid.UUID) error { return nil }
 
 func TestAccountCreatedCreatesAssetsProjection(t *testing.T) {
 	store := &recordingAssetsStore{}

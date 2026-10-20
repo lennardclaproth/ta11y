@@ -417,15 +417,24 @@ func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutati
 	return nil
 }
 
-// DeleteMutation removes one mutation.
-func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, mutationID uuid.UUID) error {
-	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.mutationsTable))
-	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, mutationID)
+// DeleteMutation removes one mutation while the item keeps another.
+//
+// The count is part of the statement rather than a read the caller acts on: a read
+// followed by a delete is not isolated from a second delete, and two of them could
+// each see a second change left and together remove both. Whether an item is left
+// without a history is exactly what ErrLastMutation exists to prevent, so the
+// condition belongs where the row is removed.
+func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, assetID, mutationID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
+		s.mutationsTable, s.mutationsTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, mutationID, assetID)
 	if err != nil {
 		return fmt.Errorf("assets store: delete mutation: %w", err)
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
-		return assets.ErrMutationNotFound
+		return assets.ErrLastMutation
 	}
 	return nil
 }
@@ -540,15 +549,19 @@ func (s *SQLXAssetsStore) UpdatePurchase(ctx context.Context, purchase *assets.P
 	return nil
 }
 
-// DeletePurchase removes one purchase.
-func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, purchaseID uuid.UUID) error {
-	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.purchasesTable))
-	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, purchaseID)
+// DeletePurchase removes one purchase while the item keeps another; see
+// DeleteMutation for why the count sits in the statement.
+func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, assetID, purchaseID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
+		s.purchasesTable, s.purchasesTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, purchaseID, assetID)
 	if err != nil {
 		return fmt.Errorf("assets store: delete purchase: %w", err)
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
-		return assets.ErrPurchaseNotFound
+		return assets.ErrLastPurchase
 	}
 	return nil
 }

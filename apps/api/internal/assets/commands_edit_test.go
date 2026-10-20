@@ -79,9 +79,15 @@ func TestEditsRefuseThePortfolioClass(t *testing.T) {
 	}
 }
 
+// The refusal itself is counted and raised by the store, in the statement that
+// removes the row; the command has to carry it out unchanged so the handler can
+// still answer 409.
 func TestDeleteMutationKeepsTheLastChange(t *testing.T) {
 	owner := uuid.New()
-	getter, commands := editFixture(owner, assets.ClassSourceManual)
+	getter, _ := editFixture(owner, assets.ClassSourceManual)
+	aq := account.NewQueries(fakeAccountStore{exists: true})
+	store := fakeAssetsStore{lastRow: assets.ErrLastMutation}
+	commands := assets.NewCommands(store, getter, *aq, inlineUoW{}, nil, nil, nil)
 
 	err := commands.DeleteMutation(context.Background(), owner, getter.asset.ID, getter.class.Mutations[0].ID)
 	if !errors.Is(err, assets.ErrLastMutation) {
@@ -97,7 +103,8 @@ func TestDeletePurchaseKeepsTheLastPurchase(t *testing.T) {
 	purchase := &assets.Purchase{ID: uuid.New(), AssetID: getter.asset.ID}
 	getter.purchases = []*assets.Purchase{purchase}
 	aq := account.NewQueries(fakeAccountStore{exists: true})
-	commands := assets.NewCommands(fakeAssetsStore{}, getter, *aq, inlineUoW{}, nil, nil, nil)
+	store := fakeAssetsStore{lastRow: assets.ErrLastPurchase}
+	commands := assets.NewCommands(store, getter, *aq, inlineUoW{}, nil, nil, nil)
 
 	err := commands.DeletePurchase(context.Background(), owner, getter.asset.ID, purchase.ID)
 	if !errors.Is(err, assets.ErrLastPurchase) {

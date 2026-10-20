@@ -28,9 +28,13 @@ type CommandStore interface {
 	// DeleteAsset removes an item together with its worth changes and purchases.
 	DeleteAsset(ctx context.Context, assetID uuid.UUID) error
 	UpdateMutation(ctx context.Context, mut *Mutation) error
-	DeleteMutation(ctx context.Context, mutationID uuid.UUID) error
+	// DeleteMutation removes a worth change only while its item keeps another,
+	// reporting ErrLastMutation when it is the last one.
+	DeleteMutation(ctx context.Context, assetID, mutationID uuid.UUID) error
 	UpdatePurchase(ctx context.Context, purchase *Purchase) error
-	DeletePurchase(ctx context.Context, purchaseID uuid.UUID) error
+	// DeletePurchase removes a purchase only while its item keeps another,
+	// reporting ErrLastPurchase when it is the last one.
+	DeletePurchase(ctx context.Context, assetID, purchaseID uuid.UUID) error
 }
 
 // QuoteTracker turns a chosen daily-priced instrument into the market-data listing

@@ -122,16 +122,14 @@ func (c *Commands) UpdateMutation(ctx context.Context, accID, assetID, mutationI
 // DeleteMutation removes one worth change and replays the class's history. An item
 // keeps at least one change: without it the item has no worth to start from.
 func (c *Commands) DeleteMutation(ctx context.Context, accID, assetID, mutationID uuid.UUID) error {
-	// Resolved inside the transaction, so two deletes cannot both see a second change left.
 	if err := c.uow.Do(ctx, func(txCtx context.Context) error {
-		asset, mutation, count, err := c.editableMutation(txCtx, accID, assetID, mutationID)
+		asset, mutation, _, err := c.editableMutation(txCtx, accID, assetID, mutationID)
 		if err != nil {
 			return err
 		}
-		if count <= 1 {
-			return ErrLastMutation
-		}
-		if err := c.cs.DeleteMutation(txCtx, mutation.ID); err != nil {
+		// The store counts in the same statement that removes the row, so two deletes
+		// cannot each see a second change left and together empty the item's history.
+		if err := c.cs.DeleteMutation(txCtx, asset.ID, mutation.ID); err != nil {
 			return err
 		}
 		return c.resequence(txCtx, asset.ClassID)
@@ -203,16 +201,13 @@ func (c *Commands) UpdatePurchase(ctx context.Context, accID, assetID, purchaseI
 // DeletePurchase removes one purchase of a daily-priced item. The item keeps at least
 // one: a holding with nothing bought has no worth to follow.
 func (c *Commands) DeletePurchase(ctx context.Context, accID, assetID, purchaseID uuid.UUID) error {
-	// Resolved inside the transaction, so two deletes cannot both see a second purchase left.
 	if err := c.uow.Do(ctx, func(txCtx context.Context) error {
-		_, purchase, count, err := c.editablePurchase(txCtx, accID, assetID, purchaseID)
+		asset, purchase, _, err := c.editablePurchase(txCtx, accID, assetID, purchaseID)
 		if err != nil {
 			return err
 		}
-		if count <= 1 {
-			return ErrLastPurchase
-		}
-		return c.cs.DeletePurchase(txCtx, purchase.ID)
+		// The store counts in the same statement that removes the row; see DeleteMutation.
+		return c.cs.DeletePurchase(txCtx, asset.ID, purchase.ID)
 	}); err != nil {
 		return fmt.Errorf("delete purchase: %w", err)
 	}
