@@ -146,6 +146,11 @@
 	let detail = $state<AssetHolding | null>(null);
 	/** Set when the selected item's purchases could not be fetched. */
 	let detailError = $state(false);
+	/** Set while they are on their way, so the table shows skeletons instead of "no purchases". */
+	let detailLoading = $state(false);
+	// Which request is the current one. The item id alone cannot tell two requests for the same
+	// item apart, and the second is triggered as soon as a class reload replaces the summaries.
+	let detailRequest = 0;
 	const selected = $derived(
 		detail?.id === selectedHolding?.id ? (detail ?? selectedHolding) : selectedHolding
 	);
@@ -287,8 +292,10 @@
 	$effect(() => {
 		const id = selectedHolding?.id;
 		if (!id) {
+			detailRequest++;
 			detail = null;
 			detailError = false;
+			detailLoading = false;
 			return;
 		}
 		// The failure belongs to the item that was selected, not to the one taking its place.
@@ -297,21 +304,24 @@
 	});
 
 	async function loadDetail(assetId: string) {
+		const request = ++detailRequest;
+		detailLoading = true;
 		try {
 			const loaded = await getHolding(assetId);
-			// A slow response for an item the user has already navigated away from is stale.
-			if (loaded.id === untrack(() => selectedHolding?.id)) {
-				detail = loaded;
-				detailError = false;
-			}
+			// A response that a newer request has overtaken is stale, whichever item it is for.
+			if (request !== detailRequest) return;
+			detail = loaded;
+			detailError = false;
 		} catch {
 			// The figures come from the class payload and stay on screen; what is missing is
 			// the purchase list, and a linked item always has at least one purchase, so the
-			// empty state would read as "you bought nothing". A late failure for an item the
-			// user has left says nothing about the one on screen, so it clears neither.
-			if (assetId !== untrack(() => selectedHolding?.id)) return;
+			// empty state would read as "you bought nothing". A late failure that a newer
+			// request has overtaken says nothing about what is on screen, so it clears neither.
+			if (request !== detailRequest) return;
 			detail = null;
 			detailError = true;
+		} finally {
+			if (request === detailRequest) detailLoading = false;
 		}
 	}
 
@@ -954,6 +964,7 @@
 							{:else}
 								<DataTable
 									rows={purchases}
+									loading={detailLoading}
 									emptyText="No purchases yet"
 									columns={[
 										{
