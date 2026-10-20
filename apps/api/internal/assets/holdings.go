@@ -183,7 +183,7 @@ func planHoldingMutations(
 	}
 
 	manualTotals := manualTotalsByClassAndDay(manual)
-	manualCarried := make(map[uuid.UUID]money.Price, len(manualTotals))
+	manualCarried := seedManualCarried(manualTotals, dayKey(*start))
 	lastPrice := make(map[uuid.UUID]money.Price, len(holdings))
 	previousWorth := make(map[uuid.UUID]money.Price, len(holdings))
 	now := time.Now().UTC()
@@ -264,6 +264,26 @@ func holdingPosition(purchases []*Purchase, day time.Time) (float64, money.Price
 		paid += purchase.Paid()
 	}
 	return quantity, paid
+}
+
+// seedManualCarried is the per-class manual worth already standing on the day
+// before the walk starts. The day loop only visits days from the first purchase
+// onwards, so a hand-set item last changed before that day would otherwise never
+// be carried and drop out of every class total this rebuild writes.
+func seedManualCarried(manualTotals map[uuid.UUID]map[string]money.Price, firstKey string) map[uuid.UUID]money.Price {
+	carried := make(map[uuid.UUID]money.Price, len(manualTotals))
+	for classID, series := range manualTotals {
+		latest := ""
+		for key := range series {
+			if key < firstKey && key > latest {
+				latest = key
+			}
+		}
+		if latest != "" {
+			carried[classID] = series[latest]
+		}
+	}
+	return carried
 }
 
 // manualTotalsByClassAndDay replays the mutations of the items this rebuild does

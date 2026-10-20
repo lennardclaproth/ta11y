@@ -94,6 +94,33 @@ func TestPlanHoldingMutationsCarriesManualItemsInTheClassTotal(t *testing.T) {
 	}
 }
 
+// TestPlanHoldingMutationsCarriesManualItemsSetBeforeTheFirstPurchase guards the
+// class total for a hand-set item whose last change predates the walk: the day
+// loop never visits that day, so the worth has to be standing before it starts.
+func TestPlanHoldingMutationsCarriesManualItemsSetBeforeTheFirstPurchase(t *testing.T) {
+	accID, classID, assetID, manualID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	holding := &Asset{ID: assetID, ClassID: classID, AccountID: accID, ListingID: &[]uuid.UUID{uuid.New()}[0]}
+
+	purchases := []*Purchase{
+		{AccountID: accID, AssetID: assetID, PurchasedOn: day(t, "2026-01-01"), Quantity: 1, UnitPrice: money.Price(10_00)},
+	}
+	manual := []*Mutation{
+		{AccountID: accID, ClassID: classID, AssetID: manualID, NewWorth: money.Price(100_00), EffectiveDate: day(t, "2024-01-01")},
+	}
+	prices := map[uuid.UUID]map[string]money.Price{
+		assetID: {"2026-01-01": money.Price(10_00)},
+	}
+
+	plan := planHoldingMutations(accID, []*Asset{holding}, purchases, manual, prices, day(t, "2026-01-01"))
+
+	if len(plan.mutations) != 1 {
+		t.Fatalf("expected one mutation, got %d", len(plan.mutations))
+	}
+	if got := plan.mutations[0].ClassTotalWorth; got != money.Price(110_00) {
+		t.Errorf("expected the manual item to be carried into the class total of 110.00, got %s", got)
+	}
+}
+
 // TestPlanHoldingMutationsStartEachHoldingAtItsOwnFirstPurchase guards against a
 // holding bought later being back-dated to the account's earliest purchase: those
 // days are not zero worth, they are days the item did not exist.
