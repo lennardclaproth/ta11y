@@ -129,6 +129,7 @@ func run() error {
 	bus := memorybus.NewMemoryBus(
 		memorybus.WithQueueSize(eventQueueSize),
 		memorybus.WithBackpressure(memorybus.BackpressureError),
+		memorybus.WithLogger(log),
 	)
 	defer closeBus(log, bus)
 
