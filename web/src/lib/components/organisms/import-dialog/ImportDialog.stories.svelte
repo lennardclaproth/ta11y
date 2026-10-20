@@ -7,7 +7,7 @@
 		{
 			id: 'vnd-degiro',
 			name: 'DEGIRO',
-			type: 'portfolio',
+			type: 'brokerage',
 			active: true,
 			import_disabled: false,
 			created_at: '2025-01-04T09:00:00Z',

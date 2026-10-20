@@ -248,7 +248,7 @@ func buildApplication(
 	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
 	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
-	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder)
+	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder, log)
 	assetsQueries := assets.NewQueries(assetsStore, marketDataQueries)
 	assetsBuilder := assets.NewBuilder(assetsStore, assetsStore)
 	assetsSyncer := assets.NewSyncer(portfolioQueries, assetsBuilder, assetsStore, assetsStore)
@@ -319,6 +319,9 @@ func registerEventHandlers(bus eventbus.Bus, app *application) error {
 		return err
 	}
 	if err := subscribe(bus, account.TopicCreated, assetsevents.NewAccountCreatedHandler(app.assetsCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, account.TopicCreated, cashflowevents.NewAccountCreatedHandler(app.cashflowCommands, app.log).Handle); err != nil {
 		return err
 	}
 	if err := subscribe(bus, importer.TopicAccepted, importerevents.NewAcceptedHandler(app.importerCommands, app.log).Handle); err != nil {
@@ -442,6 +445,8 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("GET /portfolio/transactions", portfoliohttp.GetPortfolioTransactions(app.log, app.accountQueries, app.portfolioStore))
 	protected("POST /portfolio/transactions/manual", portfoliohttp.CreateManualPortfolioTransaction(app.log, app.portfolioCommands))
 	protected("POST /portfolio/transactions/date", portfoliohttp.ChangePortfolioTransactionDate(app.log, app.portfolioCommands))
+	protected("PUT /portfolio/transactions/{transaction_id}", portfoliohttp.UpdatePortfolioTransaction(app.log, app.portfolioCommands))
+	protected("DELETE /portfolio/transactions/{transaction_id}", portfoliohttp.DeletePortfolioTransaction(app.log, app.portfolioCommands))
 	protected("POST /portfolio/rebuild", portfoliohttp.RebuildPortfolio(app.log, app.portfolioBuilder))
 
 	protected("GET /assets/classes", assethttp.GetClasses(app.log, *app.assetsQueries))

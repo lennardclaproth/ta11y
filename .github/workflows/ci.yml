@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# The Go module lives in apps/api (the repo-root go.work is local-only and gitignored).
+# The Go module lives in apps/api (the repo-root go.work points at it for local builds).
 defaults:
   run:
     working-directory: apps/api

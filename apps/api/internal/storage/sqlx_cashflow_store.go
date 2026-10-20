@@ -18,8 +18,9 @@ import (
 // SQLXCashflowStore persists and reads cashflow transactions, including the
 // analytics read models. It satisfies the cashflow command and query contracts.
 type SQLXCashflowStore struct {
-	db        *DB
-	tableName string
+	db            *DB
+	tableName     string
+	accountsTable string
 }
 
 var (
@@ -30,9 +31,21 @@ var (
 // NewSQLXCashflowStore creates a cashflow transaction store backed by SQLX.
 func NewSQLXCashflowStore(db *DB) *SQLXCashflowStore {
 	return &SQLXCashflowStore{
-		db:        db,
-		tableName: qualifyTable(db, SchemaCashflow, TableTransactions),
+		db:            db,
+		tableName:     qualifyTable(db, SchemaCashflow, TableTransactions),
+		accountsTable: qualifyTableAs(db, SchemaCashflow, TableAccounts, "cashflow_accounts"),
 	}
+}
+
+// CreateAccount inserts the cashflow account projection, ignoring an existing row.
+func (s *SQLXCashflowStore) CreateAccount(ctx context.Context, acc *cashflow.Account) error {
+	query := fmt.Sprintf(`
+		INSERT INTO %s (id, account_id, created_at, updated_at)
+		VALUES (:id, :account_id, :created_at, :updated_at)
+		ON CONFLICT (account_id) DO NOTHING
+	`, s.accountsTable)
+	_, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, acc)
+	return err
 }
 
 // CreateTransactions persists a batch of cashflow transactions in a single insert,

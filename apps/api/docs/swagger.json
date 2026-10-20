@@ -3700,7 +3700,7 @@
         },
         "/portfolio/transactions/date": {
             "post": {
-                "description": "Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots. Imported transactions keep their statement date.",
+                "description": "Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots in the background. Imported transactions keep their statement date.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3779,7 +3779,7 @@
         },
         "/portfolio/transactions/manual": {
             "post": {
-                "description": "Creates a manual portfolio transaction, then rebuilds positions and snapshots so they include it. The response reports whether that rebuild ran.",
+                "description": "Creates a manual portfolio transaction, then rebuilds positions and snapshots in the background so they include it. The response answers before the rebuild runs; a portfolio.rebuilt websocket event follows when it is done.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3828,6 +3828,155 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/portfolio/transactions/{transaction_id}": {
+            "put": {
+                "description": "Replaces the date, type, listing, amount, quantity and description of a manually entered portfolio transaction under the same rules as creating one, then rebuilds positions and snapshots in the background. Imported transactions are refused. The response answers before the rebuild runs; a portfolio.rebuilt websocket event follows when it is done.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portfolio"
+                ],
+                "summary": "Edit a manual portfolio transaction",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transaction ID",
+                        "name": "transaction_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Edited transaction",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/portfolio.UpdatePortfolioTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/portfolio.ManualPortfolioTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes a manually entered portfolio transaction, then rebuilds positions and snapshots in the background. Imported transactions are refused, since the next upload of the same statement would bring them back.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portfolio"
+                ],
+                "summary": "Delete a manual portfolio transaction",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transaction ID",
+                        "name": "transaction_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/portfolio.DeletePortfolioTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -5497,6 +5646,18 @@
                 }
             }
         },
+        "portfolio.DeletePortfolioTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "rebuild": {
+                    "description": "Rebuild reports the rebuild this write scheduled:\n\"started\" (recalculating in the background; a portfolio.rebuilt websocket event\nfollows when done) or \"skipped\" (nothing was scheduled).",
+                    "type": "string"
+                }
+            }
+        },
         "portfolio.ManualPortfolioTransactionResponse": {
             "type": "object",
             "properties": {
@@ -5531,7 +5692,7 @@
                     "type": "string"
                 },
                 "rebuild": {
-                    "description": "Rebuild says whether the positions and snapshots have caught up with this write:\n\"completed\", \"in_progress\" (another rebuild held the lock), \"skipped\" or \"failed\".",
+                    "description": "Rebuild reports the rebuild this write scheduled:\n\"started\" (recalculating in the background; a portfolio.rebuilt websocket event\nfollows when done) or \"skipped\" (nothing was scheduled).",
                     "type": "string"
                 },
                 "source": {
@@ -5719,6 +5880,29 @@
                 },
                 "value_index": {
                     "type": "number"
+                }
+            }
+        },
+        "portfolio.UpdatePortfolioTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "listing_id": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },

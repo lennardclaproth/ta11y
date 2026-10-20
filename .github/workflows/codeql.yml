@@ -33,9 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Go module lives in apps/api and the repo-root go.work is gitignored,
-      # so the build is driven explicitly rather than left to autobuild, which
-      # starts from the repo root.
+      # The Go module lives in apps/api and autobuild would start from the repo root,
+      # so the build is driven explicitly; GOWORK=off keeps it on the module itself.
       - if: matrix.language == 'go'
         uses: actions/setup-go@v5
         with:

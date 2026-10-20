@@ -24,7 +24,10 @@ func TestN26Parser_ParseAll_EnglishHeaders(t *testing.T) {
 	}
 
 	var got []cashflow.TransactionData
-	for _, txd := range seq {
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: %v", txd.RowNumber, rowErr)
+		}
 		got = append(got, txd)
 	}
 
@@ -78,7 +81,10 @@ func TestN26Parser_ParseAll_GermanHeadersAndSemicolon(t *testing.T) {
 	}
 
 	var got []cashflow.TransactionData
-	for _, txd := range seq {
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: %v", txd.RowNumber, rowErr)
+		}
 		got = append(got, txd)
 	}
 
@@ -111,7 +117,10 @@ func TestN26Parser_ParseAll_EncodingFallback_Windows1252(t *testing.T) {
 	}
 
 	var got []cashflow.TransactionData
-	for _, txd := range seq {
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: %v", txd.RowNumber, rowErr)
+		}
 		got = append(got, txd)
 	}
 	if len(got) != 1 {
@@ -119,6 +128,36 @@ func TestN26Parser_ParseAll_EncodingFallback_Windows1252(t *testing.T) {
 	}
 	if !strings.Contains(got[0].Note, "Danke f\u00fcr den Import") {
 		t.Fatalf("expected decoded umlaut in note, got %s", got[0].Note)
+	}
+}
+
+func TestN26Parser_ParseAll_UnreadableRowIsYieldedWithItsError(t *testing.T) {
+	input := `"Booking Date","Value Date","Partner Name","Partner Iban",Type,"Payment Reference","Account Name","Amount (EUR)","Original Amount","Original Currency","Exchange Rate"
+2025-06-21,2025-06-20,"DM Drogerie Markt",,Presentment,,"Lennard & Greta",-1.85,1.85,EUR,1
+,,"No date",,Presentment,,"Lennard & Greta",-2.00,,,
+2025-06-23,2025-06-23,"Rewe",,Presentment,,"Lennard & Greta",not-an-amount,,,
+2025-06-24,2025-06-24,"Lidl",,Presentment,,"Lennard & Greta",-3.10,,,
+`
+
+	seq, err := NewN26Parser().ParseAll(io.NopCloser(strings.NewReader(input)))
+	if err != nil {
+		t.Fatalf("ParseAll returned error: %v", err)
+	}
+
+	var parsed, failed []int
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			failed = append(failed, txd.RowNumber)
+			continue
+		}
+		parsed = append(parsed, txd.RowNumber)
+	}
+
+	if len(parsed) != 2 || parsed[0] != 1 || parsed[1] != 4 {
+		t.Fatalf("expected rows 1 and 4 parsed, got %v", parsed)
+	}
+	if len(failed) != 2 || failed[0] != 2 || failed[1] != 3 {
+		t.Fatalf("expected rows 2 and 3 failed, got %v", failed)
 	}
 }
 

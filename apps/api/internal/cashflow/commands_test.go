@@ -34,6 +34,9 @@ func (s *dateStore) UpdateDate(_ context.Context, _, _ uuid.UUID, date time.Time
 	return 1, nil
 }
 
+func (s *dateStore) CreateAccount(_ context.Context, _ *Account) error {
+	return nil
+}
 func (s *dateStore) CreateTransactions(_ context.Context, _ []*Transaction) (int, error) {
 	return 0, nil
 }

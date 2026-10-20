@@ -30,7 +30,7 @@ func NewIngParser() *IngParser {
 	}
 }
 
-func (p *IngParser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.TransactionData], error) {
+func (p *IngParser) ParseAll(rc io.ReadCloser) (iter.Seq2[cashflow.TransactionData, error], error) {
 	raw, err := io.ReadAll(rc)
 	closeErr := rc.Close()
 	if err != nil {
@@ -42,41 +42,36 @@ func (p *IngParser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.Transact
 	if closeErr != nil {
 		return nil, closeErr
 	}
+	// A UTF-8 byte order mark has to go before the CSV reader sees it: in front of a
+	// quoted header it stops the quote from opening the field, and "Date" stays unmatched.
+	raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
 	csvReader := csv.NewReader(bytes.NewReader(raw))
 	csvReader.Comma = ';'
 	csvReader.LazyQuotes = true
 	csvReader.TrimLeadingSpace = true
-	// Read header
 	header, err := csvReader.Read()
 	if err != nil {
-		// Handle error (e.g., log and return an empty sequence)
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%w: the file has no header row", ErrMissingHeader)
+		}
 		return nil, err
 	}
 	if err := p.parseHeader(header); err != nil {
-		// Handle error (e.g., log and return an empty sequence)
 		return nil, err
 	}
-	// Return an iterator (Seq) that yields TransactionData items
-	seq := func(yield func(int, cashflow.TransactionData) bool) {
+	seq := func(yield func(cashflow.TransactionData, error) bool) {
 		rowNumber := 1 // first data row after header
 		for {
 			record, err := csvReader.Read()
 			if err == io.EOF {
 				return
 			}
-			if err != nil {
-				// Decide policy: skip bad CSV row reads
-				rowNumber++
-				continue
+			var td cashflow.TransactionData
+			if err == nil {
+				td, err = p.ParseRow(record, rowNumber, uuid.Nil)
 			}
-			td, err := p.ParseRow(record, rowNumber, uuid.Nil)
-			if err != nil {
-				// Decide policy: skip rows that fail to parse
-				rowNumber++
-				continue
-			}
-			// Respect early-stop from consumer
-			if !yield(rowNumber, td) {
+			td.RowNumber = rowNumber
+			if !yield(td, err) {
 				return
 			}
 			rowNumber++
@@ -86,12 +81,21 @@ func (p *IngParser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.Transact
 	return seq, nil
 }
 
-// ParseHeader initializes the header map from a CSV header row.
+// ingRequiredHeaders are the columns of ING's "Download transactions" CSV a row is read
+// from. Notifications is optional: an empty note is still a valid transaction.
+var ingRequiredHeaders = []string{"Date", "Name / Description", "Debit/credit", "Amount (EUR)"}
+
+// parseHeader maps the header row to column indexes and refuses a file that lacks any
+// required column, which is what tells a wrong export apart from a damaged one.
 func (p *IngParser) parseHeader(headers []string) error {
 	p.headerToColumn = make(map[string]int, len(headers))
 	for i, h := range headers {
-		trimmed := strings.TrimSpace(h)
-		p.headerToColumn[trimmed] = i
+		p.headerToColumn[strings.TrimSpace(h)] = i
+	}
+	for _, key := range ingRequiredHeaders {
+		if _, ok := p.headerToColumn[key]; !ok {
+			return fmt.Errorf("%w: %s", ErrMissingHeader, key)
+		}
 	}
 	return nil
 }
@@ -102,12 +106,12 @@ func (p *IngParser) ParseRow(record []string, rowNumber int, importId uuid.UUID)
 		return cashflow.TransactionData{}, fmt.Errorf("header map not initialized")
 	}
 	// Extract fields
-	dateStr := record[p.headerToColumn["Date"]]
-	desc := record[p.headerToColumn["Name / Description"]]
-	note := record[p.headerToColumn["Notifications"]]
+	dateStr := p.value(record, "Date")
+	desc := p.value(record, "Name / Description")
+	note := p.value(record, "Notifications")
 	source := "ING"
-	amountStr := record[p.headerToColumn["Amount (EUR)"]]
-	directionRaw := record[p.headerToColumn["Debit/credit"]]
+	amountStr := p.value(record, "Amount (EUR)")
+	directionRaw := p.value(record, "Debit/credit")
 
 	// Parse amount (replace comma with dot)
 	amountStr = strings.ReplaceAll(amountStr, ",", ".")
@@ -144,4 +148,15 @@ func (p *IngParser) ParseRow(record []string, rowNumber int, importId uuid.UUID)
 		Date:        parsedDate,
 		AccountType: p.accountType, // default to checking for ING
 	}, nil
+}
+
+// value reads one column of a row, empty when the column is absent. ParseAll never hands
+// it a short row — the CSV reader reports that as a field-count error — but ParseRow can
+// also be called directly.
+func (p *IngParser) value(record []string, key string) string {
+	idx, ok := p.headerToColumn[key]
+	if !ok || idx >= len(record) {
+		return ""
+	}
+	return strings.TrimSpace(record[idx])
 }
