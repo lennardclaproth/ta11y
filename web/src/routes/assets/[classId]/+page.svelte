@@ -23,7 +23,7 @@
 	import Breadcrumb from '$lib/components/molecules/breadcrumb/Breadcrumb.svelte';
 	import HoldingPerformanceRow from '$lib/components/molecules/holding-performance-row/HoldingPerformanceRow.svelte';
 	import TrendIndicator from '$lib/components/molecules/trend-indicator/TrendIndicator.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import Panel from '$lib/components/atoms/panel/Panel.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
@@ -601,6 +601,12 @@
 	</AnalyticsCard>
 {/snippet}
 
+{#snippet retryLoad()}
+	<Button size="sm" variant="outline" intent="secondary" shape="default" onclick={() => void load()}>
+		Try again
+	</Button>
+{/snippet}
+
 <AppShellTemplate>
 	{#snippet top()}
 		<TopNavbar />
@@ -649,41 +655,27 @@
 		{#if !loading && !error && selected?.price_carried_forward}
 			<!-- The figures stay on screen, so the warning says which price they are based on rather
 			     than claiming nothing could be read. -->
-			<Alert intent="warning" title="Prices are not up to date">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<span>
-						Today's daily prices have not come in yet. The values below still use the price of
-						{formatDisplayDate(selected.price_date ?? null)}.
-					</span>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						shape="default"
-						onclick={() => void load()}
-					>
-						Try again
-					</Button>
-				</div>
-			</Alert>
+			<NoticeBand
+				intent="warning"
+				title="Prices are not up to date"
+				action={retryLoad}
+				class="-mx-4 lg:-mx-8"
+			>
+				Today's daily prices have not come in yet. The values below still use the price of
+				{formatDisplayDate(selected.price_date ?? null)}.
+			</NoticeBand>
 		{/if}
 
 		{#if error}
 			<!-- Nothing could be read, so the page does not pretend to show figures. -->
-			<Alert intent="error" title="This asset class could not be loaded">
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<span>{error} Nothing was changed; your items are still recorded.</span>
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						shape="default"
-						onclick={() => void load()}
-					>
-						Try again
-					</Button>
-				</div>
-			</Alert>
+			<NoticeBand
+				intent="error"
+				title="This asset class could not be loaded"
+				action={retryLoad}
+				class="-mx-4 lg:-mx-8"
+			>
+				{error} Nothing was changed; your items are still recorded.
+			</NoticeBand>
 		{:else}
 			<div class="flex min-h-0 flex-1 flex-col gap-5 lg:flex-row">
 				<Panel
@@ -944,25 +936,25 @@
 							{#if detailError}
 								<!-- A linked item always has at least one purchase, so "No purchases yet" would
 								     read as a fact about the account rather than a failed request. -->
-								<div class="p-3">
-									<Alert intent="error" title="The purchases could not be loaded">
-										<div class="flex flex-wrap items-center justify-between gap-3">
-											<span>
-												The figures above come from the class and are still current; nothing was
-												changed.
-											</span>
-											<Button
-												size="sm"
-												variant="outline"
-												intent="secondary"
-												shape="default"
-												onclick={() => void loadDetail(selected.id)}
-											>
-												Try again
-											</Button>
-										</div>
-									</Alert>
-								</div>
+								{#snippet retryDetail()}
+									<Button
+										size="sm"
+										variant="outline"
+										intent="secondary"
+										shape="default"
+										onclick={() => selected && void loadDetail(selected.id)}
+									>
+										Try again
+									</Button>
+								{/snippet}
+								<NoticeBand
+									intent="error"
+									gutter="panel"
+									title="The purchases could not be loaded"
+									action={retryDetail}
+								>
+									The figures above come from the class and are still current; nothing was changed.
+								</NoticeBand>
 							{:else}
 								<DataTable
 									rows={purchases}
@@ -1084,9 +1076,13 @@
 						</header>
 
 						{#if snapshotsError}
-							<Alert intent="error" title="The portfolio history could not be loaded">
+							<NoticeBand
+								intent="error"
+								gutter="none"
+								title="The portfolio history could not be loaded"
+							>
 								{snapshotsError} The worth on the left is still current.
-							</Alert>
+							</NoticeBand>
 						{/if}
 
 						{#if itemCount === 0}

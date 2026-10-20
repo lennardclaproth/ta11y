@@ -2,7 +2,7 @@
 	// Asking before something is removed for good. The caller does the work and throws on a
 	// refusal; the dialog stays open and says why, so "nothing happened" is never silent.
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 
@@ -49,12 +49,18 @@
 </script>
 
 <Dialog bind:open {title} size="sm" closeOnEscape={!busy}>
-	<div class="space-y-3">
-		{#if error}
-			<Alert intent="error" title="Nothing was deleted">{error}</Alert>
-		{/if}
-		<Text as="p" size="sm">{message}</Text>
-	</div>
+	{#if error}
+		<NoticeBand
+			intent="error"
+			surface="inset"
+			gutter="dialog"
+			title="Nothing was deleted"
+			class="-mx-5 -mt-4 mb-4"
+		>
+			{error}
+		</NoticeBand>
+	{/if}
+	<Text as="p" size="sm">{message}</Text>
 
 	{#snippet footer()}
 		<Button variant="ghost" intent="secondary" disabled={busy} onclick={() => (open = false)}>

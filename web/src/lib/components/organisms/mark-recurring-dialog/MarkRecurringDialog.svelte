@@ -11,6 +11,7 @@
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
 	import { rhythmLabels } from '$lib/api/recurring';
@@ -177,12 +178,7 @@
 		</fieldset>
 
 		{#if error}
-			<p
-				class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-				role="alert"
-			>
-				{error}
-			</p>
+			<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 		{/if}
 
 		<Text size="xs" tone="muted">

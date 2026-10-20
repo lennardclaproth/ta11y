@@ -7,6 +7,7 @@
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import Sparkline from '$lib/components/atoms/sparkline/Sparkline.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import RecurringItemRow from '$lib/components/molecules/recurring-item-row/RecurringItemRow.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import { scaledToNumber } from '$lib/api/money';
@@ -124,14 +125,9 @@
 			</div>
 		{/each}
 	{:else if error}
-		<div class="px-4 py-8">
-			<p
-				class="mx-auto max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700"
-				role="alert"
-			>
-				{error}
-			</p>
-		</div>
+		<!-- The same band the table above draws for the same failure: one notification shape, whatever
+		     the width of the screen. -->
+		<NoticeBand intent="error" gutter="panel">{error}</NoticeBand>
 	{:else if rows.length === 0}
 		<p class="px-6 py-10 text-center text-sm text-slate-500">{emptyText}</p>
 	{:else}
