@@ -16,6 +16,10 @@ import (
 
 // CommandStore persists assets, classes, accounts, mutations, and purchases.
 type CommandStore interface {
+	// LockClass claims a class for the rest of the transaction, so that the writes
+	// below -- which all reach the whole class through the replay -- take turns
+	// instead of interleaving. It has to be taken before the first of them.
+	LockClass(ctx context.Context, classID uuid.UUID) error
 	CreateAsset(ctx context.Context, asset *Asset) error
 	CreateAccount(ctx context.Context, account *Account) error
 	SetWorth(ctx context.Context, asset *Asset) error
@@ -135,6 +139,10 @@ func (c *Commands) CreateAsset(
 	}
 	// Start a transaction to ensure atomicity
 	err = c.uow.Do(ctx, func(txCtx context.Context) error {
+		// The opening worth is replayed into the class below, which rewrites its history.
+		if err := c.cs.LockClass(txCtx, classID); err != nil {
+			return fmt.Errorf("create asset: %w", err)
+		}
 		// Create the asset
 		if err := c.cs.CreateAsset(txCtx, asset); err != nil {
 			return fmt.Errorf("create asset: failed to store asset: %w", err)
@@ -365,6 +373,11 @@ func (c *Commands) UpdateAssetWorth(
 		if asset.IsDailyPriced() {
 			return fmt.Errorf("update asset worth: %w", ErrAssetDailyPriced)
 		}
+		// Taken before the class total is read: the figures written below are this
+		// total carried forward, and the replay rewrites the class's whole history.
+		if err := c.cs.LockClass(txCtx, asset.ClassID); err != nil {
+			return fmt.Errorf("update asset worth: %w", err)
+		}
 		previousWorth := asset.CurrentWorth
 		classTotal, err := c.ca.AggregateValue(txCtx, accID, asset.ClassID)
 		if err != nil {
@@ -438,6 +451,9 @@ func (c *Commands) DeleteClass(ctx context.Context, accountID, classID uuid.UUID
 	// The class and its children go together: a half-removed class leaves items and
 	// worth changes that still count towards net worth.
 	if err := c.uow.Do(ctx, func(txCtx context.Context) error {
+		if err := c.cs.LockClass(txCtx, classID); err != nil {
+			return err
+		}
 		return c.cs.DeleteClass(txCtx, classID)
 	}); err != nil {
 		return fmt.Errorf("delete asset: failed to delete: %w", err)

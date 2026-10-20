@@ -18,6 +18,7 @@ func (s *recordingAssetsStore) CreateAccount(_ context.Context, acc *assets.Acco
 	s.createdAccountID = acc.AccountID
 	return nil
 }
+func (s *recordingAssetsStore) LockClass(_ context.Context, _ uuid.UUID) error       { return nil }
 func (s *recordingAssetsStore) CreateAsset(_ context.Context, _ *assets.Asset) error { return nil }
 func (s *recordingAssetsStore) SetWorth(_ context.Context, _ *assets.Asset) error    { return nil }
 func (s *recordingAssetsStore) CreateClass(_ context.Context, _ *assets.Class) error { return nil }

@@ -127,16 +127,43 @@ func (s *SQLXAssetsStore) UpdateClass(ctx context.Context, class *assets.Class) 
 	return nil
 }
 
+// LockClass takes the class row, so that everything the transaction goes on to write
+// for that class waits for the one before it.
+//
+// Postgres runs read committed, so two transactions writing different rows of one
+// class share no lock: two deletes of a different change of the same item each count
+// a second one left and both succeed, and the replay that follows a write reads a
+// history another transaction is still rewriting. A lock per item cannot carry this.
+// The replay writes the whole class -- its changes first, then its items -- so any
+// order over several item rows is an order some other path takes the other way
+// around, and two of those deadlock. One row per class leaves a single thing to take,
+// and an order of one cannot be reversed.
+//
+// SQLite has no FOR UPDATE and needs none: _txlock=immediate serialises writers
+// already. A class that is gone is left to the statements that follow, which report
+// what they reported before.
+func (s *SQLXAssetsStore) LockClass(ctx context.Context, classID uuid.UUID) error {
+	if s.db.DriverName() == string(Sqlite) {
+		return nil
+	}
+	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE id = ? FOR UPDATE`, s.classesTable))
+	var id uuid.UUID
+	if err := s.db.GetExecutor(ctx).QueryRowxContext(ctx, query, classID).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("assets store: lock class: %w", err)
+	}
+	return nil
+}
+
 // DeleteClass removes a class with its items, worth changes and purchases. Like
 // DeleteAsset the children are deleted explicitly, because SQLite runs without
 // foreign-key enforcement and would otherwise leave them behind: the snapshot
 // builder reads mutations per account, so an orphan keeps counting towards net
-// worth with no way back to it. Its items are locked first, for the reason lockItem
-// documents: a delete of one of those items takes its row before its children too.
+// worth with no way back to it. Children before items, the order every writer of a
+// class keeps; the caller holds the class lock.
 func (s *SQLXAssetsStore) DeleteClass(ctx context.Context, classID uuid.UUID) error {
-	if err := s.lockClassItems(ctx, classID); err != nil {
-		return err
-	}
 	purchases := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE item_id IN (SELECT id FROM %s WHERE class_id = ?)`,
 		s.purchasesTable, s.itemsTable,
@@ -348,13 +375,10 @@ func (s *SQLXAssetsStore) UpdateAsset(ctx context.Context, asset *assets.Asset) 
 }
 
 // DeleteAsset removes an item with its mutations and purchases. The children are
-// deleted explicitly because SQLite runs without foreign-key enforcement. The item row
-// is locked first to keep the order lockItem documents, even though this path ends up
-// removing it.
+// deleted explicitly because SQLite runs without foreign-key enforcement, and before
+// the item itself: that is the order the replay and the holdings rebuild write in
+// too. The caller holds the class lock; see LockClass.
 func (s *SQLXAssetsStore) DeleteAsset(ctx context.Context, assetID uuid.UUID) error {
-	if err := s.lockItem(ctx, assetID); err != nil {
-		return err
-	}
 	for _, table := range []string{s.mutationsTable, s.purchasesTable} {
 		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE item_id = ?`, table))
 		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID); err != nil {
@@ -426,59 +450,15 @@ func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutati
 	return nil
 }
 
-// lockItem serialises the deletes below per item.
-//
-// Postgres runs read committed, so two transactions removing a different row of the
-// same item share no lock: both count a second row left and both succeed. Taking the
-// item row first makes the second wait for the first to commit, after which its count
-// sees the row that is gone. SQLite has no FOR UPDATE and needs none: _txlock=immediate
-// serialises writers already. A missing item is left to the delete, which removes
-// nothing and reports the same error as before.
-//
-// Locking order: every path that touches an item's mutations or purchases takes the
-// item row first, never the other way around. Two paths that take the same two rows in
-// opposite order deadlock, so a new delete has to keep this order rather than invert it.
-func (s *SQLXAssetsStore) lockItem(ctx context.Context, assetID uuid.UUID) error {
-	if s.db.DriverName() == string(Sqlite) {
-		return nil
-	}
-	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE id = ? FOR UPDATE`, s.itemsTable))
-	var id uuid.UUID
-	if err := s.db.GetExecutor(ctx).QueryRowxContext(ctx, query, assetID).Scan(&id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return fmt.Errorf("assets store: lock item: %w", err)
-	}
-	return nil
-}
-
-// lockClassItems takes the item rows of a class the way lockItem takes a single one, in
-// a fixed order so two classes that share nothing cannot wait on each other.
-func (s *SQLXAssetsStore) lockClassItems(ctx context.Context, classID uuid.UUID) error {
-	if s.db.DriverName() == string(Sqlite) {
-		return nil
-	}
-	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE class_id = ? ORDER BY id FOR UPDATE`, s.itemsTable))
-	var ids []uuid.UUID
-	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &ids, query, classID); err != nil {
-		return fmt.Errorf("assets store: lock class items: %w", err)
-	}
-	return nil
-}
-
 // DeleteMutation removes one mutation while the item keeps another.
 //
 // The count is part of the statement rather than a read the caller acts on: a read
 // followed by a delete is not isolated from a second delete, and two of them could
 // each see a second change left and together remove both. Whether an item is left
 // without a history is exactly what ErrLastMutation exists to prevent, so the
-// condition belongs where the row is removed, behind the item lock that makes two
-// deletes of the same item take turns.
+// condition belongs where the row is removed, behind the class lock that makes two
+// deletes in the same class take turns.
 func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, assetID, mutationID uuid.UUID) error {
-	if err := s.lockItem(ctx, assetID); err != nil {
-		return err
-	}
 	query := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
 		s.mutationsTable, s.mutationsTable,
@@ -604,11 +584,9 @@ func (s *SQLXAssetsStore) UpdatePurchase(ctx context.Context, purchase *assets.P
 }
 
 // DeletePurchase removes one purchase while the item keeps another; see
-// DeleteMutation for why the count sits in the statement and the item is locked first.
+// DeleteMutation for why the count sits in the statement, and LockClass for the lock
+// the caller holds around it.
 func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, assetID, purchaseID uuid.UUID) error {
-	if err := s.lockItem(ctx, assetID); err != nil {
-		return err
-	}
 	query := s.db.Rebind(fmt.Sprintf(
 		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
 		s.purchasesTable, s.purchasesTable,

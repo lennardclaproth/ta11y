@@ -71,6 +71,9 @@ func (c *Commands) DeleteAsset(ctx context.Context, accID, assetID uuid.UUID) er
 		return fmt.Errorf("delete asset: %w", err)
 	}
 	if err := c.uow.Do(ctx, func(txCtx context.Context) error {
+		if err := c.cs.LockClass(txCtx, asset.ClassID); err != nil {
+			return err
+		}
 		if err := c.cs.DeleteAsset(txCtx, asset.ID); err != nil {
 			return err
 		}
@@ -132,9 +135,9 @@ func (c *Commands) DeleteMutation(ctx context.Context, accID, assetID, mutationI
 		if err != nil {
 			return err
 		}
-		// The store locks the item and counts in the same statement that removes the
-		// row, so two deletes cannot each see a second change left and together empty
-		// the item's history.
+		// The store counts in the same statement that removes the row, and the class is
+		// claimed above, so two deletes cannot each see a second change left and
+		// together empty the item's history.
 		if err := c.cs.DeleteMutation(txCtx, asset.ID, mutation.ID); err != nil {
 			return err
 		}
@@ -147,7 +150,8 @@ func (c *Commands) DeleteMutation(ctx context.Context, accID, assetID, mutationI
 }
 
 // editableMutation resolves a worth change of a hand-valued item, with the number
-// of changes that item has.
+// of changes that item has. It claims the class before reading the history, so the
+// caller writes against a history no other transaction is rewriting; see LockClass.
 func (c *Commands) editableMutation(ctx context.Context, accID, assetID, mutationID uuid.UUID) (*Asset, *Mutation, int, error) {
 	asset, err := c.editableAsset(ctx, accID, assetID)
 	if err != nil {
@@ -157,6 +161,9 @@ func (c *Commands) editableMutation(ctx context.Context, accID, assetID, mutatio
 	// every rebuild; its purchases are what is edited instead.
 	if asset.IsDailyPriced() {
 		return nil, nil, 0, ErrAssetDailyPriced
+	}
+	if err := c.cs.LockClass(ctx, asset.ClassID); err != nil {
+		return nil, nil, 0, err
 	}
 	class, err := c.cg.Class(ctx, asset.ClassID)
 	if err != nil {
@@ -212,7 +219,7 @@ func (c *Commands) DeletePurchase(ctx context.Context, accID, assetID, purchaseI
 		if err != nil {
 			return err
 		}
-		// The store locks the item and counts in the removing statement; see DeleteMutation.
+		// The store counts in the removing statement, behind the class lock; see DeleteMutation.
 		return c.cs.DeletePurchase(txCtx, asset.ID, purchase.ID)
 	}); err != nil {
 		return fmt.Errorf("delete purchase: %w", err)
@@ -222,7 +229,8 @@ func (c *Commands) DeletePurchase(ctx context.Context, accID, assetID, purchaseI
 }
 
 // editablePurchase resolves a purchase of a daily-priced item, with the number of
-// purchases that item has.
+// purchases that item has. Like editableMutation it claims the class first, which is
+// what makes two deletes in it take turns; see LockClass.
 func (c *Commands) editablePurchase(ctx context.Context, accID, assetID, purchaseID uuid.UUID) (*Asset, *Purchase, int, error) {
 	asset, err := c.editableAsset(ctx, accID, assetID)
 	if err != nil {
@@ -230,6 +238,9 @@ func (c *Commands) editablePurchase(ctx context.Context, accID, assetID, purchas
 	}
 	if !asset.IsDailyPriced() {
 		return nil, nil, 0, ErrAssetNotDailyPriced
+	}
+	if err := c.cs.LockClass(ctx, asset.ClassID); err != nil {
+		return nil, nil, 0, err
 	}
 	purchases, err := c.cg.PurchasesForAsset(ctx, asset.ID)
 	if err != nil {

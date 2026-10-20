@@ -233,10 +233,12 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   `current_worth`. That is what makes back-dated and corrected changes land in the right place.
   An item's first change must be a `SET` (`ErrOpeningNotSet`). An edit keeps the change's kind;
   an item keeps at least one change (`ErrLastMutation`, raised by the store in the statement
-  that removes the row, after a `FOR UPDATE` on the item — read committed would otherwise let
-  two deletes of the same item empty a history between them; SQLite serialises writers itself).
-  Every store path that touches an item's changes or purchases takes the item row first —
-  deleting an item or a class included — so two of them can never deadlock on a reversed order.
+  that removes the row — read committed would otherwise let two deletes of the same item empty
+  a history between them). Because the replay writes the whole class, every command that adds,
+  edits or deletes history — deleting an item or a class included — takes a `FOR UPDATE` on the
+  class row first (`LockClass`), before reading the history it rewrites. One lock per class
+  leaves no order to reverse, so two of them take turns rather than deadlock; SQLite has no
+  `FOR UPDATE` and serialises writers itself.
   Only items in a `MANUAL` class can be renamed, deleted or have their history edited.
 - **A stored change holds its own result.** `new_worth` is always `amount` applied to
   `previous_worth` (`worthAfter` in `mutation.go`), on creation and on edit alike. The replay's
@@ -303,3 +305,7 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   is never written to again keeps its old rows; no migration repairs them.
 - **No guard against a negative worth.** An `ADJUST`/`DECREASE` larger than the worth is stored
   as is; only the class page's worth dialog refuses it.
+- **The holdings rebuild writes outside the class lock.** `HoldingsSyncer.SyncAccount` works per
+  account, not per class, so it does not take `LockClass`. It cannot deadlock against a command
+  that does — it writes an item's changes before the item, the same order everything else keeps
+  — but a rebuild running next to an edit of the same class is not serialised.

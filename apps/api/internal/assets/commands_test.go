@@ -30,6 +30,7 @@ func (f fakeAccountStore) List(_ context.Context) ([]*account.Account, error) { 
 // at least one" guard lives: the store counts in the statement that removes the row.
 type fakeAssetsStore struct{ lastRow error }
 
+func (fakeAssetsStore) LockClass(_ context.Context, _ uuid.UUID) error             { return nil }
 func (fakeAssetsStore) CreateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
 func (fakeAssetsStore) CreateAccount(_ context.Context, _ *assets.Account) error   { return nil }
 func (fakeAssetsStore) SetWorth(_ context.Context, _ *assets.Asset) error          { return nil }

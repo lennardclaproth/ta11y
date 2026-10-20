@@ -161,6 +161,131 @@ func TestUpdateMutationKeepsAnAmountThatLooksLikeALegacyRow(t *testing.T) {
 	}
 }
 
+// orderedStore records the store calls a command makes, in order.
+type orderedStore struct {
+	fakeAssetsStore
+	calls []string
+}
+
+func (o *orderedStore) record(name string) error {
+	o.calls = append(o.calls, name)
+	return nil
+}
+
+func (o *orderedStore) LockClass(_ context.Context, _ uuid.UUID) error { return o.record("LockClass") }
+func (o *orderedStore) CreateAsset(_ context.Context, _ *assets.Asset) error {
+	return o.record("CreateAsset")
+}
+func (o *orderedStore) SetWorth(_ context.Context, _ *assets.Asset) error {
+	return o.record("SetWorth")
+}
+func (o *orderedStore) CreateMutation(_ context.Context, _ *assets.Mutation) error {
+	return o.record("CreateMutation")
+}
+func (o *orderedStore) UpdateMutation(_ context.Context, _ *assets.Mutation) error {
+	return o.record("UpdateMutation")
+}
+func (o *orderedStore) DeleteClass(_ context.Context, _ uuid.UUID) error {
+	return o.record("DeleteClass")
+}
+func (o *orderedStore) DeleteAsset(_ context.Context, _ uuid.UUID) error {
+	return o.record("DeleteAsset")
+}
+func (o *orderedStore) DeleteMutation(_ context.Context, _, _ uuid.UUID) error {
+	return o.record("DeleteMutation")
+}
+func (o *orderedStore) UpdatePurchase(_ context.Context, _ *assets.Purchase) error {
+	return o.record("UpdatePurchase")
+}
+func (o *orderedStore) DeletePurchase(_ context.Context, _, _ uuid.UUID) error {
+	return o.record("DeletePurchase")
+}
+
+// fixedAggregator stands in for the class total the write side reads.
+type fixedAggregator struct{}
+
+func (fixedAggregator) AggregateValue(_ context.Context, _, _ uuid.UUID) (money.Price, error) {
+	return 0, nil
+}
+
+// Every write to a class's history replays the whole class, so each of these commands
+// has to claim the class row before it writes anything: a lock taken per item is an
+// order another path can take the other way around, and two of those deadlock.
+func TestHistoryWritesClaimTheClassFirst(t *testing.T) {
+	owner := uuid.New()
+
+	fixture := func(dailyPriced bool) (editGetter, *orderedStore, *assets.Commands) {
+		class := &assets.Class{ID: uuid.New(), AccountID: owner, Name: "Savings", Source: assets.ClassSourceManual}
+		asset := &assets.Asset{ID: uuid.New(), ClassID: class.ID, AccountID: owner, Name: "Cash", Class: class}
+		class.Mutations = []assets.Mutation{{
+			ID: uuid.New(), AssetID: asset.ID, ClassID: class.ID, ChangeType: assets.ChangeTypeSet,
+			EffectiveDate: time.Now().AddDate(0, -1, 0),
+		}}
+		getter := editGetter{class: class, asset: asset}
+		if dailyPriced {
+			listing := uuid.New()
+			asset.ListingID = &listing
+			getter.purchases = []*assets.Purchase{
+				{ID: uuid.New(), AssetID: asset.ID},
+				{ID: uuid.New(), AssetID: asset.ID},
+			}
+		}
+		class.Assets = []assets.Asset{*asset}
+		store := &orderedStore{}
+		aq := account.NewQueries(fakeAccountStore{exists: true})
+		return getter, store, assets.NewCommands(store, getter, *aq, inlineUoW{}, fixedAggregator{}, nil, nil)
+	}
+
+	cases := []struct {
+		name        string
+		dailyPriced bool
+		run         func(*assets.Commands, editGetter) error
+	}{
+		{"create item", false, func(c *assets.Commands, g editGetter) error {
+			_, err := c.CreateAsset(context.Background(), owner, g.class.ID, "Savings account", 0, time.Now(), nil)
+			return err
+		}},
+		{"set worth", false, func(c *assets.Commands, g editGetter) error {
+			return c.UpdateAssetWorth(context.Background(), owner, g.asset.ID, 0, assets.ChangeTypeSet, nil, time.Now(), nil)
+		}},
+		{"edit worth change", false, func(c *assets.Commands, g editGetter) error {
+			return c.UpdateMutation(context.Background(), owner, g.asset.ID, g.class.Mutations[0].ID,
+				assets.MutationEdit{EffectiveDate: time.Now()})
+		}},
+		{"delete worth change", false, func(c *assets.Commands, g editGetter) error {
+			return c.DeleteMutation(context.Background(), owner, g.asset.ID, g.class.Mutations[0].ID)
+		}},
+		{"delete item", false, func(c *assets.Commands, g editGetter) error {
+			return c.DeleteAsset(context.Background(), owner, g.asset.ID)
+		}},
+		{"delete class", false, func(c *assets.Commands, g editGetter) error {
+			return c.DeleteClass(context.Background(), owner, g.class.ID)
+		}},
+		{"edit purchase", true, func(c *assets.Commands, g editGetter) error {
+			return c.UpdatePurchase(context.Background(), owner, g.asset.ID, g.purchases[0].ID,
+				assets.PurchaseInput{Date: time.Now(), Quantity: 2, UnitPrice: money.Price(money.Scale)})
+		}},
+		{"delete purchase", true, func(c *assets.Commands, g editGetter) error {
+			return c.DeletePurchase(context.Background(), owner, g.asset.ID, g.purchases[0].ID)
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			getter, store, commands := fixture(tc.dailyPriced)
+			if err := tc.run(commands, getter); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if len(store.calls) < 2 {
+				t.Fatalf("expected the class lock and a write, got %v", store.calls)
+			}
+			if store.calls[0] != "LockClass" {
+				t.Fatalf("expected the class to be claimed first, got %v", store.calls)
+			}
+		})
+	}
+}
+
 func TestDeletePurchaseKeepsTheLastPurchase(t *testing.T) {
 	owner := uuid.New()
 	getter, _ := editFixture(owner, assets.ClassSourceManual)
