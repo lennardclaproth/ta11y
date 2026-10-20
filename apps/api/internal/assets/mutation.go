@@ -47,6 +47,20 @@ type Mutation struct {
 	CreatedAt       time.Time   `db:"created_at"`
 }
 
+// worthAfter is the worth a change leaves behind: a SET carries it in Amount, an
+// ADJUST applies Amount to the worth it follows. Every row written has to hold the
+// result alongside the amount -- the replay reads both to tell a row written before
+// this was corrected from one that is simply mid-edit.
+func worthAfter(changeType ChangeType, direction *ChangeDirection, amount, previousWorth money.Price) money.Price {
+	if changeType != ChangeTypeAdjust {
+		return amount
+	}
+	if direction != nil && *direction == ChangeDirectionDecrease {
+		return previousWorth - amount
+	}
+	return previousWorth + amount
+}
+
 func NewMutation(
 	accID, classID, assetID uuid.UUID,
 	changeType ChangeType,
@@ -55,17 +69,7 @@ func NewMutation(
 	effectiveDate time.Time,
 	note *string,
 ) (*Mutation, error) {
-	// determine how to apply the change in worth, set nextWorth to worth, this
-	// is the base case (ChangeType is "SET"). When ChangeType is "ADJUST" we need
-	// to determine whether to decrease or increase the previousworth.
-	newWorth := amount
-	if changeType == ChangeTypeAdjust {
-		if direction != nil && *direction == ChangeDirectionDecrease {
-			newWorth = previousWorth - amount
-		} else {
-			amount = previousWorth + amount
-		}
-	}
+	newWorth := worthAfter(changeType, direction, amount, previousWorth)
 	return &Mutation{
 		ID:              uuid.New(),
 		AccountID:       accID,

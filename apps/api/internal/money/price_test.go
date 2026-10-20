@@ -2,8 +2,47 @@ package money
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
+
+// TestNewPrice covers the guards a derived amount relies on: rounding rather than
+// truncation, and a refusal for anything that cannot be held in a Price.
+func TestNewPrice(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   float64
+		want    Price
+		wantErr bool
+	}{
+		{name: "rounds to the nearest scale unit", input: 0.0077, want: Price(7_700)},
+		{name: "negative", input: -1, wantErr: true},
+		{name: "not a number", input: math.NaN(), wantErr: true},
+		{name: "infinite", input: math.Inf(1), wantErr: true},
+		{name: "beyond the int64 range", input: 1e300, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewPrice(tt.input)
+
+			if tt.wantErr {
+				if !errors.Is(err, ErrInvalidPrice) {
+					t.Fatalf("NewPrice(%v) error = %v, want ErrInvalidPrice", tt.input, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("NewPrice(%v) unexpected error = %v", tt.input, err)
+			}
+
+			if got != tt.want {
+				t.Fatalf("NewPrice(%v) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestParsePrice(t *testing.T) {
 	tests := []struct {
