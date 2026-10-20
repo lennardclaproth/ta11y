@@ -26,6 +26,7 @@ type SQLXPortfolioStore struct {
 	positionsTable     string
 	posSnapshotsTable  string
 	portSnapshotsTable string
+	listingsTable      string
 }
 
 var (
@@ -47,6 +48,7 @@ func NewSQLXPortfolioStore(db *DB) *SQLXPortfolioStore {
 		positionsTable:     qualifyTable(db, SchemaPortfolio, TablePositions),
 		posSnapshotsTable:  qualifyTable(db, SchemaPortfolio, TablePosSnapshots),
 		portSnapshotsTable: qualifyTable(db, SchemaPortfolio, TablePortSnapshots),
+		listingsTable:      qualifyTable(db, SchemaMarketData, TableListings),
 	}
 }
 
@@ -206,6 +208,53 @@ func (s *SQLXPortfolioStore) UpdateTransactionOccurredAt(ctx context.Context, ac
 	return int(affected), nil
 }
 
+// UpdateManualTransaction stores the edited content of one manual transaction. The
+// position link is cleared because the instrument may have changed; the rebuild that
+// follows every manual write sets it again. A checksum already held by another row
+// surfaces as the feature's duplicate error.
+func (s *SQLXPortfolioStore) UpdateManualTransaction(ctx context.Context, tx *portfolio.Transaction) (int, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		UPDATE %s SET
+			occurred_at = ?, isin = ?, symbol = ?, description = ?, type = ?,
+			quantity = ?, unit_price = ?, amount_cents = ?, checksum = ?,
+			position_id = NULL, updated_at = ?
+		WHERE account_id = ? AND id = ? AND origin = ?
+	`, s.transactionsTable))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query,
+		tx.OccurredAt, tx.ISIN, tx.Symbol, tx.Description, string(tx.Type),
+		tx.Quantity, tx.UnitPrice, tx.AmountCents, tx.Checksum,
+		time.Now().UTC(), tx.AccountID, tx.ID, string(portfolio.TransactionOriginManual),
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, portfolio.ErrDuplicateTransaction
+		}
+		return 0, fmt.Errorf("portfolio store: update manual transaction: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("portfolio store: rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
+// DeleteManualTransaction removes one manual transaction from an account.
+func (s *SQLXPortfolioStore) DeleteManualTransaction(ctx context.Context, accountID, id uuid.UUID) (int, error) {
+	query := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE account_id = ? AND id = ? AND origin = ?`,
+		s.transactionsTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, accountID, id, string(portfolio.TransactionOriginManual))
+	if err != nil {
+		return 0, fmt.Errorf("portfolio store: delete manual transaction: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("portfolio store: rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
 // TransactionsForAccount returns an account's transactions ordered by occurrence
 // (sort "asc"/"desc").
 func (s *SQLXPortfolioStore) TransactionsForAccount(ctx context.Context, accID uuid.UUID, sort string) ([]portfolio.Transaction, error) {
@@ -327,14 +376,34 @@ func (s *SQLXPortfolioStore) GetLastSnapshot(ctx context.Context, positionID uui
 	return &snap, nil
 }
 
-// CreatePositionSnapshot persists one position snapshot, mapping the per-day unique
-// violation to portfolio.ErrPositionSnapshotAlreadyExists.
-func (s *SQLXPortfolioStore) CreatePositionSnapshot(ctx context.Context, snap *portfolio.PositionSnapshot) error {
-	if snap.CreatedAt.IsZero() {
-		snap.CreatedAt = time.Now().UTC()
+// snapshotInsertBatch bounds the rows in one multi-row insert. A rebuild writes a
+// snapshot per position per day, thousands of rows, and one statement per row made the
+// round trips the cost of a rebuild. 500 rows of the widest snapshot (24 columns) stay
+// far below the 65535 parameters Postgres accepts in one statement.
+const snapshotInsertBatch = 500
+
+// insertInBatches runs a named insert over rows, snapshotInsertBatch rows per statement.
+func insertInBatches[T any](ctx context.Context, exec sqlx.ExtContext, query string, rows []T) error {
+	for start := 0; start < len(rows); start += snapshotInsertBatch {
+		end := min(start+snapshotInsertBatch, len(rows))
+		if _, err := sqlx.NamedExecContext(ctx, exec, query, rows[start:end]); err != nil {
+			return err
+		}
 	}
-	snap.OccurredAt = date.StartOfDayUTC(snap.OccurredAt)
-	snap.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+// CreatePositionSnapshots persists position snapshots in multi-row inserts, mapping the
+// per-day unique violation to portfolio.ErrPositionSnapshotAlreadyExists.
+func (s *SQLXPortfolioStore) CreatePositionSnapshots(ctx context.Context, snaps []*portfolio.PositionSnapshot) error {
+	now := time.Now().UTC()
+	for _, snap := range snaps {
+		if snap.CreatedAt.IsZero() {
+			snap.CreatedAt = now
+		}
+		snap.OccurredAt = date.StartOfDayUTC(snap.OccurredAt)
+		snap.UpdatedAt = now
+	}
 	query := fmt.Sprintf(`
 		INSERT INTO %s (
 			id, account_id, position_id, symbol, name, listing_id, occurred_at,
@@ -352,24 +421,28 @@ func (s *SQLXPortfolioStore) CreatePositionSnapshot(ctx context.Context, snap *p
 			:created_at, :updated_at
 		)
 	`, s.posSnapshotsTable)
-	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, snap); err != nil {
+	if err := insertInBatches(ctx, s.db.GetExecutor(ctx), query, snaps); err != nil {
 		if isUniqueViolation(err) {
 			return portfolio.ErrPositionSnapshotAlreadyExists
 		}
-		return fmt.Errorf("portfolio store: create position snapshot: %w", err)
+		return fmt.Errorf("portfolio store: create position snapshots: %w", err)
 	}
 	return nil
 }
 
 // --- Portfolio snapshots ----------------------------------------------------
 
-// CreatePortfolioSnapshot upserts one portfolio snapshot keyed by (account, day).
-func (s *SQLXPortfolioStore) CreatePortfolioSnapshot(ctx context.Context, snapshot *portfolio.PortfolioSnapshot) error {
-	if snapshot.CreatedAt.IsZero() {
-		snapshot.CreatedAt = time.Now().UTC()
+// CreatePortfolioSnapshots upserts portfolio snapshots keyed by (account, day) in
+// multi-row inserts.
+func (s *SQLXPortfolioStore) CreatePortfolioSnapshots(ctx context.Context, snapshots []*portfolio.PortfolioSnapshot) error {
+	now := time.Now().UTC()
+	for _, snapshot := range snapshots {
+		if snapshot.CreatedAt.IsZero() {
+			snapshot.CreatedAt = now
+		}
+		snapshot.OccurredAt = date.StartOfDayUTC(snapshot.OccurredAt)
+		snapshot.UpdatedAt = now
 	}
-	snapshot.OccurredAt = date.StartOfDayUTC(snapshot.OccurredAt)
-	snapshot.UpdatedAt = time.Now().UTC()
 	query := fmt.Sprintf(`
 		INSERT INTO %s (
 			id, account_id, occurred_at,
@@ -407,10 +480,16 @@ func (s *SQLXPortfolioStore) CreatePortfolioSnapshot(ctx context.Context, snapsh
 			cumulative_net_cashflow = EXCLUDED.cumulative_net_cashflow,
 			updated_at = EXCLUDED.updated_at
 	`, s.portSnapshotsTable)
-	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, snapshot); err != nil {
-		return fmt.Errorf("portfolio store: create portfolio snapshot: %w", err)
+	if err := insertInBatches(ctx, s.db.GetExecutor(ctx), query, snapshots); err != nil {
+		return fmt.Errorf("portfolio store: create portfolio snapshots: %w", err)
 	}
 	return nil
+}
+
+// Do runs fn within a single database transaction; stores called with the context fn
+// receives take part in it.
+func (s *SQLXPortfolioStore) Do(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return s.db.WithTx(ctx, fn)
 }
 
 // Clean removes all built portfolio data for an account ahead of a full rebuild:
@@ -442,7 +521,13 @@ func (s *SQLXPortfolioStore) FetchForAccount(
 	whereClause, args := buildPortfolioTransactionWhereClause(query)
 	executor := s.db.GetExecutor(ctx)
 
-	totalQuery := s.db.Rebind(fmt.Sprintf("SELECT COUNT(1) FROM %s t%s", s.transactionsTable, whereClause))
+	// Imported rows usually carry only an ISIN, so the symbol of the listing their position
+	// is linked to stands in for one, both in the result and in the search.
+	joins := fmt.Sprintf(`
+		LEFT JOIN %s p ON p.id = t.position_id
+		LEFT JOIN %s l ON l.id = p.listing_id`, s.positionsTable, s.listingsTable)
+
+	totalQuery := s.db.Rebind(fmt.Sprintf("SELECT COUNT(1) FROM %s t%s%s", s.transactionsTable, joins, whereClause))
 	total := 0
 	if err := sqlx.GetContext(ctx, executor, &total, totalQuery, args...); err != nil {
 		return nil, fmt.Errorf("portfolio store: count transactions: %w", err)
@@ -452,14 +537,14 @@ func (s *SQLXPortfolioStore) FetchForAccount(
 	dataQuery := s.db.Rebind(fmt.Sprintf(`
 		SELECT
 			t.*,
-			p.listing_id
-		FROM %s t
-		LEFT JOIN %s p ON p.id = t.position_id
+			p.listing_id,
+			l.symbol AS listing_symbol
+		FROM %s t%s
 		%s
 		ORDER BY t.occurred_at %s, t.row_number %s, t.created_at %s, t.id %s
 		LIMIT ?
 		OFFSET ?
-	`, s.transactionsTable, s.positionsTable, whereClause, sortOrder, sortOrder, sortOrder, sortOrder))
+	`, s.transactionsTable, joins, whereClause, sortOrder, sortOrder, sortOrder, sortOrder))
 	dataArgs := append(append([]any{}, args...), limit, query.Offset)
 
 	var rows []portfolio.TransactionWithListingID
@@ -591,14 +676,14 @@ func buildPortfolioTransactionWhereClause(query portfolio.TransactionListQuery) 
 	appendContains("t.source", query.Source)
 	if listing := strings.TrimSpace(query.Listing); listing != "" {
 		pattern := "%" + strings.ToLower(listing) + "%"
-		conditions = append(conditions, "(LOWER(COALESCE(t.symbol, '')) LIKE ? OR LOWER(COALESCE(t.isin, '')) LIKE ?)")
+		conditions = append(conditions, "(LOWER(COALESCE(NULLIF(TRIM(t.symbol), ''), l.symbol, '')) LIKE ? OR LOWER(COALESCE(t.isin, '')) LIKE ?)")
 		args = append(args, pattern, pattern)
 	}
 	if q := strings.TrimSpace(query.Q); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
 		conditions = append(
 			conditions,
-			"(LOWER(t.description) LIKE ? OR LOWER(t.source) LIKE ? OR LOWER(COALESCE(t.symbol, '')) LIKE ? OR LOWER(COALESCE(t.isin, '')) LIKE ?)",
+			"(LOWER(t.description) LIKE ? OR LOWER(t.source) LIKE ? OR LOWER(COALESCE(NULLIF(TRIM(t.symbol), ''), l.symbol, '')) LIKE ? OR LOWER(COALESCE(t.isin, '')) LIKE ?)",
 		)
 		args = append(args, pattern, pattern, pattern, pattern)
 	}

@@ -258,8 +258,9 @@ the batch to the feature → return a `ProcessResult`*, but differ in their inpu
 failure semantics:
 
 - **Cashflow** — requires `account_id`; resolves the parser by vendor name; stamps each
-  row with the vendor `source`, its CSV `row_number` and its dedup sequence; calls
-  `cashflow.Commands.CreateMany`. An empty file is a no-op success.
+  row with the vendor `source` and its dedup sequence (the parser sets its CSV
+  `row_number`); calls `cashflow.Commands.CreateMany`. A row the ING or N26 parser could
+  not read is counted as `failed` and the rest is imported. An empty file is a no-op success.
 - **Portfolio** — requires `account_id` **and** a brokerage vendor (re-checked in the
   processor, not just at accept time); stamps `row_number` and the dedup sequence; calls
   `portfolio.Commands.CreateMany`.

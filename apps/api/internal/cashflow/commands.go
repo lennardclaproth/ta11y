@@ -23,6 +23,7 @@ type accountExistenceChecker interface {
 
 // CommandStore persists cashflow transaction mutations.
 type CommandStore interface {
+	CreateAccount(ctx context.Context, acc *Account) error
 	CreateTransactions(ctx context.Context, txs []*Transaction) (int, error)
 	UpdateDate(ctx context.Context, accountID, id uuid.UUID, date time.Time, checksum string) (int, error)
 	UpdateTagByIDs(ctx context.Context, accountID uuid.UUID, ids []uuid.UUID, tag string) (int, error)
@@ -36,6 +37,16 @@ type CommandStore interface {
 const (
 	manualCashflowBatchMaxSize = 100
 )
+
+// CreateAccount creates the cashflow projection for a base account. Creating it again
+// for the same account is a no-op.
+func (c *Commands) CreateAccount(ctx context.Context, accountID uuid.UUID) (*Account, error) {
+	acc := NewAccount(accountID)
+	if err := c.cs.CreateAccount(ctx, acc); err != nil {
+		return nil, fmt.Errorf("create account: failed to store account: %w", err)
+	}
+	return acc, nil
+}
 
 // NewCommands creates cashflow write-side use cases.
 func NewCommands(

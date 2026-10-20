@@ -25,7 +25,10 @@ func TestDegiroParser_ParseAll_HappyPath(t *testing.T) {
 	}
 
 	var got []cashflow.TransactionData
-	for _, txd := range seq {
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: %v", txd.RowNumber, rowErr)
+		}
 		got = append(got, txd)
 	}
 
@@ -120,7 +123,10 @@ func TestDegiroParser_ParseAll_FallbackToDateWhenValueDateEmpty(t *testing.T) {
 	}
 
 	var got []cashflow.TransactionData
-	for _, txd := range seq {
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: %v", txd.RowNumber, rowErr)
+		}
 		got = append(got, txd)
 	}
 
@@ -129,6 +135,31 @@ func TestDegiroParser_ParseAll_FallbackToDateWhenValueDateEmpty(t *testing.T) {
 	}
 	if got[0].Date.Format("2006-01-02") != "2026-02-08" {
 		t.Fatalf("expected parsed fallback date 2026-02-08, got %s", got[0].Date.Format("2006-01-02"))
+	}
+}
+
+func TestDegiroParser_ParseAll_UnreadableRowIsSkipped(t *testing.T) {
+	input := `Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id
+08-02-2026,14:02,08-02-2026,,,SEPA Instant Terugstorting,,EUR,"-480,00",EUR,"7,43",
+,,,,,continued description,,,,,,
+19-01-2026,12:30,19-01-2026,,,Degiro Cash Sweep Transfer,,EUR,"641,02",EUR,"487,43",
+`
+
+	seq, err := NewDegiroParser().ParseAll(io.NopCloser(strings.NewReader(input)))
+	if err != nil {
+		t.Fatalf("ParseAll returned error: %v", err)
+	}
+
+	var rows []int
+	for txd, rowErr := range seq {
+		if rowErr != nil {
+			t.Fatalf("row %d: expected no row error, got %v", txd.RowNumber, rowErr)
+		}
+		rows = append(rows, txd.RowNumber)
+	}
+
+	if len(rows) != 2 || rows[0] != 1 || rows[1] != 3 {
+		t.Fatalf("expected rows 1 and 3, got %v", rows)
 	}
 }
 
