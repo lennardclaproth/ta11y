@@ -30,8 +30,16 @@ type Purchase struct {
 }
 
 // Paid is what this purchase cost: quantity times the price paid per unit.
+//
+// The conversion rounds rather than truncates, which matters because the amount is
+// re-derived for every day the holding is held. NewPurchase refuses a purchase whose
+// cost does not fit a Price, so the zero fallback is unreachable for a stored one.
 func (p Purchase) Paid() money.Price {
-	return money.Price(float64(p.UnitPrice) * p.Quantity)
+	paid, err := money.NewPrice(p.UnitPrice.Float64() * p.Quantity)
+	if err != nil {
+		return 0
+	}
+	return paid
 }
 
 // NewPurchase validates and constructs a purchase. The date is normalised to a UTC

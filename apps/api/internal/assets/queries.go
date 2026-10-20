@@ -296,7 +296,11 @@ func (q *Queries) holdingSummary(
 		summary.Paid += purchase.Paid()
 	}
 	if summary.Quantity > 0 {
-		summary.AvgUnitPrice = money.Price(float64(summary.Paid) / summary.Quantity)
+		avg, err := money.NewPrice(summary.Paid.Float64() / summary.Quantity)
+		if err != nil {
+			return nil, fmt.Errorf("holding summary: failed to average the unit price: %w", err)
+		}
+		summary.AvgUnitPrice = avg
 	}
 	summary.Unrealized = summary.Value - summary.Paid
 	if summary.Paid > 0 {

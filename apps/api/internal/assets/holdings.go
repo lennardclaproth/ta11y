@@ -248,7 +248,9 @@ func planHoldingMutations(
 
 // holdingValue is quantity times the last known price, falling back to what was
 // paid while no price is known yet. A purchase recorded before the provider has a
-// price for that day would otherwise read as a holding worth nothing.
+// price for that day would otherwise read as a holding worth nothing. The same
+// fallback covers a valuation that does not fit a Price, which a purchase refused
+// by NewPurchase cannot produce.
 func holdingValue(quantity float64, paid, price money.Price) money.Price {
 	if quantity <= 0 {
 		return 0
@@ -256,7 +258,11 @@ func holdingValue(quantity float64, paid, price money.Price) money.Price {
 	if price <= 0 {
 		return paid
 	}
-	return money.Price(float64(price) * quantity)
+	worth, err := money.NewPrice(price.Float64() * quantity)
+	if err != nil {
+		return paid
+	}
+	return worth
 }
 
 // holdingPosition returns how much was held and how much had been paid for it by
