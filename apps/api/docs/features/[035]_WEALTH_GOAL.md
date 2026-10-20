@@ -1,6 +1,6 @@
-# [034] Monthly wealth goal
+# [035] Monthly wealth goal
 
-> **Feature IDs:** 034 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 035 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/wealthgoal` · `transport/http/handlers/wealthgoal` · `internal/storage/sqlx_wealthgoal_store.go` · the `purpose` half lives in `internal/cashflow`
 >

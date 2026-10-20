@@ -68,6 +68,12 @@ func UpdateClass(log logging.Logger, commands assets.Commands) http.Handler {
 		switch err = commands.UpdateClass(r.Context(), accountID, req.ID, req.Name, req.Archived); {
 		case errors.Is(err, assets.ErrClassAccountMismatch), errors.Is(err, assets.ErrClassNotFound):
 			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "class not found"})
+		case errors.Is(err, assets.ErrClassAlreadyExists):
+			_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"name": "a class with this name already exists"})
+		case errors.Is(err, assets.ErrClassReserved), errors.Is(err, assets.ErrClassNameEmpty):
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"name": err.Error()})
+		case errors.Is(err, assets.ErrClassNotManual):
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "the portfolio class cannot be changed"})
 		case err != nil:
 			log.Error(r.Context(), "An error occurred while updating a class", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update class"})

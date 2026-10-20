@@ -33,6 +33,12 @@ var (
 	ErrCatalogueSeedPagesInvalid  = errors.New("catalogue seed pages out of range")
 )
 
+// Quote errors
+var (
+	ErrQuoteNotFound      = errors.New("no daily-priced instrument with that symbol")
+	ErrQuoteNotSelectable = errors.New("instrument cannot be tracked with a daily price")
+)
+
 // Provider credential errors
 var (
 	ErrNoCredentialFieldsToUpdate = errors.New("no credential fields to update")

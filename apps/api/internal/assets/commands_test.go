@@ -26,8 +26,11 @@ func (f fakeAccountStore) GetByEmail(_ context.Context, _ string) (*account.Acco
 func (f fakeAccountStore) List(_ context.Context) ([]*account.Account, error) { return nil, nil }
 
 // fakeAssetsStore is a no-op assets command store; persistence is not under test.
-type fakeAssetsStore struct{}
+// lastRow is what the two delete methods report, which is where the "an item keeps
+// at least one" guard lives: the store counts in the statement that removes the row.
+type fakeAssetsStore struct{ lastRow error }
 
+func (fakeAssetsStore) LockClass(_ context.Context, _ uuid.UUID) error             { return nil }
 func (fakeAssetsStore) CreateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
 func (fakeAssetsStore) CreateAccount(_ context.Context, _ *assets.Account) error   { return nil }
 func (fakeAssetsStore) SetWorth(_ context.Context, _ *assets.Asset) error          { return nil }
@@ -35,6 +38,14 @@ func (fakeAssetsStore) CreateClass(_ context.Context, _ *assets.Class) error    
 func (fakeAssetsStore) UpdateClass(_ context.Context, _ *assets.Class) error       { return nil }
 func (fakeAssetsStore) CreateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
 func (fakeAssetsStore) DeleteClass(_ context.Context, _ uuid.UUID) error           { return nil }
+func (fakeAssetsStore) CreatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
+func (fakeAssetsStore) UpdateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
+func (fakeAssetsStore) DeleteAsset(_ context.Context, _ uuid.UUID) error           { return nil }
+func (fakeAssetsStore) UpdateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
+func (fakeAssetsStore) UpdatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
+
+func (f fakeAssetsStore) DeleteMutation(_ context.Context, _, _ uuid.UUID) error { return f.lastRow }
+func (f fakeAssetsStore) DeletePurchase(_ context.Context, _, _ uuid.UUID) error { return f.lastRow }
 
 // TestCreateClassPublishesSnapshotsRebuildRequested verifies the constructor
 // wires the bus and that a mutation publishes the rebuild-requested event.
@@ -54,7 +65,7 @@ func TestCreateClassPublishesSnapshotsRebuildRequested(t *testing.T) {
 
 	// account.Queries is held by value on Commands; deref the constructed pointer.
 	aq := account.NewQueries(fakeAccountStore{exists: true})
-	commands := assets.NewCommands(fakeAssetsStore{}, nil, *aq, nil, nil, bus)
+	commands := assets.NewCommands(fakeAssetsStore{}, nil, *aq, nil, nil, nil, bus)
 
 	accID := uuid.New()
 	if _, err := commands.CreateClass(context.Background(), accID, "Savings"); err != nil {
