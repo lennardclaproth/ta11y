@@ -231,7 +231,7 @@
 	<AddAssetItemDialog
 		bind:open={addItemOpen}
 		classId={details.class.id}
-		className={details.class.name}
+		assetClassName={details.class.name}
 		onSaved={reloadOpenClass}
 	/>
 {/if}

@@ -12,19 +12,19 @@
 		argTypes: {
 			open: { control: 'boolean' },
 			classId: { control: 'text' },
-			className: { control: 'text' }
+			assetClassName: { control: 'text' }
 		}
 	});
 </script>
 
 <!-- The quote list comes from the mock service branch, so the picker fills itself. -->
-<Story name="Playground" args={{ open: true, classId: 'cls-crypto', className: 'Crypto' }} />
+<Story name="Playground" args={{ open: true, classId: 'cls-crypto', assetClassName: 'Crypto' }} />
 
 <Story name="Add purchase to an existing item" asChild>
 	<AddAssetItemDialog
 		open
 		classId="cls-crypto"
-		className="Crypto"
+		assetClassName="Crypto"
 		holding={assetHoldings['ast-btc']}
 	/>
 </Story>
@@ -33,7 +33,7 @@
 	<AddAssetItemDialog
 		open
 		classId="cls-crypto"
-		className="Crypto"
+		assetClassName="Crypto"
 		holding={assetHoldings['ast-btc']}
 		purchase={assetHoldings['ast-btc'].purchases?.[0] ?? null}
 	/>

@@ -144,6 +144,8 @@
 	// item's detail, not a class's. The article reads from the summary until the detail lands,
 	// so the figures appear with the rest of the page and only the table fills in after.
 	let detail = $state<AssetHolding | null>(null);
+	/** Set when the selected item's purchases could not be fetched. */
+	let detailError = $state(false);
 	const selected = $derived(
 		detail?.id === selectedHolding?.id ? (detail ?? selectedHolding) : selectedHolding
 	);
@@ -222,11 +224,17 @@
 		);
 
 	async function load() {
+		// Two quick class switches can answer out of order; the breadcrumb of one class
+		// over the figures of another is worse than a slower page.
+		const wantedClass = classId;
+		const current = () => untrack(() => classId) === wantedClass;
 		loading = true;
 		error = null;
 		try {
 			await accountStore.ensureLoaded();
-			details = await getAssetClassDetails(classId);
+			const loaded = await getAssetClassDetails(wantedClass);
+			if (!current()) return;
+			details = loaded;
 			// A deep link from the drawer names the item it was opened on.
 			const wanted = page.url.searchParams.get('item');
 			const known =
@@ -239,10 +247,11 @@
 				view = 'item';
 			}
 		} catch {
+			if (!current()) return;
 			error = 'The items and their daily prices are unavailable right now.';
 			details = null;
 		} finally {
-			loading = false;
+			if (current()) loading = false;
 		}
 	}
 
@@ -279,6 +288,7 @@
 		const id = selectedHolding?.id;
 		if (!id) {
 			detail = null;
+			detailError = false;
 			return;
 		}
 		void loadDetail(id);
@@ -288,11 +298,16 @@
 		try {
 			const loaded = await getHolding(assetId);
 			// A slow response for an item the user has already navigated away from is stale.
-			if (loaded.id === untrack(() => selectedHolding?.id)) detail = loaded;
+			if (loaded.id === untrack(() => selectedHolding?.id)) {
+				detail = loaded;
+				detailError = false;
+			}
 		} catch {
-			// The figures come from the class payload and are already on screen; only the
-			// purchase list is missing, and the table says so on its own.
+			// The figures come from the class payload and stay on screen; what is missing is
+			// the purchase list, and a linked item always has at least one purchase, so the
+			// empty state would read as "you bought nothing".
 			detail = null;
+			if (assetId === untrack(() => selectedHolding?.id)) detailError = true;
 		}
 	}
 
@@ -496,26 +511,28 @@
 {/snippet}
 
 {#snippet purchaseActionsCell(row: HoldingPurchase)}
-	<span class="flex justify-end gap-1">
-		<IconButton
-			icon="heroicons:pencil"
-			ariaLabel={`Edit purchase on ${formatDisplayDate(row.date)}`}
-			variant="ghost"
-			intent="secondary"
-			size="sm"
-			onclick={() => editPurchaseRow(row)}
-		/>
-		{#if purchases.length > 1}
+	{#if canAdd}
+		<span class="flex justify-end gap-1">
 			<IconButton
-				icon="heroicons:trash"
-				ariaLabel={`Delete purchase on ${formatDisplayDate(row.date)}`}
+				icon="heroicons:pencil"
+				ariaLabel={`Edit purchase on ${formatDisplayDate(row.date)}`}
 				variant="ghost"
-				intent="error"
+				intent="secondary"
 				size="sm"
-				onclick={() => removePurchase(row)}
+				onclick={() => editPurchaseRow(row)}
 			/>
-		{/if}
-	</span>
+			{#if purchases.length > 1}
+				<IconButton
+					icon="heroicons:trash"
+					ariaLabel={`Delete purchase on ${formatDisplayDate(row.date)}`}
+					variant="ghost"
+					intent="error"
+					size="sm"
+					onclick={() => removePurchase(row)}
+				/>
+			{/if}
+		</span>
+	{/if}
 {/snippet}
 
 {#snippet valueChart(title: string, ariaLabel: string)}
@@ -848,7 +865,9 @@
 							<!-- The price block only hangs on the right once there is a column to hang it on;
 							     stacked, a right-aligned label reads as a stray fragment. -->
 							<div class="flex items-end gap-4">
-								<ActionMenu label="Item" items={itemMenu(selected)} />
+								{#if canAdd}
+									<ActionMenu label="Item" items={itemMenu(selected)} />
+								{/if}
 							<div class="text-left sm:text-right">
 								<p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
 									Price per {unit}
@@ -891,35 +910,61 @@
 						>
 							<LedgerToolbar title="Purchases">
 								{#snippet actions()}
-									<Button
-										shape="default"
-										onclick={() => {
-											addTo = selected;
-											editPurchase = null;
-											addOpen = true;
-										}}
-									>
-										<Icon icon="heroicons:plus" />
-										Add purchase
-									</Button>
+									{#if canAdd}
+										<Button
+											shape="default"
+											onclick={() => {
+												addTo = selected;
+												editPurchase = null;
+												addOpen = true;
+											}}
+										>
+											<Icon icon="heroicons:plus" />
+											Add purchase
+										</Button>
+									{/if}
 								{/snippet}
 							</LedgerToolbar>
-							<DataTable
-								rows={purchases}
-								emptyText="No purchases yet"
-								columns={[
-									{
-										key: 'date',
-										header: 'Date',
-										value: (r: HoldingPurchase) => formatDisplayDate(r.date)
-									},
-									{ key: 'quantity', header: 'Quantity', align: 'right', cell: quantityCell },
-									{ key: 'unit', header: 'Price paid', align: 'right', cell: unitPriceCell },
-									{ key: 'paid', header: 'Paid', align: 'right', cell: paidCell },
-									{ key: 'value', header: 'Value now', align: 'right', cell: valueCell },
-									{ key: 'actions', header: '', align: 'right', cell: purchaseActionsCell }
-								]}
-							/>
+							{#if detailError}
+								<!-- A linked item always has at least one purchase, so "No purchases yet" would
+								     read as a fact about the account rather than a failed request. -->
+								<div class="p-3">
+									<Alert intent="error" title="The purchases could not be loaded">
+										<div class="flex flex-wrap items-center justify-between gap-3">
+											<span>
+												The figures above come from the class and are still current; nothing was
+												changed.
+											</span>
+											<Button
+												size="sm"
+												variant="outline"
+												intent="secondary"
+												shape="default"
+												onclick={() => void loadDetail(selected.id)}
+											>
+												Try again
+											</Button>
+										</div>
+									</Alert>
+								</div>
+							{:else}
+								<DataTable
+									rows={purchases}
+									emptyText="No purchases yet"
+									columns={[
+										{
+											key: 'date',
+											header: 'Date',
+											value: (r: HoldingPurchase) => formatDisplayDate(r.date)
+										},
+										{ key: 'quantity', header: 'Quantity', align: 'right', cell: quantityCell },
+										{ key: 'unit', header: 'Price paid', align: 'right', cell: unitPriceCell },
+										{ key: 'paid', header: 'Paid', align: 'right', cell: paidCell },
+										{ key: 'value', header: 'Value now', align: 'right', cell: valueCell },
+										{ key: 'actions', header: '', align: 'right', cell: purchaseActionsCell }
+									]}
+								/>
+							{/if}
 						</Panel>
 					{:else if selectedManual}
 						<header
@@ -1070,7 +1115,7 @@
 <AddAssetItemDialog
 	bind:open={addOpen}
 	{classId}
-	className={details?.class.name ?? ''}
+	assetClassName={details?.class.name ?? ''}
 	holding={addTo}
 	purchase={editPurchase}
 	onSaved={() => void load()}

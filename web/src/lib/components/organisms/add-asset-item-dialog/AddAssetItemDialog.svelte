@@ -26,7 +26,8 @@
 	type Props = {
 		open?: boolean;
 		classId: string;
-		className: string;
+		/** The name of the asset class; `className` is the Tailwind passthrough elsewhere. */
+		assetClassName: string;
 		/**
 		 * Set to add another purchase to an item that already follows a daily price. The
 		 * instrument is then fixed and only step 2 is shown.
@@ -41,7 +42,7 @@
 	let {
 		open = $bindable(false),
 		classId,
-		className,
+		assetClassName,
 		holding = null,
 		purchase = null,
 		onSaved
@@ -120,18 +121,26 @@
 	}
 
 	async function loadQuotes() {
+		// "Clear filter" calls this straight away and can overtake a request the debounced
+		// typing already sent, leaving a list — and a pick derived from it — that does not
+		// belong to the filter on screen.
+		const wanted = query;
+		const current = () => untrack(() => query) === wanted;
 		quotesLoading = true;
 		quotesError = null;
 		try {
-			quotes = await searchQuotes({ q: query || undefined });
+			const loaded = await searchQuotes({ q: wanted || undefined });
+			if (!current()) return;
+			quotes = loaded;
 			// Keep a pick that is still in the result set; drop one the filter removed.
 			if (picked && !quotes.some((q) => q.symbol === picked?.symbol)) picked = null;
 			if (!picked) picked = quotes.find((q) => q.selectable) ?? null;
 		} catch {
+			if (!current()) return;
 			quotesError = 'The instruments could not be loaded.';
 			quotes = [];
 		} finally {
-			quotesLoading = false;
+			if (current()) quotesLoading = false;
 		}
 	}
 
@@ -237,7 +246,7 @@
 		? purchase
 			? `Edit purchase of ${holding.name}`
 			: `Add purchase to ${holding.name}`
-		: `Add item to ${className}`}
+		: `Add item to ${assetClassName}`}
 	size="md"
 >
 	<div class="space-y-4">
