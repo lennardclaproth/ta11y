@@ -166,7 +166,7 @@ always reflects the latest portfolio value.
 
 → Details: [Assets](%5B024%5D_ASSETS.md)
 
-### Daily-priced asset holdings
+### Daily-priced asset holdings [034]
 An asset item can be linked to a daily-priced instrument instead of carrying a worth the
 user sets. Purchases (date, quantity, unit price) drive its worth from the instrument's
 daily price, back to the first purchase, so it counts in net worth without daily upkeep.
