@@ -298,14 +298,16 @@
 			detailLoading = false;
 			return;
 		}
-		// The failure belongs to the item that was selected, not to the one taking its place.
-		detailError = false;
 		void loadDetail(id);
 	});
 
 	async function loadDetail(assetId: string) {
 		const request = ++detailRequest;
 		detailLoading = true;
+		// Cleared here rather than at the call sites: the failure belongs to the item that was
+		// selected, not to the one taking its place, and "Try again" shows nothing at all while
+		// the alert it sits in stays up.
+		detailError = false;
 		try {
 			const loaded = await getHolding(assetId);
 			// A response that a newer request has overtaken is stale, whichever item it is for.
