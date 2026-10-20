@@ -252,6 +252,11 @@ definitions:
       unit_price:
         type: string
     type: object
+  assets.RenameAssetRequest:
+    properties:
+      name:
+        type: string
+    type: object
   assets.SetAssetWorthRequest:
     properties:
       effective_date:
@@ -275,6 +280,17 @@ definitions:
       id:
         type: string
       name:
+        type: string
+    type: object
+  assets.UpdateMutationRequest:
+    properties:
+      amount:
+        type: string
+      direction:
+        type: string
+      effective_date:
+        type: string
+      note:
         type: string
     type: object
   auth.MeResponse:
@@ -1382,6 +1398,85 @@ paths:
       summary: Create asset
       tags:
       - assets
+  /assets/{asset_id}:
+    delete:
+      description: Removes an item in a manual class together with its worth changes
+        and purchases. The class history and net worth are rebuilt without it.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete asset item
+      tags:
+      - assets
+    patch:
+      consumes:
+      - application/json
+      description: Changes the name of an item in a manual class, daily-priced or
+        not.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: New name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/assets.RenameAssetRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Rename asset item
+      tags:
+      - assets
   /assets/{asset_id}/adjust:
     put:
       consumes:
@@ -1423,6 +1518,104 @@ paths:
               type: string
             type: object
       summary: Adjust asset worth
+      tags:
+      - assets
+  /assets/{asset_id}/mutations/{mutation_id}:
+    delete:
+      description: Removes a worth change and replays the class history without it.
+        An item keeps at least one change; deleting its last one answers 409, and
+        the item itself is deleted instead.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: Worth change ID
+        in: path
+        name: mutation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete worth change
+      tags:
+      - assets
+    put:
+      consumes:
+      - application/json
+      description: Corrects the amount, direction, date or note of a worth change.
+        Its kind stays the same. The class history is replayed in date order afterwards,
+        so a changed date or amount carries through to every later change and to net
+        worth.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: Worth change ID
+        in: path
+        name: mutation_id
+        required: true
+        type: string
+      - description: Corrected worth change
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/assets.UpdateMutationRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Edit worth change
       tags:
       - assets
   /assets/{asset_id}/purchases:
@@ -1469,6 +1662,102 @@ paths:
               type: string
             type: object
       summary: Add purchase to daily-priced item
+      tags:
+      - assets
+  /assets/{asset_id}/purchases/{purchase_id}:
+    delete:
+      description: Removes a purchase and rebuilds the item's worth history without
+        it. An item keeps at least one purchase; deleting its last one answers 409,
+        and the item itself is deleted instead.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: Purchase ID
+        in: path
+        name: purchase_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete purchase
+      tags:
+      - assets
+    put:
+      consumes:
+      - application/json
+      description: Replaces the date, quantity and unit price of a purchase. The item's
+        worth history is rebuilt from its purchases afterwards.
+      parameters:
+      - description: Asset item ID
+        in: path
+        name: asset_id
+        required: true
+        type: string
+      - description: Purchase ID
+        in: path
+        name: purchase_id
+        required: true
+        type: string
+      - description: Corrected purchase
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/assets.PurchaseRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Edit purchase
       tags:
       - assets
   /assets/{asset_id}/worth:

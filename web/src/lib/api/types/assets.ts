@@ -198,6 +198,25 @@ export interface CreateHoldingResponse {
 /** Direction for an asset-worth adjustment. */
 export type AssetWorthDirection = 'INCREASE' | 'DECREASE';
 
+/** `PATCH /assets/{asset_id}` request — mirrors `assets.RenameAssetRequest`. */
+export interface RenameAssetRequest {
+	name: string;
+}
+
+/**
+ * `PUT /assets/{asset_id}/mutations/{mutation_id}` request — mirrors
+ * `assets.UpdateMutationRequest`. The change keeps its kind: `amount` is the new worth for a
+ * SET and the amount added or withdrawn for an ADJUST, which also takes a direction.
+ */
+export interface UpdateMutationRequest {
+	/** Non-negative decimal string. */
+	amount: string;
+	direction?: AssetWorthDirection;
+	/** "YYYY-MM-DD", not in the future. */
+	effective_date: string;
+	note?: string;
+}
+
 /** `PUT /assets/{asset_id}/adjust` request — mirrors `assets.AdjustAssetWorthRequest`. */
 export interface AdjustAssetWorthRequest {
 	direction: AssetWorthDirection;

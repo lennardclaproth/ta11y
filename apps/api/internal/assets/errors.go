@@ -15,6 +15,20 @@ var (
 	ErrPurchaseQuantityInvalid  = errors.New("purchase quantity must be greater than zero")
 	ErrPurchaseUnitPriceInvalid = errors.New("purchase unit price cannot be negative")
 	ErrPurchaseDateInFuture     = errors.New("purchase date cannot be in the future")
+	ErrPurchaseNotFound         = errors.New("purchase not found")
+	ErrLastPurchase             = errors.New("a daily-priced item keeps at least one purchase; delete the item instead")
+)
+
+// Worth change errors
+var (
+	ErrMutationNotFound  = errors.New("worth change not found")
+	ErrLastMutation      = errors.New("an item keeps at least one worth change; delete the item instead")
+	ErrMutationAmount    = errors.New("worth change amount cannot be negative")
+	ErrMutationDirection = errors.New("an add or withdraw needs a direction")
+	ErrMutationInFuture  = errors.New("worth change date cannot be in the future")
+	// ErrOpeningNotSet refuses a history whose first change for an item adds or withdraws:
+	// there is no worth yet to add to.
+	ErrOpeningNotSet = errors.New("an item's first change must set its worth; date this change after the opening worth")
 )
 
 // Account errors

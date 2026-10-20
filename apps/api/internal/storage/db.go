@@ -95,12 +95,17 @@ const sqliteBusyTimeout = 5 * time.Second
 
 // sqliteDSN adds the busy timeout to a SQLite connection string, preserving any
 // parameters the configured string already carries.
+//
+// Transactions also begin IMMEDIATE, taking the write lock up front. A deferred
+// transaction that reads first and writes later cannot wait for the lock: SQLite
+// answers SQLITE_BUSY at once rather than risk a deadlock, so a request writing while
+// an event handler rebuilds snapshots failed despite the busy timeout.
 func sqliteDSN(connStr string) string {
 	separator := "?"
 	if strings.Contains(connStr, "?") {
 		separator = "&"
 	}
-	return fmt.Sprintf("%s%s_pragma=busy_timeout(%d)", connStr, separator, sqliteBusyTimeout.Milliseconds())
+	return fmt.Sprintf("%s%s_pragma=busy_timeout(%d)&_txlock=immediate", connStr, separator, sqliteBusyTimeout.Milliseconds())
 }
 
 func qualifyTable(db *DB, schema, table string) string {

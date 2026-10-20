@@ -211,6 +211,10 @@ publishes `assets.snapshots.rebuild_requested`, which a handler turns into a `Re
 | List classes | `GET /assets/classes` | query: `account_id`, `include_archived` | 200 `[{..., current_worth, growth_pct}]` |
 | Class detail | `GET /assets/classes/{class_id}` | query: `account_id` | 200 `{class, assets, growth, mutations}` |
 | Total snapshots | `GET /assets/snapshots` | query: `account_id`, `from?`, `to?` | 200 `[{date, total_worth}]` |
+| Rename item | `PATCH /assets/{asset_id}` | body: `name` | 204 |
+| Delete item | `DELETE /assets/{asset_id}` | — (history and purchases go with it) | 204 |
+| Edit worth change | `PUT /assets/{asset_id}/mutations/{mutation_id}` | body: `amount`, `direction?`, `effective_date`, `note?` | 204 |
+| Delete worth change | `DELETE /assets/{asset_id}/mutations/{mutation_id}` | — (409 for an item's last change) | 204 |
 
 **Error mapping (highlights):** worth-mutation `ErrAssetNotFound` / `ErrClassAccountMismatch` →
 404, `ErrClassReserved` → 400; otherwise 500. (Several write handlers currently collapse domain
@@ -222,6 +226,14 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   `INCREASE`/`DECREASE`. Each mutation stores `previous_worth`, `new_worth`, and the recomputed
   `class_total_worth` (sum of the class's non-archived items via `AggregateValue`), and updates
   the item's `current_worth`. The `PORTFOLIO` class rejects manual worth mutations.
+- **Replay (`resequence.go`).** Every write to a manual class's history — a new item, a set or
+  adjust, an edit or delete of a change, deleting an item — replays the class's changes in date
+  order (`effective_date`, then `created_at`, then id) inside the same transaction and rewrites
+  each hand-valued change's `previous_worth`, `new_worth` and `class_total_worth`, and the items'
+  `current_worth`. That is what makes back-dated and corrected changes land in the right place.
+  An item's first change must be a `SET` (`ErrOpeningNotSet`). An edit keeps the change's kind;
+  an item keeps at least one change (`ErrLastMutation`). Only items in a `MANUAL` class can be
+  renamed, deleted or have their history edited.
 - **Class growth %** is computed from inception: `(latest − first) / |first| × 100` using the
   earliest and latest mutation `class_total_worth`.
 - **Total snapshots (`Builder.RebuildAll`).** Mutations are read ascending; per class the last
@@ -268,3 +280,16 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   into 500s despite documenting 400/404/409.
 - No compiling entrypoint registers assets routes or subscribes the handlers (only the stale
   `cmd/server/main.go` did, against a removed `assets.NewService` API).
+- **Archived items count differently.** The replay and `AggregateValue` leave archived items
+  out of the class total; the daily-priced rebuild (`holdings.go`) counts them. Archiving an
+  item is not offered in the app, so the difference has no visible effect yet.
+- **Mixed classes after a purchase edit.** The replay folds the daily-priced items' derived
+  worth into hand-valued changes' class totals, but editing or deleting a purchase only reruns
+  the holdings rebuild. Moving a holding's first purchase later leaves earlier hand-valued
+  changes counting derived worth that no longer exists, until the next write to the class
+  replays it.
+- **Rows written by the old ADJUST INCREASE bug** (fixed in this release) store the new total
+  as `amount`. A replay would add it on top of the previous worth again; such changes have to be
+  edited to the real amount or re-entered. No migration repairs them.
+- **No guard against a negative worth.** An `ADJUST`/`DECREASE` larger than the worth is stored
+  as is; only the class page's worth dialog refuses it.

@@ -28,3 +28,13 @@
 		holding={assetHoldings['ast-btc']}
 	/>
 </Story>
+
+<Story name="Edit a recorded purchase" asChild>
+	<AddAssetItemDialog
+		open
+		classId="cls-crypto"
+		className="Crypto"
+		holding={assetHoldings['ast-btc']}
+		purchase={assetHoldings['ast-btc'].purchases?.[0] ?? null}
+	/>
+</Story>

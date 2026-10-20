@@ -24,6 +24,13 @@ type CommandStore interface {
 	CreateMutation(ctx context.Context, mut *Mutation) error
 	DeleteClass(ctx context.Context, classID uuid.UUID) error
 	CreatePurchase(ctx context.Context, purchase *Purchase) error
+	UpdateAsset(ctx context.Context, asset *Asset) error
+	// DeleteAsset removes an item together with its worth changes and purchases.
+	DeleteAsset(ctx context.Context, assetID uuid.UUID) error
+	UpdateMutation(ctx context.Context, mut *Mutation) error
+	DeleteMutation(ctx context.Context, mutationID uuid.UUID) error
+	UpdatePurchase(ctx context.Context, purchase *Purchase) error
+	DeletePurchase(ctx context.Context, purchaseID uuid.UUID) error
 }
 
 // QuoteTracker turns a chosen daily-priced instrument into the market-data listing
@@ -36,6 +43,7 @@ type QuoteTracker interface {
 type CommandGetter interface {
 	Class(ctx context.Context, classID uuid.UUID) (*Class, error)
 	Asset(ctx context.Context, assetID uuid.UUID) (*Asset, error)
+	PurchasesForAsset(ctx context.Context, assetID uuid.UUID) ([]*Purchase, error)
 }
 
 // ClassAggregator computes the aggregated worth of a class.
@@ -105,7 +113,19 @@ func (c *Commands) CreateAsset(
 	if class == nil {
 		return nil, ErrClassNotFound
 	}
-	asset, err := NewAsset(accID, classID, name, initialWorth, *note)
+	if class.AccountID != accID {
+		return nil, ErrClassAccountMismatch
+	}
+	// The portfolio class is written by the portfolio sync only.
+	if class.Source != ClassSourceManual {
+		return nil, ErrClassNotManual
+	}
+	// The note is optional in the request, so an absent one reads as empty.
+	var noteText string
+	if note != nil {
+		noteText = *note
+	}
+	asset, err := NewAsset(accID, classID, name, initialWorth, noteText)
 	if err != nil {
 		return nil, fmt.Errorf("create asset: failed to create new asset: %w", err)
 	}
@@ -130,7 +150,8 @@ func (c *Commands) CreateAsset(
 			date, note); err != nil {
 			return fmt.Errorf("create asset: could not create the initial worth mutation: %w", err)
 		}
-		return nil
+		// The opening worth may be dated before changes already in the class.
+		return c.resequence(txCtx, classID)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create asset: failed to execute transaction: %w", err)
@@ -359,7 +380,9 @@ func (c *Commands) UpdateAssetWorth(
 		if err != nil {
 			return fmt.Errorf("update asset worth: setting the new worth failed: %w", err)
 		}
-		return nil
+		// A back-dated change lands between existing ones; replaying the class puts it in
+		// order and corrects the worth and totals after it.
+		return c.resequence(txCtx, asset.ClassID)
 	})
 	if err != nil {
 		return fmt.Errorf("update asset worth: failed to execute transaction: %w", err)

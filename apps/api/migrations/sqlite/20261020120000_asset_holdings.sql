@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- Mirror of migrations/postgres/20261009120000_asset_holdings.sql. See there for why
+-- Mirror of migrations/postgres/20261020120000_asset_holdings.sql. See there for why
 -- the listing link is a nullable column on the item and carries no foreign key.
 ALTER TABLE asset_items ADD COLUMN listing_id TEXT;
 

@@ -36,6 +36,12 @@ func (fakeAssetsStore) UpdateClass(_ context.Context, _ *assets.Class) error    
 func (fakeAssetsStore) CreateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
 func (fakeAssetsStore) DeleteClass(_ context.Context, _ uuid.UUID) error           { return nil }
 func (fakeAssetsStore) CreatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
+func (fakeAssetsStore) UpdateAsset(_ context.Context, _ *assets.Asset) error       { return nil }
+func (fakeAssetsStore) DeleteAsset(_ context.Context, _ uuid.UUID) error           { return nil }
+func (fakeAssetsStore) UpdateMutation(_ context.Context, _ *assets.Mutation) error { return nil }
+func (fakeAssetsStore) DeleteMutation(_ context.Context, _ uuid.UUID) error        { return nil }
+func (fakeAssetsStore) UpdatePurchase(_ context.Context, _ *assets.Purchase) error { return nil }
+func (fakeAssetsStore) DeletePurchase(_ context.Context, _ uuid.UUID) error        { return nil }
 
 // TestCreateClassPublishesSnapshotsRebuildRequested verifies the constructor
 // wires the bus and that a mutation publishes the rebuild-requested event.

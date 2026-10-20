@@ -462,6 +462,12 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	// the latter is ambiguous against /assets/classes/{class_id} and makes the mux panic.
 	protected("GET /assets/holdings/{asset_id}", assethttp.GetHolding(app.log, *app.assetsQueries))
 	protected("POST /assets/{asset_id}/purchases", assethttp.AddPurchase(app.log, *app.assetsCommands))
+	protected("PATCH /assets/{asset_id}", assethttp.RenameAsset(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}", assethttp.DeleteAsset(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/mutations/{mutation_id}", assethttp.UpdateMutation(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}/mutations/{mutation_id}", assethttp.DeleteMutation(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/purchases/{purchase_id}", assethttp.UpdatePurchase(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}/purchases/{purchase_id}", assethttp.DeletePurchase(app.log, *app.assetsCommands))
 	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
 }
 

@@ -312,6 +312,40 @@ func (s *SQLXAssetsStore) SetWorth(ctx context.Context, asset *assets.Asset) err
 	return nil
 }
 
+// UpdateAsset persists an item's name.
+func (s *SQLXAssetsStore) UpdateAsset(ctx context.Context, asset *assets.Asset) error {
+	asset.UpdatedAt = time.Now().UTC()
+	query := fmt.Sprintf(`UPDATE %s SET name = :name, updated_at = :updated_at WHERE id = :id`, s.itemsTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, asset)
+	if err != nil {
+		return fmt.Errorf("assets store: update asset: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrAssetNotFound
+	}
+	return nil
+}
+
+// DeleteAsset removes an item with its mutations and purchases. The children are
+// deleted explicitly because SQLite runs without foreign-key enforcement.
+func (s *SQLXAssetsStore) DeleteAsset(ctx context.Context, assetID uuid.UUID) error {
+	for _, table := range []string{s.mutationsTable, s.purchasesTable} {
+		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE item_id = ?`, table))
+		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID); err != nil {
+			return fmt.Errorf("assets store: delete asset children: %w", err)
+		}
+	}
+	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.itemsTable))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete asset: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrAssetNotFound
+	}
+	return nil
+}
+
 // UpdateAssetWorth sets an item's worth scoped by account/class/item.
 func (s *SQLXAssetsStore) UpdateAssetWorth(ctx context.Context, accountID, classID, assetID uuid.UUID, worth money.Price) error {
 	query := s.db.Rebind(fmt.Sprintf(`
@@ -342,6 +376,39 @@ func (s *SQLXAssetsStore) CreateMutation(ctx context.Context, mut *assets.Mutati
 	`, s.mutationsTable)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, mut); err != nil {
 		return fmt.Errorf("assets store: create mutation: %w", err)
+	}
+	return nil
+}
+
+// UpdateMutation persists every editable field of a mutation, including the
+// worth and class total a resequence recomputes.
+func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutation) error {
+	query := fmt.Sprintf(`
+		UPDATE %s SET
+			change_type = :change_type, direction = :direction, amount = :amount,
+			previous_worth = :previous_worth, new_worth = :new_worth,
+			class_total_worth = :class_total_worth, effective_date = :effective_date, note = :note
+		WHERE id = :id
+	`, s.mutationsTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, mut)
+	if err != nil {
+		return fmt.Errorf("assets store: update mutation: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrMutationNotFound
+	}
+	return nil
+}
+
+// DeleteMutation removes one mutation.
+func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, mutationID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.mutationsTable))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, mutationID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete mutation: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrMutationNotFound
 	}
 	return nil
 }
@@ -436,6 +503,35 @@ func (s *SQLXAssetsStore) CreatePurchase(ctx context.Context, purchase *assets.P
 	`, s.purchasesTable)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, purchase); err != nil {
 		return fmt.Errorf("assets store: create purchase: %w", err)
+	}
+	return nil
+}
+
+// UpdatePurchase persists a corrected purchase.
+func (s *SQLXAssetsStore) UpdatePurchase(ctx context.Context, purchase *assets.Purchase) error {
+	query := fmt.Sprintf(`
+		UPDATE %s SET purchased_on = :purchased_on, quantity = :quantity, unit_price = :unit_price
+		WHERE id = :id
+	`, s.purchasesTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, purchase)
+	if err != nil {
+		return fmt.Errorf("assets store: update purchase: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+// DeletePurchase removes one purchase.
+func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, purchaseID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.purchasesTable))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, purchaseID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete purchase: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrPurchaseNotFound
 	}
 	return nil
 }

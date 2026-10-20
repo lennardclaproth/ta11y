@@ -63,7 +63,7 @@ func NewMutation(
 		if direction != nil && *direction == ChangeDirectionDecrease {
 			newWorth = previousWorth - amount
 		} else {
-			amount = previousWorth + amount
+			newWorth = previousWorth + amount
 		}
 	}
 	return &Mutation{

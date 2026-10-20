@@ -208,8 +208,8 @@ export const assetClassDetails: Record<string, AssetClassDetails> = {
 			{
 				id: 'mut-c1',
 				item_id: 'ast-ing-savings',
-				change_type: 'deposit',
-				direction: 'in',
+				change_type: 'ADJUST',
+				direction: 'INCREASE',
 				amount: '500.000000',
 				previous_worth: '11950.000000',
 				new_worth: '12450.000000',
@@ -221,8 +221,8 @@ export const assetClassDetails: Record<string, AssetClassDetails> = {
 			{
 				id: 'mut-c2',
 				item_id: 'ast-n26-space',
-				change_type: 'deposit',
-				direction: 'in',
+				change_type: 'ADJUST',
+				direction: 'INCREASE',
 				amount: '250.000000',
 				previous_worth: '5750.000000',
 				new_worth: '6000.000000',
@@ -230,6 +230,45 @@ export const assetClassDetails: Record<string, AssetClassDetails> = {
 				effective_date: '2026-05-12',
 				note: null,
 				created_at: '2026-05-12T09:00:00Z'
+			},
+			{
+				id: 'mut-c3',
+				item_id: 'ast-ing-savings',
+				change_type: 'SET',
+				direction: null,
+				amount: '11950.000000',
+				previous_worth: '11800.000000',
+				new_worth: '11950.000000',
+				class_total_worth: '17700.000000',
+				effective_date: '2026-04-01',
+				note: 'Interest',
+				created_at: '2026-04-01T09:00:00Z'
+			},
+			{
+				id: 'mut-c4',
+				item_id: 'ast-n26-space',
+				change_type: 'SET',
+				direction: null,
+				amount: '5750.000000',
+				previous_worth: '0.000000',
+				new_worth: '5750.000000',
+				class_total_worth: '17550.000000',
+				effective_date: '2026-02-01',
+				note: null,
+				created_at: '2026-02-01T09:00:00Z'
+			},
+			{
+				id: 'mut-c5',
+				item_id: 'ast-ing-savings',
+				change_type: 'SET',
+				direction: null,
+				amount: '11800.000000',
+				previous_worth: '0.000000',
+				new_worth: '11800.000000',
+				class_total_worth: '11800.000000',
+				effective_date: '2026-01-02',
+				note: null,
+				created_at: '2026-01-02T09:00:00Z'
 			}
 		]
 	},

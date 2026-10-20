@@ -17,8 +17,10 @@ import type {
 	DeleteAssetClassRequest,
 	HoldingPurchase,
 	PurchaseRequest,
+	RenameAssetRequest,
 	SetAssetWorthRequest,
-	UpdateAssetClassRequest
+	UpdateAssetClassRequest,
+	UpdateMutationRequest
 } from '$lib/api/types';
 import {
 	assetClassDetails,
@@ -159,4 +161,66 @@ export async function addPurchase(
 		return { id: mockId(), ...body, paid: paid.toFixed(6) };
 	}
 	return apiSend<HoldingPurchase>('POST', `/assets/${assetId}/purchases`, body);
+}
+
+/** `PATCH /assets/{asset_id}` */
+export async function renameAsset(assetId: string, body: RenameAssetRequest): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('PATCH', `/assets/${assetId}`, body);
+}
+
+/** `DELETE /assets/{asset_id}` — the item goes with its worth changes and purchases. */
+export async function deleteAsset(assetId: string): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('DELETE', `/assets/${assetId}`);
+}
+
+/** `PUT /assets/{asset_id}/mutations/{mutation_id}` */
+export async function updateMutation(
+	assetId: string,
+	mutationId: string,
+	body: UpdateMutationRequest
+): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('PUT', `/assets/${assetId}/mutations/${mutationId}`, body);
+}
+
+/** `DELETE /assets/{asset_id}/mutations/{mutation_id}` — 409 for an item's last change. */
+export async function deleteMutation(assetId: string, mutationId: string): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('DELETE', `/assets/${assetId}/mutations/${mutationId}`);
+}
+
+/** `PUT /assets/{asset_id}/purchases/{purchase_id}` */
+export async function updatePurchase(
+	assetId: string,
+	purchaseId: string,
+	body: PurchaseRequest
+): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('PUT', `/assets/${assetId}/purchases/${purchaseId}`, body);
+}
+
+/** `DELETE /assets/{asset_id}/purchases/{purchase_id}` — 409 for an item's last purchase. */
+export async function deletePurchase(assetId: string, purchaseId: string): Promise<void> {
+	if (useMocks) {
+		await delay();
+		return;
+	}
+	await apiSend<unknown>('DELETE', `/assets/${assetId}/purchases/${purchaseId}`);
 }

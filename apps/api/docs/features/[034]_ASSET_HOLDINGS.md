@@ -70,6 +70,18 @@ purchase in the account to today and emits one **SET** mutation per daily-priced
 A linked item refuses `UpdateAssetWorth` (`ErrAssetDailyPriced`): a hand-set worth would be
 overwritten by the next rebuild.
 
+### Class page figures
+
+The class page derives its figures client-side (`web/src/routes/assets/[classId]/class-series.ts`)
+over the top-bar period, day by day, so items add up into the class:
+
+- **Paid in** — a holding's purchases; for a hand-valued item its opening worth plus `ADJUST`
+  increases minus decreases. A later `SET` leaves paid in alone, so interest or a revaluation
+  reads as growth. The Portfolio class uses `total_cost_basis` from `GET /portfolio/snapshots`.
+- **Unrealized** — worth minus paid in, at the end of the period.
+- **Growth** — change in worth over the period minus the money added in it, as a share of the
+  starting worth plus what was added.
+
 ## Price source
 
 `internal/marketdata/alphavantage` is the first fetcher for the Alpha Vantage provider, which
@@ -97,7 +109,7 @@ write side) and `assets.snapshots.rebuilt`.
 | Instrument catalogue and adoption | `internal/marketdata/quotes.go` |
 | Alpha Vantage fetcher + supported crypto | `internal/marketdata/alphavantage/` |
 | Purchases, derived/manual mutations, linked items | `internal/storage/sqlx_assets_store.go` |
-| Schema (`items.listing_id`, `assets.purchases`) | `apps/api/migrations/{postgres,sqlite}/20261010130000_asset_holdings.sql` |
+| Schema (`items.listing_id`, `assets.purchases`) | `apps/api/migrations/{postgres,sqlite}/20261020120000_asset_holdings.sql` |
 | HTTP | `transport/http/handlers/assets/holding.go` · `transport/http/handlers/marketdata/quotes.go` |
 | Holdings sync before snapshot rebuild | `transport/messaging/handlers/assets/snapshots_rebuild_requested.go` |
 
@@ -108,6 +120,8 @@ write side) and `assets.snapshots.rebuilt`.
 | `GET` | `/marketdata/quotes` | Instruments that can back a holding, blocked ones included with a reason |
 | `POST` | `/assets/holdings` | Add a daily-priced item with its first purchase |
 | `POST` | `/assets/{asset_id}/purchases` | Record another acquisition |
+| `PUT` | `/assets/{asset_id}/purchases/{purchase_id}` | Correct a purchase; the rebuild follows it |
+| `DELETE` | `/assets/{asset_id}/purchases/{purchase_id}` | Remove a purchase; 409 for the item's last one |
 | `GET` | `/assets/holdings/{asset_id}` | One holding with its purchases and value-against-paid series |
 
 `GET /assets/classes/{class_id}` gained a `holdings` array alongside `assets`.
