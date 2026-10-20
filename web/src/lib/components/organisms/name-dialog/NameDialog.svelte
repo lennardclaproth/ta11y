@@ -57,8 +57,15 @@
 </script>
 
 <!-- Closing while the request is on its way would save the new name behind the user's back,
-     or write the refusal into a dialog nobody sees. -->
-<Dialog bind:open {title} size="sm" closeOnEscape={!saving}>
+     or write the refusal into a dialog nobody sees — so every way out is inert while it runs. -->
+<Dialog
+	bind:open
+	{title}
+	size="sm"
+	closeOnEscape={!saving}
+	closeOnBackdrop={!saving}
+	dismissible={!saving}
+>
 	<FormField {label} id="name-dialog-field" error={error ?? undefined}>
 		{#snippet children(ctx)}
 			<Input

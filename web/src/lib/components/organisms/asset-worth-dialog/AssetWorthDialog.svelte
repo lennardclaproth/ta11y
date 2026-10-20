@@ -155,8 +155,15 @@
 
 <!-- Closing while the request is on its way would record the change anyway, or write the
      refusal into a dialog nobody sees; at a worth change that is the difference between
-     being in net worth and not. -->
-<Dialog bind:open title={dialogTitle} size="md" closeOnEscape={!saving}>
+     being in net worth and not. Escape, the backdrop and the cross all stay inert. -->
+<Dialog
+	bind:open
+	title={dialogTitle}
+	size="md"
+	closeOnEscape={!saving}
+	closeOnBackdrop={!saving}
+	dismissible={!saving}
+>
 	<div class="space-y-4">
 		{#if !editing}
 			<Tabs
