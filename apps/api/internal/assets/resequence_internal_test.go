@@ -55,6 +55,47 @@ func TestResequenceClassReplaysChangesInDateOrder(t *testing.T) {
 	}
 }
 
+// A deposit written before NewMutation was corrected holds the running total where
+// the change belongs. Replaying it from that total would add 1300 to the 1000 it was
+// already part of; the replay has to read the change from where it was written and
+// rewrite the row with it, so the next replay finds a correct one.
+func TestResequenceClassCorrectsLegacyAdjustRows(t *testing.T) {
+	savings := uuid.New()
+	increase := ChangeDirectionIncrease
+
+	mutations := []Mutation{
+		{ID: uuid.New(), AssetID: savings, ChangeType: ChangeTypeSet, Amount: euros(1_000), PreviousWorth: 0, NewWorth: euros(1_000), ClassTotalWorth: euros(1_000), EffectiveDate: onDay("2026-01-01")},
+		// previous 1000 + 300 deposited, stored with the total in Amount and the
+		// change in NewWorth.
+		{ID: uuid.New(), AssetID: savings, ChangeType: ChangeTypeAdjust, Direction: &increase, Amount: euros(1_300), PreviousWorth: euros(1_000), NewWorth: euros(300), ClassTotalWorth: euros(300), EffectiveDate: onDay("2026-02-01")},
+	}
+
+	changed, worth, err := resequenceClass([]Asset{{ID: savings}}, mutations)
+	if err != nil {
+		t.Fatalf("resequence: %v", err)
+	}
+
+	if len(changed) != 1 {
+		t.Fatalf("want only the deposit rewritten, got %d rows", len(changed))
+	}
+	deposit := changed[0]
+	if deposit.Amount != euros(300) || deposit.PreviousWorth != euros(1_000) || deposit.NewWorth != euros(1_300) {
+		t.Fatalf("deposit: want 300 taking 1000 -> 1300, got %+v", deposit)
+	}
+	if worth[savings] != euros(1_300) {
+		t.Fatalf("current worth: want 1300, got %v", worth[savings])
+	}
+
+	// The rewritten row is a correct one, so replaying it again leaves it alone.
+	again, _, err := resequenceClass([]Asset{{ID: savings}}, []Mutation{mutations[0], *deposit})
+	if err != nil {
+		t.Fatalf("second resequence: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("want a stable row on the second replay, got %d rewritten", len(again))
+	}
+}
+
 // Rows that already hold the right figures are left alone, so an edit only rewrites
 // what it actually moved.
 func TestResequenceClassLeavesConsistentRowsAlone(t *testing.T) {

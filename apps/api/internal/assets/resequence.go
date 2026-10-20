@@ -61,11 +61,20 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 			return nil, nil, ErrOpeningNotSet
 		}
 		next := m.Amount
+		amountFixed := false
 		if m.ChangeType == ChangeTypeAdjust {
+			amount := m.Amount
+			if delta, ok := legacyAdjustAmount(m); ok {
+				// The row holds the running total where the change belongs, so it is
+				// corrected as it is replayed rather than recomputed from a total.
+				amount = delta
+				m.Amount = delta
+				amountFixed = true
+			}
 			if m.Direction != nil && *m.Direction == ChangeDirectionDecrease {
-				next = previous - m.Amount
+				next = previous - amount
 			} else {
-				next = previous + m.Amount
+				next = previous + amount
 			}
 		}
 		running[m.AssetID] = next
@@ -78,7 +87,7 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 			}
 		}
 
-		if m.PreviousWorth != previous || m.NewWorth != next || m.ClassTotalWorth != total {
+		if amountFixed || m.PreviousWorth != previous || m.NewWorth != next || m.ClassTotalWorth != total {
 			m.PreviousWorth = previous
 			m.NewWorth = next
 			m.ClassTotalWorth = total
@@ -86,6 +95,26 @@ func resequenceClass(items []Asset, mutations []Mutation) ([]*Mutation, map[uuid
 		}
 	}
 	return changed, worth, nil
+}
+
+// legacyAdjustAmount recognises an ADJUST that adds, written before NewMutation was
+// corrected: it stored the running total in Amount and the change in NewWorth, the
+// two the wrong way around. Replaying such a row from its Amount would add the total
+// to the worth it was already part of, turning one wrong number into another and
+// carrying that through every later change and the class total. The change is read
+// from where it was actually written, and the row is rewritten with it.
+//
+// The signature is exact: a row written this way satisfies
+// amount = previous_worth + new_worth, a correct one amount = new_worth -
+// previous_worth. Those coincide only when previous_worth is zero, which is excluded.
+func legacyAdjustAmount(m Mutation) (money.Price, bool) {
+	if m.ChangeType != ChangeTypeAdjust || m.Direction == nil || *m.Direction != ChangeDirectionIncrease {
+		return 0, false
+	}
+	if m.PreviousWorth == 0 || m.Amount != m.PreviousWorth+m.NewWorth {
+		return 0, false
+	}
+	return m.NewWorth, true
 }
 
 // resequence rewrites a manual class's history after one of its worth changes was
