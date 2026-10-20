@@ -36,6 +36,12 @@ func (s *recordingCashflowStore) UpdateIgnoredByIDs(_ context.Context, _ uuid.UU
 func (s *recordingCashflowStore) UpdateIgnoredByFilter(_ context.Context, _ cashflow.TransactionFilters, _ bool) (int, error) {
 	return 0, nil
 }
+func (s *recordingCashflowStore) UpdatePurposeByIDs(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ cashflow.Purpose) (int, error) {
+	return 0, nil
+}
+func (s *recordingCashflowStore) UpdatePurposeByFilter(_ context.Context, _ cashflow.TransactionFilters, _ cashflow.Purpose) (int, error) {
+	return 0, nil
+}
 
 func TestAccountCreatedCreatesCashflowProjection(t *testing.T) {
 	store := &recordingCashflowStore{}

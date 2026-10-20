@@ -15,8 +15,10 @@ type TransactionFilters struct {
 	Tags        string `json:"tags,omitempty"`
 	Untagged    *bool  `json:"untagged,omitempty"`
 	HideIgnored *bool  `json:"hide_ignored,omitempty"`
-	From        string `json:"from,omitempty"`
-	To          string `json:"to,omitempty"`
+	// Purpose is a comma-separated goal purpose filter: income, wealth, none.
+	Purpose string `json:"purpose,omitempty"`
+	From    string `json:"from,omitempty"`
+	To      string `json:"to,omitempty"`
 }
 
 func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[string]string) {
@@ -29,6 +31,10 @@ func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[st
 	if dateErr != nil {
 		problems["filters.date_range"] = dateErr.Error()
 	}
+	purposes, purposeErr := cashflow.SplitPurposes(tf.Purpose)
+	if purposeErr != nil {
+		problems["filters.purpose"] = purposeErr.Error()
+	}
 
 	return cashflow.TransactionFilters{
 		Query:       tf.Q,
@@ -39,6 +45,7 @@ func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[st
 		Tags:        cashflow.SplitTags(tf.Tags),
 		Untagged:    tf.Untagged,
 		HideIgnored: tf.HideIgnored,
+		Purposes:    purposes,
 		From:        from,
 		To:          to,
 	}, problems

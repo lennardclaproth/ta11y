@@ -26,6 +26,7 @@ type GetTransactionsRequest struct {
 	Tags        string `query:"tags"`
 	Untagged    bool   `query:"untagged"`
 	HideIgnored bool   `query:"hide_ignored"`
+	Purpose     string `query:"purpose"`
 	From        string `query:"from"`
 	To          string `query:"to"`
 }
@@ -76,6 +77,7 @@ type GetTransactionsResponse struct {
 // @Param       tags query string false "Comma-separated tags, e.g. food,travel"
 // @Param       untagged query bool false "Only untagged transactions (empty tag)"
 // @Param       hide_ignored query bool false "Hide ignored transactions"
+// @Param       purpose query string false "Comma-separated goal purpose filter: income, wealth, none"
 // @Param       from query string false "Start date (YYYY-MM-DD)"
 // @Param       to query string false "End date (YYYY-MM-DD)"
 // @Success     200 {object} TransactionsResponse
@@ -127,6 +129,7 @@ func GetTransactions(log logging.Logger, queries *cashflow.Queries) http.Handler
 				Date:        tx.Date,
 				Tag:         tx.Tag,
 				Ignored:     tx.Ignored,
+				Purpose:     string(tx.Purpose),
 			})
 		}
 
@@ -168,6 +171,10 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 	if dateErr != nil {
 		problems["date_range"] = dateErr.Error()
 	}
+	purposes, purposeErr := cashflow.SplitPurposes(req.Purpose)
+	if purposeErr != nil {
+		problems["purpose"] = purposeErr.Error()
+	}
 
 	limit := req.Limit
 	if limit == 0 {
@@ -187,6 +194,7 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 		Tags:        cashflow.SplitTags(req.Tags),
 		Untagged:    req.Untagged,
 		HideIgnored: req.HideIgnored,
+		Purposes:    purposes,
 		From:        from,
 		To:          to,
 	}, problems
