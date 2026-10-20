@@ -24,7 +24,8 @@ masthead; the store keeps at most three auto-dismissing notices and drops the ol
 one, so nothing counts down unseen — a notice with `duration: 0` stays outside that cap until it is
 dismissed. Its API, timers and intents are otherwise unchanged. A dialog
 or drawer covers that region with its own scrim, so an overlay that stays open reports its own
-outcomes in a band inside it (`ProviderCatalogueDrawer`, the two Recurring drawers). A problem that
+outcomes in a band inside it (`ProviderCatalogueDrawer`, the two Recurring drawers); its body
+scrolls, so that band is scrolled into view when it appears. A problem that
 stays is rendered
 by the component that owns the content (`DataTable` on a failed load, with an optional `onRetry`);
 a refused save is rendered inside its dialog, drawer or form, and never also as a toast. Per-field

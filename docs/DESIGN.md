@@ -281,8 +281,10 @@ table row.
   dismissed (`duration: 0`) is outside the cap and is never pushed out by a newer one.
 - **Under an overlay** — a dialog or drawer covers the notice region with its own scrim, so what it
   reports it reports itself, in a band inside it. Never send a toast from an overlay that stays open.
-  The band has no timer, so it is dismissible and waits for the reader. An action that closes the
-  overlay first may use the region, because by then nothing covers it.
+  The band has no timer, so it is dismissible and waits for the reader. The overlay body scrolls
+  and the band is pinned at the top of it, so when the action sits further down the band is
+  scrolled into view as it appears. An action that closes the overlay first may use the region,
+  because by then nothing covers it.
 - **A problem that stays** — the band sits at the content it concerns (above the records), with its
   recovery action on the same line. Nothing is drawn underneath a failed load: no zero, no
   empty-filter line, no pagination.

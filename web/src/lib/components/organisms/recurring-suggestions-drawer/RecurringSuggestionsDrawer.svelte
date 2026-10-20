@@ -50,6 +50,14 @@
 		onDismiss
 	}: Props = $props();
 
+	// Confirming and dismissing happen in a card that can sit below the fold of this scrolling
+	// drawer, while the band that reports the outcome is pinned at the top of it. So the band is
+	// brought into view when it appears instead of waiting above a list nobody scrolls back up.
+	let bandEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (notice) bandEl?.scrollIntoView({ block: 'nearest' });
+	});
+
 	// Adjusting opens in place: changing a name should not cost you the list you were
 	// reading, and the transactions behind the suggestion do not change either way.
 	let adjusting = $state<string | null>(null);
@@ -89,16 +97,18 @@
 	{#if notice}
 		<!-- No timer behind this band, so it is dismissible: the drawer stays open while you work
 		     through the list, and the outcome waits for the reader. -->
-		<NoticeBand
-			intent={notice.intent}
-			surface="inset"
-			gutter="dialog"
-			class="-mx-5 -mt-4 mb-4"
-			dismissible
-			onDismiss={onDismissNotice}
-		>
-			{notice.message}
-		</NoticeBand>
+		<div bind:this={bandEl}>
+			<NoticeBand
+				intent={notice.intent}
+				surface="inset"
+				gutter="dialog"
+				class="-mx-5 -mt-4 mb-4"
+				dismissible
+				onDismiss={onDismissNotice}
+			>
+				{notice.message}
+			</NoticeBand>
+		</div>
 	{/if}
 
 	<Text size="sm" tone="muted" class="mb-4">

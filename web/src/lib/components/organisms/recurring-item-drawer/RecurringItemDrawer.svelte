@@ -56,6 +56,15 @@
 		onClose
 	}: Props = $props();
 
+	// The band sits at the top of the drawer body, which is the scroll container, while the
+	// action that fills it — **Unlink** — sits in the transaction table at the bottom. An item
+	// with a year of transactions scrolls, so the outcome is brought into view rather than
+	// reported above the fold where nobody is looking.
+	let bandEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (notice) bandEl?.scrollIntoView({ block: 'nearest' });
+	});
+
 	const labels = $derived(item ? item.history.map((point) => point.date) : []);
 	const amounts = $derived(
 		item ? item.history.map((point) => scaledToNumber(point.amountCents)) : []
@@ -101,16 +110,18 @@
 	{#if notice}
 		<!-- No timer behind this band, so it is dismissible: the drawer stays open and the outcome
 		     waits for the reader rather than for a countdown nobody can see. -->
-		<NoticeBand
-			intent={notice.intent}
-			surface="inset"
-			gutter="dialog"
-			class="-mx-5 -mt-4 mb-4"
-			dismissible
-			onDismiss={onDismissNotice}
-		>
-			{notice.message}
-		</NoticeBand>
+		<div bind:this={bandEl}>
+			<NoticeBand
+				intent={notice.intent}
+				surface="inset"
+				gutter="dialog"
+				class="-mx-5 -mt-4 mb-4"
+				dismissible
+				onDismiss={onDismissNotice}
+			>
+				{notice.message}
+			</NoticeBand>
+		</div>
 	{/if}
 
 	{#if loading}
