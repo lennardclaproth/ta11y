@@ -1,6 +1,6 @@
-# [034] Ignore rules
+# [035] Ignore rules
 
-> **Feature IDs:** 034 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 035 · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/cashflow` · `transport/http/handlers/cashflow` · `internal/storage/sqlx_cashflow_ignore_rule_store.go` · `internal/importer/cashflow`
 >

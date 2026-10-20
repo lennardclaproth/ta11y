@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	"github.com/lennardclaproth/ta11y/internal/logging"
 	"go.elastic.co/apm/v2"
 )
 
@@ -43,6 +44,13 @@ func WithBackpressure(p BackpressurePolicy) Option {
 	return func(mb *MemoryBus) { mb.backpressure = p }
 }
 
+// WithLogger reports handler failures to the application log as well as to APM.
+// Without it a handler that fails leaves no trace in the log, which is what makes
+// a projection that was never written read as an unexplained error elsewhere.
+func WithLogger(log logging.Logger) Option {
+	return func(mb *MemoryBus) { mb.log = log }
+}
+
 type MemoryBus struct {
 	mu sync.RWMutex
 
@@ -57,6 +65,7 @@ type MemoryBus struct {
 	workers      int
 	queueSize    int
 	backpressure BackpressurePolicy
+	log          logging.Logger
 }
 
 var (
@@ -240,6 +249,9 @@ func (b *MemoryBus) worker() {
 		// TODO: implement a timeout to prevent goroutine exhaustion
 		if err := s.handler(hctx, envelope); err != nil {
 			apm.CaptureError(context.Background(), err).Send()
+			if b.log != nil {
+				b.log.Error(hctx, "event bus: handler failed", err, "topic", envelope.Topic)
+			}
 		}
 		if len(s.queue) > 0 && !s.closed.Load() {
 			// keep scheduled=1, requeue

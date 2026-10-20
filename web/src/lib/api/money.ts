@@ -23,3 +23,16 @@ export function decimalStringToNumber(value: string): number {
 export function numberToScaled(value: number): number {
 	return Math.round(value * MONEY_SCALE);
 }
+
+/**
+ * Render a held quantity (an asset holding's units, never a price — those go through
+ * the `Money` atom). Two decimals minimum so a column lines up, eight maximum so a
+ * small crypto amount is never rounded away to nothing.
+ */
+export function formatQuantity(value: string | number): string {
+	const parsed = typeof value === 'number' ? value : Number.parseFloat(value);
+	return new Intl.NumberFormat('en-US', {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 8
+	}).format(Number.isFinite(parsed) ? parsed : 0);
+}

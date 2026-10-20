@@ -36,6 +36,16 @@
 		/** Bindable open state of the calendar. */
 		open?: boolean;
 		ariaLabel?: string;
+		/** Wires a `FormField` label to the trigger. */
+		id?: string;
+		/** Wires a `FormField` hint or error to the trigger. */
+		ariaDescribedby?: string;
+		/**
+		 * Marks the trigger as rejected. The trigger is a plain button, whose role does not
+		 * support `aria-invalid`, so this is the border only — the reason reaches a screen
+		 * reader through `ariaDescribedby` pointing at the field's error text.
+		 */
+		invalid?: boolean;
 		onChange?: (value: string | null) => void;
 		class?: string;
 	};
@@ -52,6 +62,9 @@
 		layer = 'popover',
 		open = $bindable(false),
 		ariaLabel = 'Select date',
+		id,
+		ariaDescribedby,
+		invalid = false,
 		onChange,
 		class: className = ''
 	}: Props = $props();
@@ -82,15 +95,17 @@
 	{#snippet trigger(api)}
 		<button
 			type="button"
+			{id}
 			{disabled}
 			aria-label={ariaLabel}
 			aria-expanded={api.open}
+			aria-describedby={ariaDescribedby}
 			class={[
 				'inline-flex items-center gap-2 rounded-xl border bg-white whitespace-nowrap',
 				'transition-colors hover:bg-slate-50',
 				'focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none',
 				'disabled:pointer-events-none disabled:opacity-50',
-				api.open ? 'border-slate-400' : 'border-slate-300',
+				invalid ? 'border-red-400' : api.open ? 'border-slate-400' : 'border-slate-300',
 				value ? 'text-slate-800' : 'text-slate-500',
 				sizeClasses[size],
 				className

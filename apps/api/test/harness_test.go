@@ -176,6 +176,36 @@ func (ts *testServer) postJSON(t *testing.T, path string, payload any) (int, []b
 	return resp.StatusCode, body
 }
 
+// send makes a request with any method; payload nil sends no body.
+func (ts *testServer) send(t *testing.T, method, path string, payload any) (int, []byte) {
+	t.Helper()
+	var body io.Reader
+	if payload != nil {
+		buf, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		body = bytes.NewReader(buf)
+	}
+	req, err := http.NewRequest(method, ts.baseURL+path, body)
+	if err != nil {
+		t.Fatalf("build %s %s: %v", method, path, err)
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body of %s %s: %v", method, path, err)
+	}
+	return resp.StatusCode, out
+}
+
 func freePort(t *testing.T) int {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
