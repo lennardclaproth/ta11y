@@ -158,7 +158,9 @@ listing's symbol when the statement carried only an ISIN.
 ### Asset management
 Users manage account-scoped asset classes and the items within them, set or adjust each
 item's worth, inspect class details and mutations, and read total net-worth snapshots
-across all classes.
+across all classes. Classes and items can be renamed and deleted, and an item's past worth
+changes edited or removed; every change replays the class's history in date order, so
+back-dated and corrected entries carry through to net worth.
 
 → Details: [Assets](%5B024%5D_ASSETS.md)
 
@@ -168,6 +170,18 @@ read-only "portfolio" asset class and the total asset snapshots are rebuilt, so 
 always reflects the latest portfolio value.
 
 → Details: [Assets](%5B024%5D_ASSETS.md)
+
+### Daily-priced asset holdings [034]
+An asset item can be linked to a daily-priced instrument instead of carrying a worth the
+user sets. Purchases (date, quantity, unit price) drive its worth from the instrument's
+daily price, back to the first purchase, so it counts in net worth without daily upkeep.
+Crypto is quoted in euro by Alpha Vantage; metals have no euro source and stay manual.
+The class page (`/assets/{class_id}`) opens on the whole class and shows worth against paid
+in over the top-bar period for every class: daily-priced items, items with a worth you set
+(where adding or withdrawing money moves paid in and setting a new worth is growth), and the
+Portfolio against its cost basis.
+
+→ Details: [Daily-priced asset holdings](%5B034%5D_ASSET_HOLDINGS.md)
 
 ### Realtime updates (WebSocket)
 Clients subscribe to an account-scoped WebSocket (`/ws/accounts/{account_id}`) and receive

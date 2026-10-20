@@ -207,6 +207,9 @@ func AdjustAssetWorth(log logging.Logger, commands assets.Commands) http.Handler
 		case errors.Is(err, assets.ErrClassReserved):
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "asset class is reserved and cannot be modified"})
 			return
+		case errors.Is(err, assets.ErrOpeningNotSet):
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"effective_date": assets.ErrOpeningNotSet.Error()})
+			return
 		case err != nil:
 			log.Error(r.Context(), "adjust asset worth: failed to update asset worth", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to update asset worth"})

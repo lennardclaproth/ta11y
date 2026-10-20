@@ -30,6 +30,7 @@ type SQLXAssetsStore struct {
 	itemsTable     string
 	mutationsTable string
 	snapshotsTable string
+	purchasesTable string
 }
 
 var (
@@ -40,12 +41,20 @@ var (
 	_ assets.QueryStore      = (*SQLXAssetsStore)(nil)
 	_ assets.BuilderStore    = (*SQLXAssetsStore)(nil)
 	_ assets.SyncStore       = (*SQLXAssetsStore)(nil)
+	_ assets.HoldingsStore   = (*SQLXAssetsStore)(nil)
 )
 
 // assetMutationSelectColumns aliases item_id to the domain's asset_id db tag.
 const assetMutationSelectColumns = `
 	id, account_id, class_id, item_id AS asset_id, change_type, direction,
 	amount, previous_worth, new_worth, class_total_worth, effective_date, note, created_at
+`
+
+// assetMutationSelectColumnsM is assetMutationSelectColumns qualified for a query
+// that joins the mutations table in as m.
+const assetMutationSelectColumnsM = `
+	m.id, m.account_id, m.class_id, m.item_id AS asset_id, m.change_type, m.direction,
+	m.amount, m.previous_worth, m.new_worth, m.class_total_worth, m.effective_date, m.note, m.created_at
 `
 
 // NewSQLXAssetsStore creates an assets store backed by SQLX.
@@ -57,6 +66,7 @@ func NewSQLXAssetsStore(db *DB) *SQLXAssetsStore {
 		itemsTable:     qualifyTableAs(db, SchemaAssets, TableAssetItems, "asset_items"),
 		mutationsTable: qualifyTableAs(db, SchemaAssets, TableAssetMutations, "asset_mutations"),
 		snapshotsTable: qualifyTableAs(db, SchemaAssets, TableAssetSnapshot, "asset_snapshots"),
+		purchasesTable: qualifyTableAs(db, SchemaAssets, TableAssetPurchases, "asset_purchases"),
 	}
 }
 
@@ -117,8 +127,56 @@ func (s *SQLXAssetsStore) UpdateClass(ctx context.Context, class *assets.Class) 
 	return nil
 }
 
-// DeleteClass removes a class by ID; items and mutations cascade via foreign keys.
+// LockClass takes the class row, so that everything the transaction goes on to write
+// for that class waits for the one before it.
+//
+// Postgres runs read committed, so two transactions writing different rows of one
+// class share no lock: two deletes of a different change of the same item each count
+// a second one left and both succeed, and the replay that follows a write reads a
+// history another transaction is still rewriting. A lock per item cannot carry this.
+// The replay writes the whole class -- its changes first, then its items -- so any
+// order over several item rows is an order some other path takes the other way
+// around, and two of those deadlock. One row per class leaves a single thing to take,
+// and an order of one cannot be reversed.
+//
+// SQLite has no FOR UPDATE and needs none: _txlock=immediate serialises writers
+// already. A class that is gone is left to the statements that follow, which report
+// what they reported before.
+func (s *SQLXAssetsStore) LockClass(ctx context.Context, classID uuid.UUID) error {
+	if s.db.DriverName() == string(Sqlite) {
+		return nil
+	}
+	query := s.db.Rebind(fmt.Sprintf(`SELECT id FROM %s WHERE id = ? FOR UPDATE`, s.classesTable))
+	var id uuid.UUID
+	if err := s.db.GetExecutor(ctx).QueryRowxContext(ctx, query, classID).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("assets store: lock class: %w", err)
+	}
+	return nil
+}
+
+// DeleteClass removes a class with its items, worth changes and purchases. Like
+// DeleteAsset the children are deleted explicitly, because SQLite runs without
+// foreign-key enforcement and would otherwise leave them behind: the snapshot
+// builder reads mutations per account, so an orphan keeps counting towards net
+// worth with no way back to it. Children before items, the order every writer of a
+// class keeps; the caller holds the class lock.
 func (s *SQLXAssetsStore) DeleteClass(ctx context.Context, classID uuid.UUID) error {
+	purchases := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE item_id IN (SELECT id FROM %s WHERE class_id = ?)`,
+		s.purchasesTable, s.itemsTable,
+	))
+	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, purchases, classID); err != nil {
+		return fmt.Errorf("assets store: delete class purchases: %w", err)
+	}
+	for _, table := range []string{s.mutationsTable, s.itemsTable} {
+		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE class_id = ?`, table))
+		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, classID); err != nil {
+			return fmt.Errorf("assets store: delete class children: %w", err)
+		}
+	}
 	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.classesTable))
 	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, classID); err != nil {
 		return fmt.Errorf("assets store: delete class: %w", err)
@@ -240,8 +298,8 @@ func (s *SQLXAssetsStore) AggregateValue(ctx context.Context, accID, classID uui
 // CreateAsset inserts one asset item.
 func (s *SQLXAssetsStore) CreateAsset(ctx context.Context, asset *assets.Asset) error {
 	query := fmt.Sprintf(`
-		INSERT INTO %s (id, class_id, account_id, name, current_worth, archived, created_at, updated_at)
-		VALUES (:id, :class_id, :account_id, :name, :current_worth, :archived, :created_at, :updated_at)
+		INSERT INTO %s (id, class_id, account_id, name, current_worth, archived, listing_id, created_at, updated_at)
+		VALUES (:id, :class_id, :account_id, :name, :current_worth, :archived, :listing_id, :created_at, :updated_at)
 	`, s.itemsTable)
 	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, asset); err != nil {
 		return fmt.Errorf("assets store: create asset: %w", err)
@@ -302,6 +360,42 @@ func (s *SQLXAssetsStore) SetWorth(ctx context.Context, asset *assets.Asset) err
 	return nil
 }
 
+// UpdateAsset persists an item's name.
+func (s *SQLXAssetsStore) UpdateAsset(ctx context.Context, asset *assets.Asset) error {
+	asset.UpdatedAt = time.Now().UTC()
+	query := fmt.Sprintf(`UPDATE %s SET name = :name, updated_at = :updated_at WHERE id = :id`, s.itemsTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, asset)
+	if err != nil {
+		return fmt.Errorf("assets store: update asset: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrAssetNotFound
+	}
+	return nil
+}
+
+// DeleteAsset removes an item with its mutations and purchases. The children are
+// deleted explicitly because SQLite runs without foreign-key enforcement, and before
+// the item itself: that is the order the replay and the holdings rebuild write in
+// too. The caller holds the class lock; see LockClass.
+func (s *SQLXAssetsStore) DeleteAsset(ctx context.Context, assetID uuid.UUID) error {
+	for _, table := range []string{s.mutationsTable, s.purchasesTable} {
+		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE item_id = ?`, table))
+		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID); err != nil {
+			return fmt.Errorf("assets store: delete asset children: %w", err)
+		}
+	}
+	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.itemsTable))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, assetID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete asset: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrAssetNotFound
+	}
+	return nil
+}
+
 // UpdateAssetWorth sets an item's worth scoped by account/class/item.
 func (s *SQLXAssetsStore) UpdateAssetWorth(ctx context.Context, accountID, classID, assetID uuid.UUID, worth money.Price) error {
 	query := s.db.Rebind(fmt.Sprintf(`
@@ -336,6 +430,49 @@ func (s *SQLXAssetsStore) CreateMutation(ctx context.Context, mut *assets.Mutati
 	return nil
 }
 
+// UpdateMutation persists every editable field of a mutation, including the
+// worth and class total a resequence recomputes.
+func (s *SQLXAssetsStore) UpdateMutation(ctx context.Context, mut *assets.Mutation) error {
+	query := fmt.Sprintf(`
+		UPDATE %s SET
+			change_type = :change_type, direction = :direction, amount = :amount,
+			previous_worth = :previous_worth, new_worth = :new_worth,
+			class_total_worth = :class_total_worth, effective_date = :effective_date, note = :note
+		WHERE id = :id
+	`, s.mutationsTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, mut)
+	if err != nil {
+		return fmt.Errorf("assets store: update mutation: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrMutationNotFound
+	}
+	return nil
+}
+
+// DeleteMutation removes one mutation while the item keeps another.
+//
+// The count is part of the statement rather than a read the caller acts on: a read
+// followed by a delete is not isolated from a second delete, and two of them could
+// each see a second change left and together remove both. Whether an item is left
+// without a history is exactly what ErrLastMutation exists to prevent, so the
+// condition belongs where the row is removed, behind the class lock that makes two
+// deletes in the same class take turns.
+func (s *SQLXAssetsStore) DeleteMutation(ctx context.Context, assetID, mutationID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
+		s.mutationsTable, s.mutationsTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, mutationID, assetID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete mutation: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrLastMutation
+	}
+	return nil
+}
+
 // Mutations returns an account's mutations ordered by effective date, optionally paginated.
 func (s *SQLXAssetsStore) Mutations(ctx context.Context, accID uuid.UUID, sort *sorting.Direction, skip, take *uint64) ([]*assets.Mutation, error) {
 	dir := "ASC"
@@ -360,6 +497,144 @@ func (s *SQLXAssetsStore) Mutations(ctx context.Context, accID uuid.UUID, sort *
 		return nil, fmt.Errorf("assets store: mutations: %w", err)
 	}
 	return muts, nil
+}
+
+// MutationsForAsset returns one item's mutations oldest first.
+func (s *SQLXAssetsStore) MutationsForAsset(ctx context.Context, assetID uuid.UUID) ([]*assets.Mutation, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT %s FROM %s WHERE item_id = ? ORDER BY effective_date ASC, created_at ASC
+	`, assetMutationSelectColumns, s.mutationsTable))
+	var muts []*assets.Mutation
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &muts, query, assetID); err != nil {
+		return nil, fmt.Errorf("assets store: mutations for asset: %w", err)
+	}
+	return muts, nil
+}
+
+// ManualMutations returns the account's mutations for items that are not linked to
+// a listing, oldest first.
+func (s *SQLXAssetsStore) ManualMutations(ctx context.Context, accID uuid.UUID) ([]*assets.Mutation, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT %s FROM %s m
+		WHERE m.account_id = ?
+		  AND EXISTS (SELECT 1 FROM %s i WHERE i.id = m.item_id AND i.listing_id IS NULL)
+		ORDER BY m.effective_date ASC, m.created_at ASC
+	`, assetMutationSelectColumnsM, s.mutationsTable, s.itemsTable))
+	var muts []*assets.Mutation
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &muts, query, accID); err != nil {
+		return nil, fmt.Errorf("assets store: manual mutations: %w", err)
+	}
+	return muts, nil
+}
+
+// DeleteDerivedMutations removes every mutation of a daily-priced item, which the
+// holdings rebuild rewrites from purchases and prices.
+func (s *SQLXAssetsStore) DeleteDerivedMutations(ctx context.Context, accID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(`
+		DELETE FROM %s
+		WHERE account_id = ?
+		  AND item_id IN (SELECT id FROM %s WHERE account_id = ? AND listing_id IS NOT NULL)
+	`, s.mutationsTable, s.itemsTable))
+	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, accID, accID); err != nil {
+		return fmt.Errorf("assets store: delete derived mutations: %w", err)
+	}
+	return nil
+}
+
+// --- Purchases --------------------------------------------------------------
+
+// DailyPricedAssets returns the account's items that are linked to a listing.
+func (s *SQLXAssetsStore) DailyPricedAssets(ctx context.Context, accID uuid.UUID) ([]*assets.Asset, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE account_id = ? AND listing_id IS NOT NULL ORDER BY name ASC, created_at ASC
+	`, s.itemsTable))
+	var items []*assets.Asset
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &items, query, accID); err != nil {
+		return nil, fmt.Errorf("assets store: daily-priced assets: %w", err)
+	}
+	return items, nil
+}
+
+// CreatePurchase inserts one recorded purchase of a daily-priced item.
+func (s *SQLXAssetsStore) CreatePurchase(ctx context.Context, purchase *assets.Purchase) error {
+	query := fmt.Sprintf(`
+		INSERT INTO %s (id, account_id, item_id, purchased_on, quantity, unit_price, created_at)
+		VALUES (:id, :account_id, :item_id, :purchased_on, :quantity, :unit_price, :created_at)
+	`, s.purchasesTable)
+	if _, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, purchase); err != nil {
+		return fmt.Errorf("assets store: create purchase: %w", err)
+	}
+	return nil
+}
+
+// UpdatePurchase persists a corrected purchase.
+func (s *SQLXAssetsStore) UpdatePurchase(ctx context.Context, purchase *assets.Purchase) error {
+	query := fmt.Sprintf(`
+		UPDATE %s SET purchased_on = :purchased_on, quantity = :quantity, unit_price = :unit_price
+		WHERE id = :id
+	`, s.purchasesTable)
+	res, err := sqlx.NamedExecContext(ctx, s.db.GetExecutor(ctx), query, purchase)
+	if err != nil {
+		return fmt.Errorf("assets store: update purchase: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+// DeletePurchase removes one purchase while the item keeps another; see
+// DeleteMutation for why the count sits in the statement, and LockClass for the lock
+// the caller holds around it.
+func (s *SQLXAssetsStore) DeletePurchase(ctx context.Context, assetID, purchaseID uuid.UUID) error {
+	query := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE id = ? AND (SELECT COUNT(*) FROM %s WHERE item_id = ?) > 1`,
+		s.purchasesTable, s.purchasesTable,
+	))
+	res, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, purchaseID, assetID)
+	if err != nil {
+		return fmt.Errorf("assets store: delete purchase: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return assets.ErrLastPurchase
+	}
+	return nil
+}
+
+// PurchasesForAccount returns every purchase in the account, oldest first.
+func (s *SQLXAssetsStore) PurchasesForAccount(ctx context.Context, accID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE account_id = ? ORDER BY purchased_on ASC, created_at ASC
+	`, s.purchasesTable))
+	return s.selectPurchases(ctx, query, accID)
+}
+
+// PurchasesForClass returns the purchases of every daily-priced item in a class,
+// oldest first.
+func (s *SQLXAssetsStore) PurchasesForClass(ctx context.Context, classID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT p.* FROM %s p
+		JOIN %s i ON i.id = p.item_id
+		WHERE i.class_id = ?
+		ORDER BY p.purchased_on ASC, p.created_at ASC
+	`, s.purchasesTable, s.itemsTable))
+	return s.selectPurchases(ctx, query, classID)
+}
+
+// PurchasesForAsset returns one item's purchases, oldest first.
+func (s *SQLXAssetsStore) PurchasesForAsset(ctx context.Context, assetID uuid.UUID) ([]*assets.Purchase, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s WHERE item_id = ? ORDER BY purchased_on ASC, created_at ASC
+	`, s.purchasesTable))
+	return s.selectPurchases(ctx, query, assetID)
+}
+
+func (s *SQLXAssetsStore) selectPurchases(ctx context.Context, query string, arg any) ([]*assets.Purchase, error) {
+	rows := make([]*assets.Purchase, 0)
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &rows, query, arg); err != nil {
+		return nil, fmt.Errorf("assets store: select purchases: %w", err)
+	}
+	return rows, nil
 }
 
 // --- Snapshots --------------------------------------------------------------

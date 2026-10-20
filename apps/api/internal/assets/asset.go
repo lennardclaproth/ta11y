@@ -23,8 +23,12 @@ type Asset struct {
 	Name         string      `db:"name"`
 	CurrentWorth money.Price `db:"current_worth"`
 	Archived     bool        `db:"archived"`
-	CreatedAt    time.Time   `db:"created_at"`
-	UpdatedAt    time.Time   `db:"updated_at"`
+	// ListingID links the item to a market-data listing. When it is set the item's
+	// worth is derived from that listing's daily price and its purchases, and the
+	// manual set/adjust path is refused.
+	ListingID *uuid.UUID `db:"listing_id"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at"`
 }
 
 func NewAsset(

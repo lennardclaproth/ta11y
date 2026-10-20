@@ -83,8 +83,12 @@ func GetClasses(log logging.Logger, queries assets.Queries) http.Handler {
 }
 
 type ClassDetailsResponse struct {
-	Class     ClassResponse              `json:"class"`
-	Assets    []AssetResponse            `json:"assets"`
+	Class  ClassResponse   `json:"class"`
+	Assets []AssetResponse `json:"assets"`
+	// Holdings are the class's daily-priced items. They are reported apart from
+	// Assets because they carry a quantity, a price and a purchase history that an
+	// item with a hand-set worth has no equivalent of.
+	Holdings  []HoldingResponse          `json:"holdings"`
 	Growth    []ClassGrowthPointResponse `json:"growth"`
 	Mutations []MutationResponse         `json:"mutations"`
 }
@@ -144,6 +148,7 @@ func GetClassDetails(log logging.Logger, queries assets.Queries) http.Handler {
 		if err != nil {
 			log.Error(r.Context(), "An error occurred while trying to get the class details", err)
 			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "could not get class details"})
+			return
 		}
 		res := toClassDetailsResponse(cd)
 		_ = httpx.JSONEncode(w, http.StatusOK, res)
@@ -199,8 +204,13 @@ func toClassDetailsResponse(details *assets.ClassDetails) ClassDetailsResponse {
 			TotalWorth: point.TotalWorth.String(),
 		})
 	}
+	holdings := make([]HoldingResponse, 0, len(details.Holdings))
+	for _, holding := range details.Holdings {
+		holdings = append(holdings, toHoldingResponse(holding))
+	}
 	return ClassDetailsResponse{
 		Assets:    assets,
+		Holdings:  holdings,
 		Mutations: mutations,
 		Class:     class,
 		Growth:    growthPnts,

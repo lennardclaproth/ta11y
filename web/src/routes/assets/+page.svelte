@@ -8,6 +8,7 @@
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import AssetClassDrawer from '$lib/components/organisms/asset-class-drawer/AssetClassDrawer.svelte';
+	import AddAssetItemDialog from '$lib/components/organisms/add-asset-item-dialog/AddAssetItemDialog.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
@@ -22,6 +23,7 @@
 		getAssetClassDetails,
 		createAssetClass
 	} from '$lib/services/assets';
+	import { goto } from '$app/navigation';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore } from '$lib/stores/period.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -46,6 +48,8 @@
 	let className = $state('');
 	let creatingClass = $state(false);
 	let createError = $state<string | null>(null);
+
+	let addItemOpen = $state(false);
 
 	const euro = (n: number) => `€${n.toLocaleString('en', { maximumFractionDigits: 0 })}`;
 	const monthShort = (iso: string) =>
@@ -120,6 +124,23 @@
 		} finally {
 			detailsLoading = false;
 		}
+	}
+
+	// A new item changes the class total, so the table behind the drawer is reloaded too.
+	async function reloadOpenClass() {
+		if (!details) return;
+		const classId = details.class.id;
+		detailsLoading = true;
+		try {
+			details = await getAssetClassDetails(classId);
+		} catch {
+			// The item was saved; only the refresh failed, so say that rather than let the
+			// drawer silently keep showing the figures from before it.
+			toast.error('Saved, but the class could not be refreshed');
+		} finally {
+			detailsLoading = false;
+		}
+		void loadAll();
 	}
 </script>
 
@@ -210,7 +231,23 @@
 	</PageContentTemplate>
 </AppShellTemplate>
 
-<AssetClassDrawer bind:open={drawerOpen} {details} loading={detailsLoading} />
+<AssetClassDrawer
+	bind:open={drawerOpen}
+	{details}
+	loading={detailsLoading}
+	onOpenClass={() => details && goto(`/assets/${details.class.id}`)}
+	onAddItem={() => (addItemOpen = true)}
+	onOpenItem={(assetId) => details && goto(`/assets/${details.class.id}?item=${assetId}`)}
+/>
+
+{#if details}
+	<AddAssetItemDialog
+		bind:open={addItemOpen}
+		classId={details.class.id}
+		assetClassName={details.class.name}
+		onSaved={reloadOpenClass}
+	/>
+{/if}
 
 <Dialog bind:open={createOpen} title="New asset class" size="sm">
 	{#if createError}
