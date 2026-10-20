@@ -1,16 +1,16 @@
-import { apiGet, apiSend } from '$lib/api/client';
+import { ApiError, apiGet, apiSend } from '$lib/api/client';
 import { DEMO_ACCOUNT_ID, useMocks } from '$lib/api/config';
 import type {
-	ChangePortfolioTransactionDateRequest,
-	ChangePortfolioTransactionDateResponse,
 	CreateManualPortfolioTransactionRequest,
+	DeletePortfolioTransactionResponse,
 	ManualPortfolioTransactionResponse,
 	PortfolioPositionsQuery,
 	PortfolioPositionsResponse,
 	PortfolioSnapshotsQuery,
 	PortfolioSnapshotsResponse,
 	PortfolioTransactionsQuery,
-	PortfolioTransactionsResponse
+	PortfolioTransactionsResponse,
+	UpdatePortfolioTransactionRequest
 } from '$lib/api/types';
 import {
 	portfolioPositions,
@@ -115,7 +115,7 @@ export async function createManualPortfolioTransaction(
 			unit_price: '0',
 			created_at: now,
 			updated_at: now,
-			rebuild: 'completed'
+			rebuild: 'skipped'
 		};
 	}
 	return apiSend<ManualPortfolioTransactionResponse>(
@@ -125,18 +125,69 @@ export async function createManualPortfolioTransaction(
 	);
 }
 
-/** `POST /portfolio/transactions/date` — also rebuilds, reporting whether that ran. */
-export async function changePortfolioTransactionDate(
-	body: ChangePortfolioTransactionDateRequest
-): Promise<ChangePortfolioTransactionDateResponse> {
+/** `PUT /portfolio/transactions/{id}` — manual rows only; also rebuilds, reporting whether that ran. */
+export async function updatePortfolioTransaction(
+	id: string,
+	body: UpdatePortfolioTransactionRequest
+): Promise<ManualPortfolioTransactionResponse> {
 	if (useMocks) {
 		await delay();
-		return { id: body.id, occurred_at: `${body.occurred_at}T00:00:00Z`, rebuild: 'completed' };
+		const existing = portfolioTransactions.find((tx) => tx.id === id);
+		if (!existing) {
+			throw new ApiError(404, 'Request failed with status 404', {
+				transaction_id: 'no transaction found with the given id'
+			});
+		}
+		if (existing.origin !== 'MANUAL') {
+			throw new ApiError(422, 'Request failed with status 422', {
+				transaction: 'only manually entered transactions can be changed or deleted'
+			});
+		}
+		const quantity = body.quantity ?? '0';
+		const isTrade = body.type === 'BUY' || body.type === 'SELL';
+		Object.assign(existing, {
+			occurred_at: `${body.occurred_at}T00:00:00Z`,
+			type: body.type,
+			listing_id: body.listing_id ?? null,
+			description: body.description ?? '',
+			amount: body.amount,
+			quantity,
+			unit_price:
+				isTrade && Number(quantity) > 0 ? String(Number(body.amount) / Number(quantity)) : '0',
+			updated_at: new Date().toISOString()
+		});
+		return { ...clone(existing), rebuild: 'skipped' };
 	}
-	return apiSend<ChangePortfolioTransactionDateResponse>(
-		'POST',
-		'/portfolio/transactions/date',
+	return apiSend<ManualPortfolioTransactionResponse>(
+		'PUT',
+		`/portfolio/transactions/${encodeURIComponent(id)}`,
 		body
+	);
+}
+
+/** `DELETE /portfolio/transactions/{id}` — manual rows only; also rebuilds, reporting whether that ran. */
+export async function deletePortfolioTransaction(
+	id: string
+): Promise<DeletePortfolioTransactionResponse> {
+	if (useMocks) {
+		await delay();
+		const index = portfolioTransactions.findIndex((tx) => tx.id === id);
+		if (index === -1) {
+			throw new ApiError(404, 'Request failed with status 404', {
+				transaction_id: 'no transaction found with the given id'
+			});
+		}
+		if (portfolioTransactions[index].origin !== 'MANUAL') {
+			throw new ApiError(422, 'Request failed with status 422', {
+				transaction: 'only manually entered transactions can be changed or deleted'
+			});
+		}
+		portfolioTransactions.splice(index, 1);
+		return { id, rebuild: 'skipped' };
+	}
+	return apiSend<DeletePortfolioTransactionResponse>(
+		'DELETE',
+		`/portfolio/transactions/${encodeURIComponent(id)}`
 	);
 }
 

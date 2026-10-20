@@ -73,7 +73,7 @@ func NewN26Parser() *N26Parser {
 	}
 }
 
-func (p *N26Parser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.TransactionData], error) {
+func (p *N26Parser) ParseAll(rc io.ReadCloser) (iter.Seq2[cashflow.TransactionData, error], error) {
 	raw, err := io.ReadAll(rc)
 	closeErr := rc.Close()
 	if err != nil {
@@ -103,23 +103,19 @@ func (p *N26Parser) ParseAll(rc io.ReadCloser) (iter.Seq2[int, cashflow.Transact
 		return nil, err
 	}
 
-	seq := func(yield func(int, cashflow.TransactionData) bool) {
+	seq := func(yield func(cashflow.TransactionData, error) bool) {
 		rowNumber := 1 // first data row after header
 		for {
 			record, err := csvReader.Read()
 			if err == io.EOF {
 				return
 			}
-			if err != nil {
-				rowNumber++
-				continue
+			var td cashflow.TransactionData
+			if err == nil {
+				td, err = p.ParseRow(record, rowNumber, uuid.Nil)
 			}
-			td, err := p.ParseRow(record, rowNumber, uuid.Nil)
-			if err != nil {
-				rowNumber++
-				continue
-			}
-			if !yield(rowNumber, td) {
+			td.RowNumber = rowNumber
+			if !yield(td, err) {
 				return
 			}
 			rowNumber++

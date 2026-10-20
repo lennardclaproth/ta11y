@@ -2,7 +2,7 @@
 export interface Vendor {
 	id: string;
 	name: string;
-	type: string;
+	type: 'brokerage' | 'bank';
 	active: boolean;
 	import_disabled: boolean;
 	created_at: string;

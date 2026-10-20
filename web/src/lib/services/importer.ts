@@ -18,17 +18,21 @@ function mockAccepted(): ImportAcceptedResponse {
 	return { import_id: mockId(), status: 'pending' };
 }
 
-async function acceptMockImport(file: File, type: ImportType): Promise<ImportAcceptedResponse> {
+async function acceptMockImport(
+	file: File,
+	type: ImportType,
+	vendorId: string
+): Promise<ImportAcceptedResponse> {
 	await delay();
 	const accepted = mockAccepted();
-	await registerMockImport(accepted.import_id, type, file);
+	await registerMockImport(accepted.import_id, type, file, vendorId);
 	return accepted;
 }
 
 /** `POST /imports/cashflow` (multipart) */
 export async function importCashflow(input: CashflowImportInput): Promise<ImportAcceptedResponse> {
 	if (useMocks) {
-		return acceptMockImport(input.file, 'cashflow');
+		return acceptMockImport(input.file, 'cashflow', input.vendor_id);
 	}
 	const form = new FormData();
 	form.append('file', input.file);
@@ -41,7 +45,7 @@ export async function importPortfolio(
 	input: PortfolioImportInput
 ): Promise<ImportAcceptedResponse> {
 	if (useMocks) {
-		return acceptMockImport(input.file, 'portfolio');
+		return acceptMockImport(input.file, 'portfolio', input.vendor_id);
 	}
 	const form = new FormData();
 	form.append('file', input.file);
