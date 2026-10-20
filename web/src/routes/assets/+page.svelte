@@ -29,6 +29,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { donutRamps } from '$lib/charts/theme';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { AssetClass, AssetClassDetails, AssetSnapshotPoint } from '$lib/api/types';
 
 	let classes = $state<AssetClass[]>([]);
@@ -39,6 +40,11 @@
 	let drawerOpen = $state(false);
 	let details = $state<AssetClassDetails | null>(null);
 	let detailsLoading = $state(false);
+
+	// Adding an item leaves the class drawer open, and a drawer draws its own scrim over the notice
+	// region under the masthead. So that outcome is reported in the drawer it was started from
+	// rather than as a toast nobody would see.
+	let classNotice = $state<NoticeMessage | null>(null);
 
 	// One period for the whole app, chosen in the account overview.
 	const from = $derived(periodStore.from);
@@ -118,6 +124,7 @@
 		drawerOpen = true;
 		detailsLoading = true;
 		details = null;
+		classNotice = null;
 		try {
 			await accountStore.ensureLoaded();
 			details = await getAssetClassDetails(row.id);
@@ -136,7 +143,7 @@
 		} catch {
 			// The item was saved; only the refresh failed, so say that rather than let the
 			// drawer silently keep showing the figures from before it.
-			toast.error('Saved, but the class could not be refreshed');
+			classNotice = { intent: 'error', message: 'Saved, but the class could not be refreshed' };
 		} finally {
 			detailsLoading = false;
 		}
@@ -235,6 +242,8 @@
 	bind:open={drawerOpen}
 	{details}
 	loading={detailsLoading}
+	notice={classNotice}
+	onDismissNotice={() => (classNotice = null)}
 	onOpenClass={() => details && goto(`/assets/${details.class.id}`)}
 	onAddItem={() => (addItemOpen = true)}
 	onOpenItem={(assetId) => details && goto(`/assets/${details.class.id}?item=${assetId}`)}

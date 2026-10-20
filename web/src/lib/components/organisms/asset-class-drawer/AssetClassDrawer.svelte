@@ -10,6 +10,7 @@
 	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { AssetClassDetails } from '$lib/api/types';
 
 	type Props = {
@@ -17,6 +18,12 @@
 		details?: AssetClassDetails | null;
 		loading?: boolean;
 		error?: string | null;
+		/**
+		 * What an action taken here reported. This drawer stays open afterwards and covers the notice
+		 * region under the masthead with its own scrim, so the outcome is stated in the drawer itself.
+		 */
+		notice?: NoticeMessage | null;
+		onDismissNotice?: () => void;
 		onClose?: () => void;
 		/** Follow through to the class's own page. */
 		onOpenClass?: () => void;
@@ -31,11 +38,21 @@
 		details = null,
 		loading = false,
 		error = null,
+		notice = null,
+		onDismissNotice,
 		onClose,
 		onOpenClass,
 		onAddItem,
 		onOpenItem
 	}: Props = $props();
+
+	// The band sits at the top of the drawer body, which is the scroll container, while the action
+	// that fills it — **Add item** — sits in the footer over a list that scrolls. So the outcome is
+	// brought into view rather than reported above the fold where nobody is looking.
+	let bandEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (notice) bandEl?.scrollIntoView({ block: 'nearest' });
+	});
 
 	const growth = $derived(details?.class.growth_pct ?? null);
 	const holdings = $derived(details?.holdings ?? []);
@@ -89,6 +106,23 @@
 			</Text>
 		{/if}
 	{/snippet}
+
+	{#if notice}
+		<!-- No timer behind this band, so it is dismissible: the drawer stays open and the outcome
+		     waits for the reader rather than for a countdown nobody can see. -->
+		<div bind:this={bandEl}>
+			<NoticeBand
+				intent={notice.intent}
+				surface="inset"
+				gutter="dialog"
+				class="-mx-5 -mt-4 mb-4"
+				dismissible
+				onDismiss={onDismissNotice}
+			>
+				{notice.message}
+			</NoticeBand>
+		</div>
+	{/if}
 
 	{#if loading}
 		<div class="space-y-3">
