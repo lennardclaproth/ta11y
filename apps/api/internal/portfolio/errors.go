@@ -23,4 +23,5 @@ var (
 	ErrManualOccurredAtInFuture      = fmt.Errorf("occurred_at must be today or earlier")
 	ErrTransactionNotFound           = fmt.Errorf("no transaction found with the given id")
 	ErrTransactionDateNotEditable    = fmt.Errorf("only manually entered transactions can be moved to another date")
+	ErrTransactionNotEditable        = fmt.Errorf("only manually entered transactions can be changed or deleted")
 )

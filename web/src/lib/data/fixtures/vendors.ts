@@ -5,7 +5,7 @@ export const vendors: Vendor[] = [
 	{
 		id: 'vnd-degiro',
 		name: 'DEGIRO',
-		type: 'portfolio',
+		type: 'brokerage',
 		active: true,
 		import_disabled: false,
 		created_at: '2025-01-04T09:00:00Z',
@@ -14,7 +14,7 @@ export const vendors: Vendor[] = [
 	{
 		id: 'vnd-ing',
 		name: 'ING',
-		type: 'cashflow',
+		type: 'bank',
 		active: true,
 		import_disabled: false,
 		created_at: '2025-01-04T09:00:00Z',
@@ -23,7 +23,7 @@ export const vendors: Vendor[] = [
 	{
 		id: 'vnd-n26',
 		name: 'N26',
-		type: 'cashflow',
+		type: 'bank',
 		active: true,
 		import_disabled: false,
 		created_at: '2025-01-04T09:00:00Z',
@@ -32,7 +32,7 @@ export const vendors: Vendor[] = [
 	{
 		id: 'vnd-bnd',
 		name: 'Brand New Day',
-		type: 'portfolio',
+		type: 'brokerage',
 		active: true,
 		import_disabled: false,
 		created_at: '2025-01-04T09:00:00Z',
