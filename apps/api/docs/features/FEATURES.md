@@ -74,7 +74,10 @@ removed once an import finishes, successfully or not.
 **Import CSV** on Cashflow and on Portfolio opens one import panel. A monthly broker
 account statement is uploaded once and fills both destinations, and the result reports
 per destination what was new, what was already imported and what failed, plus the
-products it brought in that no listing matches yet.
+products it brought in that no listing matches yet. On Cashflow, **Import CSV** opens a
+bank statement panel instead (ING, N26), which fills Cashflow only, says when a file is
+not that bank's export, and counts rows it could not read as failed; a DEGIRO statement
+is handed over from there to the brokerage panel.
 
 Repeating the import is safe. Consecutive exports overlap, so a row is recognised by
 what it is — date, product, amount and quantity — and no
@@ -141,11 +144,13 @@ portfolio transactions, and request asynchronous portfolio rebuilds that recompu
 positions and snapshots from transactions and market data.
 
 A manual transaction is entered on any day up to and including today, and one entered by
-hand can later be moved to another day; imported transactions keep their statement date.
+hand can later be edited (date, type, listing, quantity, amount, description) or deleted;
+imported transactions stay as the statement records them.
 Because a backdated or moved trade lands elsewhere in the stream a rebuild reads, the
-write asks for one itself and reports whether it ran — a rebuild already in progress is
-not queued, so the response says the positions on screen are still the previous result and
-leaves the rebuild action as the way out.
+write asks for one itself. It answers without waiting: the rebuild runs in the background,
+one per account at a time with later requests folded into a single follow-up, and the page
+refreshes on the `portfolio.rebuilt` event. A rebuild runs as one database transaction, so
+the previous result stays visible until the new one is complete.
 
 Rebuilds account for share splits. A split changes the share count without changing the
 money invested, so it is replayed as an event in the same chronological stream as the
@@ -158,7 +163,8 @@ Every rebuild re-links positions to listings, so adding a listing and rebuilding
 transactions imported earlier. The match is exact: the ISIN, or the symbol when the
 instrument has none. No match leaves the position unlinked — it still counts as a
 position, it just contributes no market value — rather than attaching it to a listing
-that merely looks similar.
+that merely looks similar. A linked position, and the transactions mapped to it, show the
+listing's symbol when the statement carried only an ISIN.
 
 → Details: [Portfolio](%5B013%5D_PORTFOLIO.md)
 

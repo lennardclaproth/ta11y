@@ -13,6 +13,7 @@
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
 	import TransactionFormModal from '$lib/components/organisms/transaction-form-modal/TransactionFormModal.svelte';
 	import ImportDialog from '$lib/components/organisms/import-dialog/ImportDialog.svelte';
+	import CashflowImportDialog from '$lib/components/organisms/cashflow-import-dialog/CashflowImportDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
@@ -115,6 +116,9 @@
 	let creating = $state(false);
 	let createError = $state<string | null>(null);
 	let importOpen = $state(false);
+	let brokerageImportOpen = $state(false);
+	let vendorsLoaded = $state(false);
+	let bankVendors = $state<Vendor[]>([]);
 	let brokerageVendors = $state<Vendor[]>([]);
 
 	let markOpen = $state(false);
@@ -507,17 +511,31 @@
 		return `${total} ${total === 1 ? 'row' : 'rows'}${selected}`;
 	});
 
-	// Imports need a brokerage vendor, which the cashflow page does not otherwise load,
-	// so the list is fetched when the dialog is first opened rather than on every visit.
+	// Imports need the vendors, which the cashflow page does not otherwise load, so the list
+	// is fetched when an import is first opened rather than on every visit. A bank statement
+	// opens the bank import; a DEGIRO statement is handed over from there to the brokerage one.
 	async function openImport() {
-		if (brokerageVendors.length === 0) {
+		if (!vendorsLoaded) {
 			try {
-				brokerageVendors = (await listVendors()).filter((v) => v.active && v.type === 'portfolio');
+				const active = (await listVendors()).filter((v) => v.active);
+				bankVendors = active.filter((v) => v.type === 'bank');
+				brokerageVendors = active.filter((v) => v.type === 'brokerage');
+				vendorsLoaded = true;
 			} catch {
-				// Leave the list empty; the dialog says there is no brokerage account.
+				// Retried on the next open; opening now would read as "no bank account".
+				toast.error('Could not load your accounts. Try again.');
+				return;
 			}
 		}
 		importOpen = true;
+	}
+
+	function refreshAfterImport() {
+		void load(currentQuery());
+		void loadAnalytics();
+		// An import can switch a rule's harvest, and the rule names on the ledger's rows
+		// come from the list this page holds.
+		void loadIgnoreRules();
 	}
 </script>
 
@@ -678,14 +696,18 @@
 	onSubmit={handleMarkRecurring}
 />
 
-<ImportDialog
+<CashflowImportDialog
 	bind:open={importOpen}
+	vendors={bankVendors}
+	onFinished={refreshAfterImport}
+	onBrokerageImport={() => (brokerageImportOpen = true)}
+	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
+/>
+
+<ImportDialog
+	bind:open={brokerageImportOpen}
 	vendors={brokerageVendors}
-	onFinished={() => {
-		void load(currentQuery());
-		void loadAnalytics();
-		void loadIgnoreRules();
-	}}
+	onFinished={refreshAfterImport}
 	onGoToPortfolio={() => void goto('/portfolio')}
 	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
 />

@@ -56,8 +56,11 @@ func SplitTags(tags string) []string {
 
 type AccountType string
 
+// CsvParser reads a vendor export. The sequence yields every data row with its
+// RowNumber set: a row that could not be read comes with its error rather than being
+// dropped, so an import can count it as failed.
 type CsvParser interface {
-	ParseAll(rc io.ReadCloser) (iter.Seq2[int, TransactionData], error)
+	ParseAll(rc io.ReadCloser) (iter.Seq2[TransactionData, error], error)
 }
 
 const (

@@ -37,8 +37,9 @@ func NewProcessor(
 
 // Process parses the cashflow CSV into a batch of transaction data and hands the whole
 // batch to the cashflow commands, which persist it in a single bulk insert. Rows are
-// stamped with the vendor as their source, their CSV row number, and the dedup
-// sequence that lets a partly overlapping export be recognised as already imported.
+// stamped with the vendor as their source and the dedup sequence that lets a partly
+// overlapping export be recognised as already imported. A row the parser could not read
+// is counted as failed and the rest of the file is still imported.
 func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer.ProcessResult, error) {
 	accountID, err := imp.RequireAccountID()
 	if err != nil {
@@ -75,9 +76,13 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 	source := string(v.Name)
 	sequencer := importer.NewDedupSequencer()
 	data := make([]cashflowdomain.TransactionData, 0)
-	for rowNumber, row := range rows {
+	failed := 0
+	for row, rowErr := range rows {
+		if rowErr != nil {
+			failed++
+			continue
+		}
 		row.Source = source
-		row.RowNumber = rowNumber
 		// The key is the transaction's own DedupKey, which is exactly what its checksum
 		// digests — including the note, which carries the vendor's own reference
 		// (DEGIRO's order id) and so already separates two same-day transfers of equal
@@ -86,13 +91,14 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 		row.DedupSeq = sequencer.Next(row.DedupKey()...)
 		data = append(data, row)
 	}
+	total := len(data) + failed
 	if len(data) == 0 {
-		return importer.ProcessResult{}, nil
+		return importer.ProcessResult{TotalRows: total, Failed: failed}, nil
 	}
 
 	result, err := p.commands.CreateMany(ctx, accountID, &imp.ID, data)
 	if err != nil {
-		return importer.ProcessResult{TotalRows: len(data), Failed: len(data)}, fmt.Errorf("import cashflow: %w", err)
+		return importer.ProcessResult{TotalRows: total, Failed: total}, fmt.Errorf("import cashflow: %w", err)
 	}
 
 	// Rules run over the rows this import inserted, never over the ledger as a whole:
@@ -107,17 +113,19 @@ func (p *Processor) Process(ctx context.Context, imp *importer.Import) (importer
 		// the review would claim nothing left the totals while it did. Applying the
 		// remaining rules to the ledger afterwards is the way back.
 		return importer.ProcessResult{
-			TotalRows:   len(data),
+			TotalRows:   total,
 			Imported:    result.Imported,
 			Duplicates:  result.Duplicates,
+			Failed:      failed,
 			AutoIgnored: autoIgnored,
 		}, fmt.Errorf("import cashflow: apply ignore rules: %w", err)
 	}
 
 	return importer.ProcessResult{
-		TotalRows:   len(data),
+		TotalRows:   total,
 		Imported:    result.Imported,
 		Duplicates:  result.Duplicates,
+		Failed:      failed,
 		AutoIgnored: autoIgnored,
 	}, nil
 }

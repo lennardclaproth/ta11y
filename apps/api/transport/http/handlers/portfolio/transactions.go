@@ -159,8 +159,9 @@ type ManualPortfolioTransactionResponse struct {
 	UnitPrice   string     `json:"unit_price"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
-	// Rebuild says whether the positions and snapshots have caught up with this write:
-	// "completed", "in_progress" (another rebuild held the lock), "skipped" or "failed".
+	// Rebuild reports the rebuild this write scheduled:
+	// "started" (recalculating in the background; a portfolio.rebuilt websocket event
+	// follows when done) or "skipped" (nothing was scheduled).
 	Rebuild string `json:"rebuild"`
 }
 
@@ -343,7 +344,7 @@ func toPortfolioTransactionResponses(rows []portfoliodomain.TransactionWithListi
 			Type:        string(tx.Type),
 			ListingID:   tx.ListingID,
 			ISIN:        tx.ISIN,
-			Symbol:      tx.Symbol,
+			Symbol:      displaySymbol(tx),
 			Description: tx.Description,
 			Amount:      formatDecimal(portfoliodomain.SignedAmountForRead(tx.Type, tx.Quantity, tx.AmountCents.Float64())),
 			Quantity:    formatDecimal(tx.Quantity),
@@ -355,10 +356,18 @@ func toPortfolioTransactionResponses(rows []portfoliodomain.TransactionWithListi
 	return out
 }
 
+// displaySymbol is the transaction's own symbol, or the linked listing's when it has none.
+func displaySymbol(tx portfoliodomain.TransactionWithListingID) *string {
+	if tx.Symbol != nil && strings.TrimSpace(*tx.Symbol) != "" {
+		return tx.Symbol
+	}
+	return tx.ListingSymbol
+}
+
 // CreateManualPortfolioTransaction creates a manual portfolio transaction and rebuilds the portfolio.
 //
 // @Summary Create manual portfolio transaction
-// @Description Creates a manual portfolio transaction, then rebuilds positions and snapshots so they include it. The response reports whether that rebuild ran.
+// @Description Creates a manual portfolio transaction, then rebuilds positions and snapshots in the background so they include it. The response answers before the rebuild runs; a portfolio.rebuilt websocket event follows when it is done.
 // @Tags portfolio
 // @Accept json
 // @Produce json
@@ -417,8 +426,6 @@ func CreateManualPortfolioTransaction(
 			return
 		}
 
-		logRebuildOutcome(r, log, result.Rebuild, *result.Transaction.AccountID)
-
 		_ = httpx.JSONEncode(w, http.StatusCreated, toManualPortfolioTransactionResponse(result))
 	})
 }
@@ -426,7 +433,7 @@ func CreateManualPortfolioTransaction(
 // ChangePortfolioTransactionDate moves a manual portfolio transaction to another date.
 //
 // @Summary Change a portfolio transaction date
-// @Description Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots. Imported transactions keep their statement date.
+// @Description Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots in the background. Imported transactions keep their statement date.
 // @Tags portfolio
 // @Accept json
 // @Produce json
@@ -470,8 +477,6 @@ func ChangePortfolioTransactionDate(
 			writeChangePortfolioTransactionDateError(w, r, log, err)
 			return
 		}
-		logRebuildOutcome(r, log, rebuild, accountID)
-
 		_ = httpx.JSONEncode(w, http.StatusOK, ChangePortfolioTransactionDateResponse{
 			ID:         tx.ID,
 			OccurredAt: tx.OccurredAt,
@@ -496,16 +501,6 @@ func writeChangePortfolioTransactionDateError(w http.ResponseWriter, r *http.Req
 		log.Error(r.Context(), "portfolio change date: failed to move transaction", err)
 		_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to change the transaction date"})
 	}
-}
-
-// logRebuildOutcome records a rebuild that was attempted and errored. The write itself
-// succeeded, so the response reports the outcome rather than failing; the reason the
-// rebuild could not finish would otherwise be lost.
-func logRebuildOutcome(r *http.Request, log logging.Logger, result portfoliodomain.RebuildResult, accountID uuid.UUID) {
-	if result.Outcome != portfoliodomain.RebuildFailed {
-		return
-	}
-	log.Error(r.Context(), "portfolio transaction: rebuild after write failed", result.Err, "account_id", accountID.String())
 }
 
 func writeManualPortfolioTransactionError(w http.ResponseWriter, r *http.Request, log logging.Logger, err error) {

@@ -1035,6 +1035,17 @@ definitions:
       vendor_id:
         type: string
     type: object
+  portfolio.DeletePortfolioTransactionResponse:
+    properties:
+      id:
+        type: string
+      rebuild:
+        description: |-
+          Rebuild reports the rebuild this write scheduled:
+          "started" (recalculating in the background; a portfolio.rebuilt websocket event
+          follows when done) or "skipped" (nothing was scheduled).
+        type: string
+    type: object
   portfolio.ManualPortfolioTransactionResponse:
     properties:
       account_id:
@@ -1059,8 +1070,9 @@ definitions:
         type: string
       rebuild:
         description: |-
-          Rebuild says whether the positions and snapshots have caught up with this write:
-          "completed", "in_progress" (another rebuild held the lock), "skipped" or "failed".
+          Rebuild reports the rebuild this write scheduled:
+          "started" (recalculating in the background; a portfolio.rebuilt websocket event
+          follows when done) or "skipped" (nothing was scheduled).
         type: string
       source:
         type: string
@@ -1184,6 +1196,21 @@ definitions:
         type: number
       value_index:
         type: number
+    type: object
+  portfolio.UpdatePortfolioTransactionRequest:
+    properties:
+      amount:
+        type: string
+      description:
+        type: string
+      listing_id:
+        type: string
+      occurred_at:
+        type: string
+      quantity:
+        type: string
+      type:
+        type: string
     type: object
   transport_http_handlers_cashflow.TransactionFilters:
     properties:
@@ -3792,13 +3819,118 @@ paths:
       summary: Get portfolio transactions
       tags:
       - portfolio
+  /portfolio/transactions/{transaction_id}:
+    delete:
+      description: Removes a manually entered portfolio transaction, then rebuilds
+        positions and snapshots in the background. Imported transactions are refused,
+        since the next upload of the same statement would bring them back.
+      parameters:
+      - description: Transaction ID
+        in: path
+        name: transaction_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/portfolio.DeletePortfolioTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a manual portfolio transaction
+      tags:
+      - portfolio
+    put:
+      consumes:
+      - application/json
+      description: Replaces the date, type, listing, amount, quantity and description
+        of a manually entered portfolio transaction under the same rules as creating
+        one, then rebuilds positions and snapshots in the background. Imported transactions
+        are refused. The response answers before the rebuild runs; a portfolio.rebuilt
+        websocket event follows when it is done.
+      parameters:
+      - description: Transaction ID
+        in: path
+        name: transaction_id
+        required: true
+        type: string
+      - description: Edited transaction
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/portfolio.UpdatePortfolioTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/portfolio.ManualPortfolioTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Edit a manual portfolio transaction
+      tags:
+      - portfolio
   /portfolio/transactions/date:
     post:
       consumes:
       - application/json
       description: Moves a manually entered portfolio transaction to another date,
-        today or earlier, then rebuilds positions and snapshots. Imported transactions
-        keep their statement date.
+        today or earlier, then rebuilds positions and snapshots in the background.
+        Imported transactions keep their statement date.
       parameters:
       - description: Change date payload
         in: body
@@ -3851,8 +3983,8 @@ paths:
       consumes:
       - application/json
       description: Creates a manual portfolio transaction, then rebuilds positions
-        and snapshots so they include it. The response reports whether that rebuild
-        ran.
+        and snapshots in the background so they include it. The response answers before
+        the rebuild runs; a portfolio.rebuilt websocket event follows when it is done.
       parameters:
       - description: Manual portfolio transaction payload
         in: body

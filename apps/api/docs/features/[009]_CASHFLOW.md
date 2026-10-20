@@ -134,7 +134,9 @@ erDiagram
 Physical names: Postgres `cashflow.transactions` / `cashflow.accounts`; SQLite `transactions`
 / `cashflow_accounts`. A partial analytics index covers `(date, direction, tag) WHERE ignored = FALSE`.
 Note `cashflow.transactions.account_id` references the projection (`cashflow.accounts.account_id`),
-not `account.accounts` directly.
+not `account.accounts` directly. The projection is created on `account.created`, as portfolio's
+and assets' are; accounts that predate that handler got theirs from the
+`20261012120000_cashflow_accounts_backfill` migration.
 
 ## Transaction classification states
 
@@ -254,6 +256,8 @@ subscribe to `import.completed`.
 | `internal/cashflow/filters.go` | App-level `TransactionFilters` for bulk mutations |
 | `internal/cashflow/transaction.go` | `Transaction`, checksum, `CashFlowDirection`/`AccountType`, `CsvParser` |
 | `internal/cashflow/errors.go` | Manual-create + account errors |
+| `internal/cashflow/account.go` | `Account` — the per-account projection every transaction references |
+| `transport/messaging/handlers/cashflow/account_created.go` | Creates the projection on `account.created` |
 | `transport/http/handlers/cashflow/*.go` | Query, manual create, change date, analytics, tag (×3), ignore (×2) handlers + DTOs |
 | `internal/storage/sqlx_cashflow_store.go` | `SQLXCashflowStore` (both interfaces): inserts, list/count, tag/ignore, analytics SQL |
 | `internal/importer/cashflow/` | Import processor + vendor CSV parsers (ING / DeGiro / N26) |
@@ -265,8 +269,6 @@ subscribe to `import.completed`.
   currently dead. The old `[022]` auto-tagging agent (`TaggerJob`, `agent.enabled`) was
   removed with the `internal/jobs` package; `internal/cashflow/auto_tagger.go` remains as
   orphaned scaffolding with no caller.
-- **No cashflow account projection wiring.** `cashflow.accounts` exists in the schema but no
-  `account.created` handler or cashflow-account store populates it in the refactored tree.
 - **Only the date can be changed after the fact.** Amount, description, tag and direction are
   fixed once a transaction exists, and there is no delete, so correcting anything else means
   re-entering the transaction.

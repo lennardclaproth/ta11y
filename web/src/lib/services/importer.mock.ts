@@ -1,17 +1,70 @@
 /**
  * Fixture-mode stand-in for the import pipeline. It reads the uploaded CSV the way
- * `internal/importer/{cashflow,portfolio}` does — headers decide whether the file is
- * the export at all, content decides which rows are new — so running the portal on
+ * `internal/importer/{cashflow,portfolio}` does — the vendor's headers decide whether the
+ * file is its export at all, content decides which rows are new — so running the portal on
  * mocks exercises the behaviour this feature is about instead of returning a
  * hard-coded success. Nothing leaves the browser and nothing is persisted.
  */
 
 import type { ImportResult, ImportType, UnlinkedProduct } from '$lib/api/types';
 import { listings } from '$lib/data/fixtures/marketdata';
+import { vendors } from '$lib/data/fixtures/vendors';
 import { countMockAutoIgnored } from './ignoreRules';
 
-/** The headers both DEGIRO parsers require before they will read a single row. */
-const requiredHeaders = ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change'];
+/** How one vendor's export is recognised and when one of its rows counts as failed. */
+interface ExportFormat {
+	delimiter: string;
+	/** The headers the vendor's parser requires before it will read a single row. */
+	required: string[];
+	/** True for a row the parser would refuse; such a row is counted, not imported. */
+	rowFails?: (row: Record<string, string>) => boolean;
+	/** The description and note the row lands in the ledger with — what a rule matches on. */
+	ledgerText: (row: Record<string, string>) => { description: string; note: string };
+}
+
+const isAmount = (raw: string | undefined) => /^-?\d+([.,]\d+)?$/.test((raw ?? '').trim());
+
+/**
+ * The exports per vendor name, after `internal/importer/cashflow/parsers`. N26 is matched
+ * on its English headers only; the server also accepts the German ones. DEGIRO rows are
+ * never counted as failed, matching its parsers, which skip a row they cannot read.
+ */
+const exportFormats: Record<string, ExportFormat> = {
+	DEGIRO: {
+		delimiter: ',',
+		required: ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change'],
+		ledgerText: (row) => ({
+			description: row['Description'] ?? '',
+			note: row['Product'] ?? ''
+		})
+	},
+	ING: {
+		delimiter: ';',
+		required: ['Date', 'Name / Description', 'Debit/credit', 'Amount (EUR)'],
+		rowFails: (row) =>
+			!/^\d{8}$/.test(row['Date'] ?? '') ||
+			!['debit', 'credit'].includes((row['Debit/credit'] ?? '').toLowerCase()) ||
+			!isAmount(row['Amount (EUR)']),
+		ledgerText: (row) => ({
+			description: row['Name / Description'] ?? '',
+			note: row['Notifications'] ?? ''
+		})
+	},
+	N26: {
+		delimiter: ',',
+		required: ['Booking Date', 'Amount (EUR)'],
+		rowFails: (row) => !row['Booking Date'] || !isAmount(row['Amount (EUR)']),
+		ledgerText: (row) => ({
+			description: row['Partner Name'] ?? '',
+			note: row['Payment Reference'] ?? ''
+		})
+	}
+};
+
+function formatFor(vendorId: string): ExportFormat {
+	const name = vendors.find((vendor) => vendor.id === vendorId)?.name ?? 'DEGIRO';
+	return exportFormats[name] ?? exportFormats.DEGIRO;
+}
 
 /**
  * Rows already imported in this session, per destination. The real deduplication lives
@@ -30,8 +83,20 @@ const results = new Map<string, ImportResult>();
 const processingPolls = 1;
 const pollsLeft = new Map<string, number>();
 
-function splitCsvLine(line: string): string[] {
-	return line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''));
+/** Splits one CSV line, keeping a delimiter inside a quoted cell ("Smith, J") in its cell. */
+function splitCsvLine(line: string, delimiter: string): string[] {
+	const cells: string[] = [];
+	let cell = '';
+	let quoted = false;
+	for (const char of line) {
+		if (char === '"') quoted = !quoted;
+		else if (char === delimiter && !quoted) {
+			cells.push(cell.trim());
+			cell = '';
+		} else cell += char;
+	}
+	cells.push(cell.trim());
+	return cells;
 }
 
 function emptyResult(importId: string, type: ImportType): ImportResult {
@@ -84,19 +149,25 @@ function collectUnlinkedProducts(rows: Record<string, string>[]): UnlinkedProduc
 export async function registerMockImport(
 	importId: string,
 	type: ImportType,
-	file: File
+	file: File,
+	vendorId: string
 ): Promise<void> {
 	const result = emptyResult(importId, type);
 	results.set(importId, result);
 	pollsLeft.set(importId, processingPolls);
 
+	const format = formatFor(vendorId);
 	const lines = (await file.text())
+		.replace(/^\uFEFF/, '')
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line !== '');
 
-	const header = lines.length > 0 ? splitCsvLine(lines[0]) : [];
-	const missing = requiredHeaders.filter((column) => !header.includes(column));
+	// N26 exports with either delimiter, so the header line decides.
+	const delimiter =
+		format === exportFormats.N26 && lines[0]?.includes(';') ? ';' : format.delimiter;
+	const header = lines.length > 0 ? splitCsvLine(lines[0], delimiter) : [];
+	const missing = format.required.filter((column) => !header.includes(column));
 	if (missing.length > 0) {
 		result.status = 'failed';
 		result.reason = 'file_not_recognised';
@@ -112,11 +183,17 @@ export async function registerMockImport(
 	const occurrences = new Map<string, number>();
 
 	for (const line of lines.slice(1)) {
-		const cells = splitCsvLine(line);
+		const cells = splitCsvLine(line, delimiter);
 		const row: Record<string, string> = {};
 		header.forEach((column, index) => {
 			row[column] = cells[index] ?? '';
 		});
+
+		if (format.rowFails?.(row)) {
+			result.total_rows += 1;
+			result.failed += 1;
+			continue;
+		}
 		rows.push(row);
 
 		const content = header.map((column) => row[column]).join('');
@@ -141,9 +218,7 @@ export async function registerMockImport(
 	if (type === 'cashflow') {
 		// Only rows this upload actually brought in are offered to the rules, the same as
 		// on the server: a duplicate keeps the import it first arrived with.
-		result.auto_ignored = countMockAutoIgnored(
-			newRows.map((row) => ({ description: row['Description'] ?? '', note: row['Product'] ?? '' }))
-		);
+		result.auto_ignored = countMockAutoIgnored(newRows.map(format.ledgerText));
 	}
 }
 

@@ -29,10 +29,16 @@ func (s *recordingPortfolioStore) CreateTransactions(_ context.Context, _ []*por
 func (s *recordingPortfolioStore) UpdateTransactionOccurredAt(_ context.Context, _, _ uuid.UUID, _ time.Time, _ string) (int, error) {
 	return 0, nil
 }
+func (s *recordingPortfolioStore) UpdateManualTransaction(_ context.Context, _ *portfolio.Transaction) (int, error) {
+	return 0, nil
+}
+func (s *recordingPortfolioStore) DeleteManualTransaction(_ context.Context, _, _ uuid.UUID) (int, error) {
+	return 0, nil
+}
 
 func TestAccountCreatedCreatesPortfolioProjection(t *testing.T) {
 	store := &recordingPortfolioStore{}
-	commands := portfolio.NewCommands(store, nil, marketdata.Queries{}, vendor.Queries{}, nil)
+	commands := portfolio.NewCommands(store, nil, marketdata.Queries{}, vendor.Queries{}, nil, nil)
 	handler := NewAccountCreatedHandler(commands, nil)
 
 	accID := uuid.New()
