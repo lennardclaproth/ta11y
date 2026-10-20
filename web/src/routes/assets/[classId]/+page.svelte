@@ -291,6 +291,8 @@
 			detailError = false;
 			return;
 		}
+		// The failure belongs to the item that was selected, not to the one taking its place.
+		detailError = false;
 		void loadDetail(id);
 	});
 
@@ -305,9 +307,11 @@
 		} catch {
 			// The figures come from the class payload and stay on screen; what is missing is
 			// the purchase list, and a linked item always has at least one purchase, so the
-			// empty state would read as "you bought nothing".
+			// empty state would read as "you bought nothing". A late failure for an item the
+			// user has left says nothing about the one on screen, so it clears neither.
+			if (assetId !== untrack(() => selectedHolding?.id)) return;
 			detail = null;
-			if (assetId === untrack(() => selectedHolding?.id)) detailError = true;
+			detailError = true;
 		}
 	}
 
