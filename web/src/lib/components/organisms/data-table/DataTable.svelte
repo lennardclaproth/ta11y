@@ -1,8 +1,10 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
+	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Checkbox from '$lib/components/atoms/checkbox/Checkbox.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { zClasses } from '$lib/styles/z-index';
 	import type { Column, ColumnAlign, SortDirection } from './data-table.types';
 
@@ -26,6 +28,8 @@
 		sortDirection?: SortDirection;
 		onSort?: (key: string, direction: SortDirection) => void;
 		onRowClick?: (row: T) => void;
+		/** Retry a failed load; shown as the recovery action next to the failure notice. */
+		onRetry?: () => void;
 		/** Footer content (e.g. a FooterBar) rendered below the scroll area. */
 		footer?: Snippet;
 		class?: string;
@@ -45,6 +49,7 @@
 		sortDirection = 'asc',
 		onSort,
 		onRowClick,
+		onRetry,
 		footer,
 		class: className = ''
 	}: Props = $props();
@@ -122,159 +127,161 @@
 	}
 </script>
 
+{#snippet retryAction()}
+	<Button size="sm" variant="outline" intent="secondary" onclick={onRetry}>Try again</Button>
+{/snippet}
+
 <div class={['flex min-h-0 flex-col', className].filter(Boolean).join(' ')}>
-	<div class="min-h-0 flex-1 overflow-auto">
-		<table class="w-full min-w-[40rem] border-collapse text-sm">
-			<thead class={['sticky top-0 bg-taupe-50', zClasses.stickyHeader].join(' ')}>
-				<tr class="border-b border-slate-400">
-					{#if selectable}
-						<th class="w-10 px-3 py-2">
-							<Checkbox
-								checked={allSelected}
-								indeterminate={someSelected}
-								disabled={allIds.length === 0}
-								onchange={toggleAll}
-								aria-label="Select all"
-							/>
-						</th>
-					{/if}
-					{#each columns as column (column.key)}
-						<th
-							scope="col"
-							aria-sort={ariaSort(column)}
-							class={[
-								'px-3 py-3 text-xs font-semibold text-slate-700',
-								alignClasses[column.align ?? 'left'],
-								column.width ?? ''
-							]
-								.filter(Boolean)
-								.join(' ')}
-						>
-							<div
+	{#if error}
+		<!-- A failed load is a problem that stays, so it is stated at the content. Nothing is drawn
+		     underneath it: no zero, no empty-filter line, no pagination of a list that never loaded. -->
+		<NoticeBand intent="error" gutter="panel" action={onRetry ? retryAction : undefined}>
+			{error}
+		</NoticeBand>
+	{:else}
+		<div class="min-h-0 flex-1 overflow-auto">
+			<table class="w-full min-w-[40rem] border-collapse text-sm">
+				<thead class={['sticky top-0 bg-taupe-50', zClasses.stickyHeader].join(' ')}>
+					<tr class="border-b border-slate-400">
+						{#if selectable}
+							<th class="w-10 px-3 py-2">
+								<Checkbox
+									checked={allSelected}
+									indeterminate={someSelected}
+									disabled={allIds.length === 0}
+									onchange={toggleAll}
+									aria-label="Select all"
+								/>
+							</th>
+						{/if}
+						{#each columns as column (column.key)}
+							<th
+								scope="col"
+								aria-sort={ariaSort(column)}
 								class={[
-									'flex items-center gap-1',
-									column.align === 'right' ? 'justify-end' : '',
-									column.align === 'center' ? 'justify-center' : ''
+									'px-3 py-3 text-xs font-semibold text-slate-700',
+									alignClasses[column.align ?? 'left'],
+									column.width ?? ''
 								]
 									.filter(Boolean)
 									.join(' ')}
 							>
-								{#if column.sortKey}
-									<button
-										type="button"
-										class="group inline-flex items-center gap-1 rounded-md whitespace-nowrap transition-colors hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
-										onclick={() => headerSort(column)}
-									>
-										<span>{column.header}</span>
-										<Icon
-											icon={sortIcon(column)}
-											size="md"
-											class={sortKey === column.sortKey
-												? 'text-slate-700'
-												: 'text-slate-300 group-hover:text-slate-500'}
-										/>
-									</button>
-								{:else}
-									<span>{column.header}</span>
-								{/if}
-								{#if column.filter}
-									{@render column.filter()}
-								{/if}
-							</div>
-						</th>
-					{/each}
-				</tr>
-			</thead>
-
-			<tbody>
-				{#if loading}
-					{#each [0, 1, 2, 3, 4, 5] as rowIndex (rowIndex)}
-						<tr class="border-b border-slate-100">
-							{#if selectable}
-								<td class="px-3 py-2"><Skeleton variant="rect" class="h-4 w-4" /></td>
-							{/if}
-							{#each columns as column (column.key)}
-								<td class="px-3 py-2">
-									<Skeleton />
-								</td>
-							{/each}
-						</tr>
-					{/each}
-				{:else if error}
-					<tr>
-						<td colspan={colSpan} class="px-3 py-8">
-							<div
-								class="mx-auto max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700"
-							>
-								{error}
-							</div>
-						</td>
-					</tr>
-				{:else if isEmpty}
-					<tr>
-						<td colspan={colSpan} class="px-3 py-10 text-center text-sm text-slate-500">
-							{emptyText}
-						</td>
-					</tr>
-				{:else}
-					{#each rows as row (getRowId(row))}
-						{@const id = getRowId(row)}
-						{@const selected = selectable && selectedIds.includes(id)}
-						{@const rowSelectable = !selectable || isRowSelectable(row)}
-						<tr
-							class={[
-								'border-b border-slate-100 transition-colors',
-								selected ? 'bg-amber-50' : 'hover:bg-slate-50',
-								rowSelectable ? '' : 'text-slate-400',
-								// An outline, not a ring: a ring is a box-shadow, which a collapsed table row
-								// does not paint.
-								onRowClick
-									? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-slate-500'
-									: ''
-							]
-								.filter(Boolean)
-								.join(' ')}
-							tabindex={onRowClick ? 0 : undefined}
-							onclick={(event) => openRow(event, row)}
-							onkeydown={(event) => openRowByKey(event, row)}
-						>
-							{#if selectable}
-								<td class="px-3 py-2" data-row-select>
-									<Checkbox
-										checked={selected}
-										disabled={!rowSelectable}
-										onchange={() => toggleRow(id)}
-										aria-label="Select row"
-									/>
-								</td>
-							{/if}
-							{#each columns as column (column.key)}
-								<td
+								<div
 									class={[
-										'px-3 py-2 text-slate-700',
-										alignClasses[column.align ?? 'left'],
-										column.width ?? ''
+										'flex items-center gap-1',
+										column.align === 'right' ? 'justify-end' : '',
+										column.align === 'center' ? 'justify-center' : ''
 									]
 										.filter(Boolean)
 										.join(' ')}
 								>
-									{#if column.cell}
-										{@render column.cell(row)}
-									{:else if column.value}
-										{column.value(row)}
+									{#if column.sortKey}
+										<button
+											type="button"
+											class="group inline-flex items-center gap-1 rounded-md whitespace-nowrap transition-colors hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+											onclick={() => headerSort(column)}
+										>
+											<span>{column.header}</span>
+											<Icon
+												icon={sortIcon(column)}
+												size="md"
+												class={sortKey === column.sortKey
+													? 'text-slate-700'
+													: 'text-slate-300 group-hover:text-slate-500'}
+											/>
+										</button>
+									{:else}
+										<span>{column.header}</span>
 									{/if}
-								</td>
-							{/each}
-						</tr>
-					{/each}
-				{/if}
-			</tbody>
-		</table>
-	</div>
+									{#if column.filter}
+										{@render column.filter()}
+									{/if}
+								</div>
+							</th>
+						{/each}
+					</tr>
+				</thead>
 
-	{#if footer}
-		<div class={['border-t border-slate-200', zClasses.popover].filter(Boolean).join(' ')}>
-			{@render footer()}
+				<tbody>
+					{#if loading}
+						{#each [0, 1, 2, 3, 4, 5] as rowIndex (rowIndex)}
+							<tr class="border-b border-slate-100">
+								{#if selectable}
+									<td class="px-3 py-2"><Skeleton variant="rect" class="h-4 w-4" /></td>
+								{/if}
+								{#each columns as column (column.key)}
+									<td class="px-3 py-2">
+										<Skeleton />
+									</td>
+								{/each}
+							</tr>
+						{/each}
+					{:else if isEmpty}
+						<tr>
+							<td colspan={colSpan} class="px-3 py-10 text-center text-sm text-slate-500">
+								{emptyText}
+							</td>
+						</tr>
+					{:else}
+						{#each rows as row (getRowId(row))}
+							{@const id = getRowId(row)}
+							{@const selected = selectable && selectedIds.includes(id)}
+							{@const rowSelectable = !selectable || isRowSelectable(row)}
+							<tr
+								class={[
+									'border-b border-slate-100 transition-colors',
+									selected ? 'bg-amber-50' : 'hover:bg-slate-50',
+									rowSelectable ? '' : 'text-slate-400',
+									// An outline, not a ring: a ring is a box-shadow, which a collapsed table row
+									// does not paint.
+									onRowClick
+										? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-slate-500'
+										: ''
+								]
+									.filter(Boolean)
+									.join(' ')}
+								tabindex={onRowClick ? 0 : undefined}
+								onclick={(event) => openRow(event, row)}
+								onkeydown={(event) => openRowByKey(event, row)}
+							>
+								{#if selectable}
+									<td class="px-3 py-2" data-row-select>
+										<Checkbox
+											checked={selected}
+											disabled={!rowSelectable}
+											onchange={() => toggleRow(id)}
+											aria-label="Select row"
+										/>
+									</td>
+								{/if}
+								{#each columns as column (column.key)}
+									<td
+										class={[
+											'px-3 py-2 text-slate-700',
+											alignClasses[column.align ?? 'left'],
+											column.width ?? ''
+										]
+											.filter(Boolean)
+											.join(' ')}
+									>
+										{#if column.cell}
+											{@render column.cell(row)}
+										{:else if column.value}
+											{column.value(row)}
+										{/if}
+									</td>
+								{/each}
+							</tr>
+						{/each}
+					{/if}
+				</tbody>
+			</table>
 		</div>
+
+		{#if footer}
+			<div class={['border-t border-slate-200', zClasses.popover].filter(Boolean).join(' ')}>
+				{@render footer()}
+			</div>
+		{/if}
 	{/if}
 </div>

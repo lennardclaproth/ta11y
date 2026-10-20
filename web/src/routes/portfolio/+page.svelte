@@ -17,7 +17,7 @@
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import TransactionDateHeader from '$lib/components/molecules/transaction-date-header/TransactionDateHeader.svelte';
 	import PortfolioTransactionDrawer from '$lib/components/organisms/portfolio-transaction-drawer/PortfolioTransactionDrawer.svelte';
 	import FooterBar from '$lib/components/organisms/footer-bar/FooterBar.svelte';
@@ -96,6 +96,11 @@
 	let txPickerOpen = $state(false);
 	let txDescription = $state('');
 	let txError = $state<string | null>(null);
+	/**
+	 * Only a refusal by the server gets the heading: it states that a save was attempted and failed.
+	 * A validation message is said on its own, because nothing was sent yet.
+	 */
+	let txErrorTitle = $state<string | undefined>(undefined);
 	let creatingTx = $state(false);
 	let rebuilding = $state(false);
 	let importOpen = $state(false);
@@ -108,6 +113,8 @@
 	let savingDetail = $state(false);
 	let deletingDetail = $state(false);
 	let detailError = $state<string | null>(null);
+	// Save and Delete report in the same band, so the heading says which of the two was refused.
+	let detailErrorTitle = $state('This transaction was not changed');
 
 	// Set while the background rebuild a write started is running, so what is on screen
 	// (positions, performance, net worth) is known to still be the previous result. Cleared
@@ -301,6 +308,7 @@
 		txPickerOpen = false;
 		txDescription = '';
 		txError = null;
+		txErrorTitle = undefined;
 		txOpen = true;
 		await loadVendors();
 	}
@@ -323,16 +331,19 @@
 	}
 
 	async function submitTx() {
+		// The dialog is open, so what is missing is said in the dialog rather than on a toast behind it.
+		// Nothing has been sent at this point, so these carry no "was not saved" heading.
+		txErrorTitle = undefined;
 		if (!vendorId || txAmount.trim() === '') {
-			toast.error('Vendor and amount are required');
+			txError = 'Vendor and amount are required';
 			return;
 		}
 		if (needsListing && !txListing) {
-			toast.error('Select a listing');
+			txError = 'Select a listing';
 			return;
 		}
 		if (needsQuantity && txQuantity.trim() === '') {
-			toast.error('Quantity is required');
+			txError = 'Quantity is required';
 			return;
 		}
 		creatingTx = true;
@@ -354,8 +365,9 @@
 			noteRebuild(created.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
+			// The dialog stays open with the entry, so the refusal belongs in it, not on a toast as well.
 			txError = createMessage(err, txDate);
-			toast.error('Failed to add transaction');
+			txErrorTitle = 'This transaction was not saved';
 		} finally {
 			creatingTx = false;
 		}
@@ -392,7 +404,8 @@
 			noteRebuild(result.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
-			detailError = editMessage(err, body.occurred_at);
+			detailError = editMessage(err, body.occurred_at, genericWriteMessage);
+			detailErrorTitle = 'This transaction was not changed';
 			if (isMissingTransaction(err)) void loadAll();
 		} finally {
 			savingDetail = false;
@@ -413,7 +426,8 @@
 			noteRebuild(result.rebuild, sentAt);
 			void loadAll();
 		} catch (err) {
-			detailError = editMessage(err, day);
+			detailError = editMessage(err, day, genericDeleteMessage);
+			detailErrorTitle = 'This transaction was not deleted';
 			if (isMissingTransaction(err)) void loadAll();
 		} finally {
 			deletingDetail = false;
@@ -448,6 +462,7 @@
 	});
 
 	const genericWriteMessage = 'Could not save the transaction. Try again.';
+	const genericDeleteMessage = 'Could not delete the transaction. Try again.';
 
 	function duplicateMessage(date: string): string {
 		return `A transaction with the same listing and amount already exists on ${formatDisplayDate(date)}. Pick another day.`;
@@ -475,7 +490,9 @@
 		return genericWriteMessage;
 	}
 
-	function editMessage(err: unknown, date: string): string {
+	// An edit and a delete share these statuses but not the sentence that is left when none of them
+	// matches, so the caller hands in the one that names the button it was pressed on.
+	function editMessage(err: unknown, date: string, generic: string): string {
 		if (err instanceof ApiError && err.status === 409) return duplicateMessage(date);
 		if (err instanceof ApiError && err.status === 422) {
 			return 'This transaction came from an import, so it stays as the statement records it.';
@@ -487,9 +504,9 @@
 			return 'That listing no longer exists. Pick another one.';
 		}
 		if (err instanceof ApiError && err.status === 400) {
-			return fieldMessage(err) ?? genericWriteMessage;
+			return fieldMessage(err) ?? generic;
 		}
-		return genericWriteMessage;
+		return generic;
 	}
 
 	async function handleRebuild() {
@@ -590,10 +607,10 @@
 		{/snippet}
 
 		{#if updating}
-			<Alert intent="info" title="Updating your portfolio">
+			<NoticeBand intent="info" gutter="panel" title="Updating your portfolio">
 				The transaction is saved. Positions, performance and net worth are being recalculated, and
 				this page refreshes as soon as that is done.
-			</Alert>
+			</NoticeBand>
 		{/if}
 
 		<div class="flex min-h-0 flex-1 flex-col">
@@ -629,6 +646,7 @@
 					{loading}
 					{error}
 					emptyText={positionsEmptyText}
+					onRetry={() => void loadAll()}
 					columns={[
 						{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
 						{ key: 'name', header: 'Name', value: (r: PortfolioPosition) => r.name ?? '—' },
@@ -651,6 +669,7 @@
 						? `No transactions match “${transactionQuery}”. Clear the search to see them all.`
 						: 'No transactions in this period.'}
 					onRowClick={openDetail}
+					onRetry={() => void loadAll()}
 					columns={[
 						{
 							key: 'date',
@@ -702,6 +721,20 @@
 	closeOnEscape={!creatingTx}
 	closeOnBackdrop={!creatingTx}
 >
+	<!-- A refused save stays in the dialog, directly under its header and full-bleed, with the entry
+	     untouched behind it. The band carries role="alert", so it is announced and not just coloured. -->
+	{#if txError}
+		<NoticeBand
+			intent="error"
+			surface="inset"
+			gutter="dialog"
+			title={txErrorTitle}
+			class="-mx-5 -mt-4 mb-4"
+		>
+			{txError}
+		</NoticeBand>
+	{/if}
+
 	<div class="space-y-3">
 		<TransactionDateHeader
 			bind:value={txDate}
@@ -709,13 +742,6 @@
 			today={txToday}
 			disabled={creatingTx}
 		/>
-
-		{#if txError}
-			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
-			<div role="alert">
-				<Alert intent="error" title="This transaction was not saved">{txError}</Alert>
-			</div>
-		{/if}
 
 		<FormField label="Type" id="ptx-type">
 			{#snippet children(ctx)}
@@ -784,6 +810,7 @@
 			saving={savingDetail}
 			deleting={deletingDetail}
 			error={detailError}
+			errorTitle={detailErrorTitle}
 			onSave={handleDetailSave}
 			onDelete={handleDetailDelete}
 		/>

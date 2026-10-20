@@ -35,3 +35,17 @@
 		pending: recurringSuggestions[0].match_key
 	}}
 />
+
+<!-- Confirming leaves this drawer open so the rest of the list can be worked through, and the
+     drawer covers the notice region, so the outcome is stated here. -->
+<Story
+	name="Confirmed"
+	args={{
+		open: true,
+		suggestions: recurringSuggestions.slice(1),
+		notice: {
+			intent: 'success',
+			message: `${recurringSuggestions[0].name} added, with ${recurringSuggestions[0].matches} transactions`
+		}
+	}}
+/>

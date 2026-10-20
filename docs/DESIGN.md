@@ -228,7 +228,7 @@ shadow to distinguish it from content.
 | Sticky table header | 20 |
 | Popover / table footer | 30 |
 | Floating action button / expanded scrim | 40 |
-| Modal scrim / toast host | 50 |
+| Modal scrim | 50 |
 | Portaled filter popover | 60 |
 | Async search dropdown | 70 |
 
@@ -267,7 +267,40 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Counts | CountStat | Tabular and labelled; no currency, no colour by sign; a placeholder, not a zero, while unknown |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
-| Feedback | Alert, ToastHost, Skeleton, Spinner | Persistent issues belong near the affected content; transient feedback uses the single shell toast host |
+| Feedback | NoticeBand, NoticeBandRegion, Skeleton, Spinner | Every notification is a NoticeBand; persistent issues belong near the affected content, transient feedback goes through the single shell notice region |
+
+#### Notifications
+
+One shape reports everything: a full-width band with a hairline rule above and below, always in
+normal document flow. Nothing floats, so a notice never covers the navigation, a page action or a
+table row.
+
+- **After an action** — `NoticeBandRegion` renders the toast store directly under the masthead.
+  Stacked bands share one hairline (`-mt-px`) so several notices read as one ruled block, and at
+  most three auto-dismissing ones exist at once: a band is in the flow, so each one pushes the page
+  down. The store holds the cap, so a fourth notice does not queue out of sight while its timer runs
+  — the oldest is dismissed as the new one arrives. A notice that is meant to stay until it is
+  dismissed (`duration: 0`) is outside the cap and is never pushed out by a newer one.
+- **Under an overlay** — a dialog or drawer covers the notice region with its own scrim, so what it
+  reports it reports itself, in a band inside it. Never send a toast from an overlay that stays open.
+  The band has no timer, so it is dismissible and waits for the reader. The overlay body scrolls
+  and the band is pinned at the top of it, so when the action sits further down the band is
+  scrolled into view as it appears. An action that closes the overlay first may use the region,
+  because by then nothing covers it.
+- **A problem that stays** — the band sits at the content it concerns (above the records), with its
+  recovery action on the same line. Nothing is drawn underneath a failed load: no zero, no
+  empty-filter line, no pagination.
+- **In a modal or form** — a refused save stays where it happened: per field through `FormField`, or
+  as a band full-bleed under the dialog header. The entry is preserved, and no toast repeats it. A
+  band's `title` states that something failed, so it belongs to a real refusal; a validation message
+  that stops the form before it is sent is said on its own. Where one band serves two actions, the
+  title and the message name the one that was pressed — a refused delete does not report a change.
+
+The band's text lines up with the text of its container through `gutter` (`page`, `panel`, `dialog`,
+`none`), and `surface` picks the sheet it is printed on (`paper` on the taupe canvas and in a muted
+panel, `inset` inside a white dialog or drawer). The intent colour appears only in the solid chip;
+the message stays slate, and the intent name is in the band as screen-reader-only text, so colour is
+never the only carrier of meaning.
 
 Do not assume every component implements every intent: Button supports primary/secondary/warning/error/success/info; Badge adds neutral; Input uses default/error/success. Read each component's types before extending it.
 

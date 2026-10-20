@@ -11,6 +11,7 @@
 	import AddAssetItemDialog from '$lib/components/organisms/add-asset-item-dialog/AddAssetItemDialog.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
@@ -28,6 +29,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { donutRamps } from '$lib/charts/theme';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { AssetClass, AssetClassDetails, AssetSnapshotPoint } from '$lib/api/types';
 
 	let classes = $state<AssetClass[]>([]);
@@ -39,6 +41,11 @@
 	let details = $state<AssetClassDetails | null>(null);
 	let detailsLoading = $state(false);
 
+	// Adding an item leaves the class drawer open, and a drawer draws its own scrim over the notice
+	// region under the masthead. So that outcome is reported in the drawer it was started from
+	// rather than as a toast nobody would see.
+	let classNotice = $state<NoticeMessage | null>(null);
+
 	// One period for the whole app, chosen in the account overview.
 	const from = $derived(periodStore.from);
 	const to = $derived(periodStore.to);
@@ -46,6 +53,7 @@
 	let createOpen = $state(false);
 	let className = $state('');
 	let creatingClass = $state(false);
+	let createError = $state<string | null>(null);
 
 	let addItemOpen = $state(false);
 
@@ -96,6 +104,7 @@
 	async function createClass() {
 		if (className.trim() === '') return;
 		creatingClass = true;
+		createError = null;
 		try {
 			await accountStore.ensureLoaded();
 			await createAssetClass({ name: className.trim() });
@@ -104,7 +113,8 @@
 			toast.success('Asset class created');
 			void loadAll();
 		} catch {
-			toast.error('Failed to create asset class');
+			// The dialog stays open with the entry, so the refusal is stated in it, not behind it.
+			createError = 'Failed to create asset class';
 		} finally {
 			creatingClass = false;
 		}
@@ -114,6 +124,7 @@
 		drawerOpen = true;
 		detailsLoading = true;
 		details = null;
+		classNotice = null;
 		try {
 			await accountStore.ensureLoaded();
 			details = await getAssetClassDetails(row.id);
@@ -132,7 +143,7 @@
 		} catch {
 			// The item was saved; only the refresh failed, so say that rather than let the
 			// drawer silently keep showing the figures from before it.
-			toast.error('Saved, but the class could not be refreshed');
+			classNotice = { intent: 'error', message: 'Saved, but the class could not be refreshed' };
 		} finally {
 			detailsLoading = false;
 		}
@@ -196,7 +207,15 @@
 			meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
 		>
 			{#snippet actions()}
-				<Button shape="default" onclick={() => (createOpen = true)}>
+				<!-- Reset on opening, not on closing: Cancel sets `createOpen` itself, which never reaches
+				     the dialog's `onClose`, and a stale band would greet the next empty form. -->
+				<Button
+					shape="default"
+					onclick={() => {
+						createError = null;
+						createOpen = true;
+					}}
+				>
 					<Icon icon="heroicons:plus" />
 					Add asset class
 				</Button>
@@ -208,6 +227,7 @@
 			{error}
 			emptyText="No asset classes yet. Add one to start tracking what you own."
 			onRowClick={openClass}
+			onRetry={() => void loadAll()}
 			columns={[
 				{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
 				{ key: 'source', header: 'Source', value: (r: AssetClass) => r.source },
@@ -222,6 +242,8 @@
 	bind:open={drawerOpen}
 	{details}
 	loading={detailsLoading}
+	notice={classNotice}
+	onDismissNotice={() => (classNotice = null)}
 	onOpenClass={() => details && goto(`/assets/${details.class.id}`)}
 	onAddItem={() => (addItemOpen = true)}
 	onOpenItem={(assetId) => details && goto(`/assets/${details.class.id}?item=${assetId}`)}
@@ -237,6 +259,11 @@
 {/if}
 
 <Dialog bind:open={createOpen} title="New asset class" size="sm">
+	{#if createError}
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
+			{createError}
+		</NoticeBand>
+	{/if}
 	<FormField label="Name" id="class-name">
 		{#snippet children(ctx)}
 			<Input id={ctx.id} bind:value={className} placeholder="e.g. Real estate" />

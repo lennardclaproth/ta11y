@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import DatePicker from '$lib/components/molecules/date-picker/DatePicker.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import ListingSearchSelect from '$lib/components/molecules/listing-search-select/ListingSearchSelect.svelte';
@@ -43,6 +43,11 @@
 		deleting?: boolean;
 		/** Refused save or delete, in words the reader can act on. */
 		error?: string | null;
+		/**
+		 * What the refusal was about, as the caller knows it: Save and Delete share this one band,
+		 * and a heading has to name the button that was pressed.
+		 */
+		errorTitle?: string;
 		onSave?: (body: UpdatePortfolioTransactionRequest) => void;
 		onDelete?: () => void;
 		onClose?: () => void;
@@ -57,6 +62,7 @@
 		saving = false,
 		deleting = false,
 		error = null,
+		errorTitle = 'This transaction was not changed',
 		onSave,
 		onDelete,
 		onClose
@@ -170,8 +176,16 @@
 		</div>
 
 		{#if error}
-			<!-- An error Alert carries role="alert", so a refusal after Save is announced. -->
-			<Alert intent="error" title="This transaction was not changed">{error}</Alert>
+			<!-- An error band carries role="alert", so a refusal after Save is announced. -->
+			<NoticeBand
+				intent="error"
+				surface="inset"
+				gutter="dialog"
+				title={errorTitle}
+				class="-mx-5"
+			>
+				{error}
+			</NoticeBand>
 		{/if}
 
 		{#if editable}
@@ -300,10 +314,16 @@
 					</div>
 				{/if}
 			</dl>
-			<Alert intent="info" title="Imported transactions stay as the statement records them">
+			<NoticeBand
+				intent="info"
+				surface="inset"
+				gutter="dialog"
+				title="Imported transactions stay as the statement records them"
+				class="-mx-5"
+			>
 				This transaction came from an import, so it cannot be changed or deleted here. Re-uploading
 				the statement recognises it by exactly these values.
-			</Alert>
+			</NoticeBand>
 		{/if}
 	</div>
 

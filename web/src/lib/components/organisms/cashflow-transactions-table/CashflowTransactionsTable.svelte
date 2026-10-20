@@ -45,6 +45,8 @@
 		onFilterChange?: () => void;
 		/** Open one transaction (e.g. in a detail drawer). */
 		onRowClick?: (row: CashflowTransaction) => void;
+		/** Retry a failed load; offered next to the failure notice. */
+		onRetry?: () => void;
 		/** Bulk actions for the footer when rows are selected. */
 		bulkActions?: Snippet;
 		class?: string;
@@ -73,6 +75,7 @@
 		onLimitChange,
 		onFilterChange,
 		onRowClick,
+		onRetry,
 		bulkActions,
 		class: className = ''
 	}: Props = $props();
@@ -172,6 +175,7 @@
 	{sortDirection}
 	{onSort}
 	{onRowClick}
+	{onRetry}
 	{emptyText}
 	class={className}
 	columns={[

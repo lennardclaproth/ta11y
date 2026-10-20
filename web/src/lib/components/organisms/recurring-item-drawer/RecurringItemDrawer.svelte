@@ -8,6 +8,7 @@
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
@@ -21,6 +22,7 @@
 		rhythmLabels
 	} from '$lib/api/recurring';
 	import { cashflowOriginLabel } from '$lib/api/transactions';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringItemDetail, RecurringTransaction } from '$lib/api/types';
 
 	type Props = {
@@ -30,6 +32,12 @@
 		error?: string | null;
 		/** The transaction id currently being unlinked, if any. */
 		unlinking?: string | null;
+		/**
+		 * What an action taken here reported. This drawer stays open afterwards and covers the notice
+		 * region under the masthead with its own scrim, so the outcome is stated in the drawer itself.
+		 */
+		notice?: NoticeMessage | null;
+		onDismissNotice?: () => void;
 		onUnlink?: (transaction: RecurringTransaction) => void;
 		onEnd?: () => void;
 		onClose?: () => void;
@@ -41,10 +49,21 @@
 		loading = false,
 		error = null,
 		unlinking = null,
+		notice = null,
+		onDismissNotice,
 		onUnlink,
 		onEnd,
 		onClose
 	}: Props = $props();
+
+	// The band sits at the top of the drawer body, which is the scroll container, while the
+	// action that fills it — **Unlink** — sits in the transaction table at the bottom. An item
+	// with a year of transactions scrolls, so the outcome is brought into view rather than
+	// reported above the fold where nobody is looking.
+	let bandEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (notice) bandEl?.scrollIntoView({ block: 'nearest' });
+	});
 
 	const labels = $derived(item ? item.history.map((point) => point.date) : []);
 	const amounts = $derived(
@@ -88,6 +107,23 @@
 		{/if}
 	{/snippet}
 
+	{#if notice}
+		<!-- No timer behind this band, so it is dismissible: the drawer stays open and the outcome
+		     waits for the reader rather than for a countdown nobody can see. -->
+		<div bind:this={bandEl}>
+			<NoticeBand
+				intent={notice.intent}
+				surface="inset"
+				gutter="dialog"
+				class="-mx-5 -mt-4 mb-4"
+				dismissible
+				onDismiss={onDismissNotice}
+			>
+				{notice.message}
+			</NoticeBand>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="flex flex-col gap-3">
 			<Skeleton variant="rect" height="10rem" />
@@ -95,12 +131,7 @@
 			<Skeleton width="40%" />
 		</div>
 	{:else if error}
-		<p
-			class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-			role="alert"
-		>
-			{error}
-		</p>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 	{:else if item}
 		<AnalyticsCard title="Amount over time">
 			{#if amounts.length > 1}
