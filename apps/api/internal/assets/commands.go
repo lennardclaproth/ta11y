@@ -431,7 +431,11 @@ func (c *Commands) DeleteClass(ctx context.Context, accountID, classID uuid.UUID
 	if class.Source != ClassSourceManual {
 		return ErrClassNotManual
 	}
-	if err := c.cs.DeleteClass(ctx, classID); err != nil {
+	// The class and its children go together: a half-removed class leaves items and
+	// worth changes that still count towards net worth.
+	if err := c.uow.Do(ctx, func(txCtx context.Context) error {
+		return c.cs.DeleteClass(txCtx, classID)
+	}); err != nil {
 		return fmt.Errorf("delete asset: failed to delete: %w", err)
 	}
 

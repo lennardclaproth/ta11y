@@ -127,8 +127,25 @@ func (s *SQLXAssetsStore) UpdateClass(ctx context.Context, class *assets.Class) 
 	return nil
 }
 
-// DeleteClass removes a class by ID; items and mutations cascade via foreign keys.
+// DeleteClass removes a class with its items, worth changes and purchases. Like
+// DeleteAsset the children are deleted explicitly, because SQLite runs without
+// foreign-key enforcement and would otherwise leave them behind: the snapshot
+// builder reads mutations per account, so an orphan keeps counting towards net
+// worth with no way back to it.
 func (s *SQLXAssetsStore) DeleteClass(ctx context.Context, classID uuid.UUID) error {
+	purchases := s.db.Rebind(fmt.Sprintf(
+		`DELETE FROM %s WHERE item_id IN (SELECT id FROM %s WHERE class_id = ?)`,
+		s.purchasesTable, s.itemsTable,
+	))
+	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, purchases, classID); err != nil {
+		return fmt.Errorf("assets store: delete class purchases: %w", err)
+	}
+	for _, table := range []string{s.mutationsTable, s.itemsTable} {
+		query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE class_id = ?`, table))
+		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, classID); err != nil {
+			return fmt.Errorf("assets store: delete class children: %w", err)
+		}
+	}
 	query := s.db.Rebind(fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, s.classesTable))
 	if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query, classID); err != nil {
 		return fmt.Errorf("assets store: delete class: %w", err)
