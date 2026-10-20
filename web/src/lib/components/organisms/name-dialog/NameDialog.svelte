@@ -56,7 +56,9 @@
 	}
 </script>
 
-<Dialog bind:open {title} size="sm">
+<!-- Closing while the request is on its way would save the new name behind the user's back,
+     or write the refusal into a dialog nobody sees. -->
+<Dialog bind:open {title} size="sm" closeOnEscape={!saving}>
 	<FormField {label} id="name-dialog-field" error={error ?? undefined}>
 		{#snippet children(ctx)}
 			<Input
@@ -69,7 +71,9 @@
 	</FormField>
 
 	{#snippet footer()}
-		<Button variant="ghost" intent="secondary" onclick={() => (open = false)}>Cancel</Button>
+		<Button variant="ghost" intent="secondary" disabled={saving} onclick={() => (open = false)}>
+			Cancel
+		</Button>
 		<Button intent="success" loading={saving} onclick={save}>Save</Button>
 	{/snippet}
 </Dialog>

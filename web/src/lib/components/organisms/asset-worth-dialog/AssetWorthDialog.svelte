@@ -17,7 +17,7 @@
 	import { todayISO } from '$lib/components/molecules/calendar/calendar.utils';
 	import { adjustAssetWorth, setAssetWorth, updateMutation } from '$lib/services/assets';
 	import type { AssetMutation } from '$lib/api/types';
-	import type { WorthDialogAsset } from './asset-worth-dialog.types';
+	import type { WorthChangeMode, WorthDialogAsset } from './asset-worth-dialog.types';
 
 	type Props = {
 		open?: boolean;
@@ -41,8 +41,11 @@
 		onSaved
 	}: Props = $props();
 
-	// Plain strings because Tabs binds one; the values are `WorthChangeMode` and the direction.
-	let mode = $state<string>('adjust');
+	// Plain strings because Tabs binds one; the two values still come from WorthChangeMode,
+	// so a typo in either of them fails to compile rather than silently matching nothing.
+	const ADJUST: WorthChangeMode = 'adjust';
+	const SET: WorthChangeMode = 'set';
+	let mode = $state<string>(ADJUST);
 	let direction = $state<string>('INCREASE');
 	let amount = $state('');
 	let date = $state<string | null>(todayISO());
@@ -59,20 +62,20 @@
 	const current = $derived(asset ? decimalStringToNumber(asset.current_worth) : 0);
 	const amountValue = $derived(Number.parseFloat(amount) || 0);
 	const newWorth = $derived(
-		mode === 'set' ? amountValue : direction === 'DECREASE' ? current - amountValue : current + amountValue
+		mode === SET ? amountValue : direction === 'DECREASE' ? current - amountValue : current + amountValue
 	);
 
 	$effect(() => {
 		if (open) {
 			untrack(() => {
 				if (editing) {
-					mode = editing.change_type.toUpperCase() === 'ADJUST' ? 'adjust' : 'set';
+					mode = editing.change_type.toUpperCase() === 'ADJUST' ? ADJUST : SET;
 					direction = editing.direction?.toUpperCase() === 'DECREASE' ? 'DECREASE' : 'INCREASE';
 					amount = String(decimalStringToNumber(editing.amount));
 					date = editing.effective_date.slice(0, 10);
 					note = editing.note ?? '';
 				} else {
-					mode = 'adjust';
+					mode = ADJUST;
 					direction = 'INCREASE';
 					amount = '';
 					date = today;
@@ -87,9 +90,9 @@
 	function validate(): boolean {
 		const problems: Record<string, string> = {};
 		const value = Number.parseFloat(amount);
-		if (!Number.isFinite(value) || value < 0 || (mode === 'adjust' && value === 0)) {
-			problems.amount = mode === 'set' ? 'Enter what it is worth now.' : 'Enter an amount.';
-		} else if (!editing && mode === 'adjust' && direction === 'DECREASE' && value > current) {
+		if (!Number.isFinite(value) || value < 0 || (mode === ADJUST && value === 0)) {
+			problems.amount = mode === SET ? 'Enter what it is worth now.' : 'Enter an amount.';
+		} else if (!editing && mode === ADJUST && direction === 'DECREASE' && value > current) {
 			// Only checked for a new withdrawal: an edited one is weighed against the worth on its
 			// own day, which only the recalculated history knows.
 			problems.amount = 'You cannot withdraw more than it is worth.';
@@ -110,11 +113,11 @@
 				await updateMutation(asset.id, editing.id, {
 					amount: amountValue.toFixed(6),
 					direction:
-						mode === 'adjust' ? (direction === 'DECREASE' ? 'DECREASE' : 'INCREASE') : undefined,
+						mode === ADJUST ? (direction === 'DECREASE' ? 'DECREASE' : 'INCREASE') : undefined,
 					effective_date,
 					note: trimmedNote
 				});
-			} else if (mode === 'set') {
+			} else if (mode === SET) {
 				await setAssetWorth(asset.id, {
 					worth: amountValue.toFixed(6),
 					effective_date,
@@ -150,13 +153,16 @@
 	}
 </script>
 
-<Dialog bind:open title={dialogTitle} size="md">
+<!-- Closing while the request is on its way would record the change anyway, or write the
+     refusal into a dialog nobody sees; at a worth change that is the difference between
+     being in net worth and not. -->
+<Dialog bind:open title={dialogTitle} size="md" closeOnEscape={!saving}>
 	<div class="space-y-4">
 		{#if !editing}
 			<Tabs
 				tabs={[
-					{ value: 'adjust', label: 'Add or withdraw' },
-					{ value: 'set', label: 'Set new worth' }
+					{ value: ADJUST, label: 'Add or withdraw' },
+					{ value: SET, label: 'Set new worth' }
 				]}
 				bind:value={mode}
 				ariaLabel="What changed"
@@ -166,7 +172,7 @@
 			{#if editing}
 				The history after this change is recalculated, so later changes and your net worth
 				follow the correction.
-			{:else if mode === 'adjust'}
+			{:else if mode === ADJUST}
 				Money you put in or took out, like a transfer to your savings. It counts towards paid in.
 			{:else}
 				What it is worth now on its own, like savings after interest or a revalued house. The
@@ -178,7 +184,7 @@
 			<Alert intent="error" title="This change could not be saved">{saveError}</Alert>
 		{/if}
 
-		{#if mode === 'adjust'}
+		{#if mode === ADJUST}
 			<Tabs
 				tabs={[
 					{ value: 'INCREASE', label: 'Add' },
@@ -194,7 +200,7 @@
 			<FormField
 				label={opening
 					? 'Opening worth'
-					: mode === 'set'
+					: mode === SET
 						? editing
 							? 'Worth set to'
 							: 'Worth now'
@@ -250,7 +256,9 @@
 	</div>
 
 	{#snippet footer()}
-		<Button variant="ghost" intent="secondary" onclick={() => (open = false)}>Cancel</Button>
+		<Button variant="ghost" intent="secondary" disabled={saving} onclick={() => (open = false)}>
+			Cancel
+		</Button>
 		<Button intent="success" loading={saving} onclick={save}>Save</Button>
 	{/snippet}
 </Dialog>
