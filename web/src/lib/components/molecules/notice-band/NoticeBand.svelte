@@ -65,7 +65,7 @@
 			noticeBandChipClasses[intent]
 		].join(' ')}
 	>
-		<Icon icon={noticeBandIcons[intent]} size="md" />
+		<Icon icon={noticeBandIcons[intent]} size="lg" />
 		<span class="sr-only">{noticeBandLabels[intent]}</span>
 	</span>
 
