@@ -26,7 +26,10 @@ Vantage supplies crypto in euro; gold and silver have no euro source and remain 
   feature branches on.
 - **`assets.Purchase`** — one acquisition: account, item, day (UTC), quantity (float, because
   crypto is held in fractions), unit price (`money.Price`). There is no sell counterpart, so the
-  quantity held on a day is the sum of the purchases up to it.
+  quantity held on a day is the sum of the purchases up to it. The quantity has to be finite and
+  within `MaxPurchaseQuantity`, and the cost it implies has to fit a `money.Price`
+  (`ErrPurchaseCostOutOfRange`): everything derived from a holding multiplies the two, and a
+  product past the fixed scale does not read as a large number but as a negative worth.
 - **`marketdata.Quote`** — one instrument offered as a daily-priced holding: symbol, name, kind,
   currency, and whether it is `Selectable`. An unselectable quote carries a `Reason` fit for
   display. `ListingID`/`Price` are nil until somebody tracks the instrument.
@@ -59,13 +62,16 @@ purchase in the account to today and emits one **SET** mutation per daily-priced
 - **Class total** — a mutation records the class total the snapshot builder reads, and a class
   can hold manual items next to linked ones. The total written is every daily-priced item in the
   class that day **plus** the manual worth carried forward to it; otherwise a price move would
-  silently erase the manual items beside it.
+  silently erase the manual items beside it. The carried worth is seeded with the stand on the
+  day before the walk starts, because a manual item last set before the earliest purchase is
+  never visited by the day loop.
 - **Idempotence** — the derived rows are deleted and rewritten wholesale on every run
   (`DeleteDerivedMutations`), so the rebuild is safe to repeat.
 - **Price window** — prices are read through `marketdata.Queries.GetEODByListing` from the item's
   first purchase onwards, which both bounds the provider fetch and refreshes a stale listing on
   the way. A listing that cannot be read leaves the holding at what was paid rather than failing
-  a rebuild the rest of the account depends on.
+  a rebuild the rest of the account depends on, and is logged at warn level with the listing:
+  nothing else reports a history quietly rewritten back to cost.
 
 A linked item refuses `UpdateAssetWorth` (`ErrAssetDailyPriced`): a hand-set worth would be
 overwritten by the next rebuild.

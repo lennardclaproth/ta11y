@@ -158,7 +158,7 @@ stateDiagram-v2
     [*] --> Manual : CreateClass (source = MANUAL)
     [*] --> Portfolio : portfolio sync (source = PORTFOLIO)
     Manual --> Manual : archive / un-archive · add items · mutate item worth
-    Manual --> [*] : DeleteClass (cascades items + mutations)
+    Manual --> [*] : DeleteClass (removes items, changes and purchases)
     Portfolio --> Portfolio : re-synced on each portfolio.rebuilt
     note right of Portfolio
         Read-only via the manual API:
@@ -207,7 +207,7 @@ publishes `assets.snapshots.rebuild_requested`, which a handler turns into a `Re
 | Adjust worth | `PUT /assets/{asset_id}/adjust` | body: `account_id`, `direction`, `amount`, `effective_date`, `note?` | 204 |
 | Create class | `POST /assets/classes` | body: `account_id`, `name` | 201 `{id}` |
 | Update class | `PATCH /assets/classes` | body: `account_id`, `id`, `name?`, `archived?` | 204 |
-| Delete class | `DELETE /assets/classes/{class_id}` | body: `account_id` | 204 |
+| Delete class | `DELETE /assets/classes/{class_id}` | body: `account_id` (its items, changes and purchases go with it) | 204 |
 | List classes | `GET /assets/classes` | query: `account_id`, `include_archived` | 200 `[{..., current_worth, growth_pct}]` |
 | Class detail | `GET /assets/classes/{class_id}` | query: `account_id` | 200 `{class, assets, growth, mutations}` |
 | Total snapshots | `GET /assets/snapshots` | query: `account_id`, `from?`, `to?` | 200 `[{date, total_worth}]` |
@@ -232,8 +232,9 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   each hand-valued change's `previous_worth`, `new_worth` and `class_total_worth`, and the items'
   `current_worth`. That is what makes back-dated and corrected changes land in the right place.
   An item's first change must be a `SET` (`ErrOpeningNotSet`). An edit keeps the change's kind;
-  an item keeps at least one change (`ErrLastMutation`). Only items in a `MANUAL` class can be
-  renamed, deleted or have their history edited.
+  an item keeps at least one change (`ErrLastMutation`, raised by the store in the statement
+  that removes the row, so two deletes cannot empty a history between them). Only items in a
+  `MANUAL` class can be renamed, deleted or have their history edited.
 - **Class growth %** is computed from inception: `(latest − first) / |first| × 100` using the
   earliest and latest mutation `class_total_worth`.
 - **Total snapshots (`Builder.RebuildAll`).** Mutations are read ascending; per class the last
@@ -289,7 +290,9 @@ errors into 500 — see [Refactor state](#refactor-state--not-implemented).)
   changes counting derived worth that no longer exists, until the next write to the class
   replays it.
 - **Rows written by the old ADJUST INCREASE bug** (fixed in this release) store the new total
-  as `amount`. A replay would add it on top of the previous worth again; such changes have to be
-  edited to the real amount or re-entered. No migration repairs them.
+  as `amount` and the change as `new_worth`. The replay recognises that signature
+  (`amount = previous_worth + new_worth` with a non-zero previous worth) and rewrites the row
+  with the real amount, so it is corrected the first time the class is replayed. A class that
+  is never written to again keeps its old rows; no migration repairs them.
 - **No guard against a negative worth.** An `ADJUST`/`DECREASE` larger than the worth is stored
   as is; only the class page's worth dialog refuses it.
