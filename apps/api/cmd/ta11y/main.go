@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "github.com/lennardclaproth/ta11y/docs"
 	"github.com/lennardclaproth/ta11y/internal/account"
@@ -51,7 +52,17 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
-const eventQueueSize = 128
+const (
+	eventQueueSize = 128
+
+	// busDrainTimeout bounds how long shutdown waits for queued events. Together with
+	// the HTTP server's own 5s shutdown it stays inside Cloud Run's 10s SIGTERM grace.
+	busDrainTimeout = 4 * time.Second
+
+	// importRecoveryGrace spares imports touched this recently from start-up recovery:
+	// during a rolling deploy the previous instance may still be finishing them.
+	importRecoveryGrace = 2 * time.Minute
+)
 
 type application struct {
 	log logging.Logger
@@ -165,13 +176,61 @@ func run() error {
 			"account_id", fallback.AccountID.String())
 	}
 
+	recoverInterruptedWork(ctx, app, log)
+
 	go auth.SweepExpiredSessions(ctx, app.authStore, log)
 
 	router := apphttp.NewRouter()
 	registerRoutes(router, app)
 
-	server := apphttp.NewServer(cfg.Server.Addr(), router, log, cfg.Server.AllowedOrigins())
-	return server.Run(ctx)
+	var serverOptions []apphttp.ServerOption
+	if cfg.Server.WebDir != "" {
+		serverOptions = append(serverOptions, apphttp.WithSite(config.APIPrefix, apphttp.SiteHandler(cfg.Server.WebDir)))
+		log.Info(ctx, "serving the web app", "dir", cfg.Server.WebDir, "api_prefix", config.APIPrefix)
+	}
+	server := apphttp.NewServer(cfg.Server.Addr(), router, log, cfg.Server.AllowedOrigins(), serverOptions...)
+	runErr := server.Run(ctx)
+	drainBus(log, bus)
+	return runErr
+}
+
+// apiPathPrefix is the browser-side path the API lives under: APIPrefix when the server
+// also serves the web app, otherwise the root.
+func apiPathPrefix(cfg *config.Config) string {
+	if cfg.Server.WebDir == "" {
+		return ""
+	}
+	return config.APIPrefix
+}
+
+// recoverInterruptedWork fails background work a previous process started but never
+// finished, so nothing shows as running forever after a restart. It runs before the
+// server accepts requests. A failure is logged rather than fatal: the stuck rows are a
+// nuisance, not a reason to refuse to start.
+func recoverInterruptedWork(ctx context.Context, app *application, log logging.Logger) {
+	imports, err := app.importerCommands.RecoverInterrupted(ctx, time.Now().Add(-importRecoveryGrace))
+	if err != nil {
+		log.Warn(ctx, "failed recovering interrupted imports", "error", err.Error())
+	} else if imports > 0 {
+		log.Info(ctx, "failed imports interrupted by a restart", "count", imports)
+	}
+
+	seeds, err := app.marketDataCatalog.RecoverInterrupted(ctx)
+	if err != nil {
+		log.Warn(ctx, "failed recovering interrupted catalogue seeds", "error", err.Error())
+	} else if seeds > 0 {
+		log.Info(ctx, "failed catalogue seeds interrupted by a restart", "count", seeds)
+	}
+}
+
+// drainBus lets queued events finish after the server stops taking requests, so work
+// accepted just before shutdown is not silently dropped by the deferred Close.
+func drainBus(log logging.Logger, bus *memorybus.MemoryBus) {
+	ctx, cancel := context.WithTimeout(context.Background(), busDrainTimeout)
+	defer cancel()
+	if err := bus.Drain(ctx); err != nil {
+		log.Warn(ctx, "event bus did not drain before shutdown", "error", err.Error())
+	}
 }
 
 // buildAuthRegistry discovers the configured identity providers. With auth disabled it
@@ -230,7 +289,7 @@ func buildApplication(
 	marketDataQueries := marketdata.NewQueries(marketDataStore, marketDataSyncer)
 	marketDataCatalog := marketdata.NewCatalogue(marketDataStore, map[marketdata.Source]marketdata.TickerSearcher{
 		marketdata.SourceMarketStack: marketStackClient,
-	})
+	}, marketdata.WithMaxSeedPages(cfg.MarketData.MaxSeedPages))
 	// Only sources that can actually fetch a daily price in euro offer quotes, so
 	// MarketStack -- which the app uses for listed equities -- is deliberately absent.
 	marketDataQuotes := marketdata.NewQuotes(marketDataStore, marketDataQueries, marketDataCommands, map[marketdata.Source]marketdata.QuoteCatalogue{
@@ -241,7 +300,7 @@ func buildApplication(
 	accountCommands := account.NewCommands(accountStore, bus)
 	accountQueries := account.NewQueries(accountStore)
 	authCommands := auth.NewCommands(authStore, authStore, accountQueries, accountCommands, cfg.Auth.SessionTTL, cfg.Auth.IsEmailAllowed)
-	authQueries := auth.NewQueries(authStore, accountQueries)
+	authQueries := auth.NewQueries(authStore, accountQueries, cfg.Auth.IsEmailAllowed)
 	vendorCommands := vendor.NewCommands(vendorStore)
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, ignoreRuleStore, ignoreRuleStore, accountQueries)
@@ -283,8 +342,9 @@ func buildApplication(
 		authQueries:     authQueries,
 		authStore:       authStore,
 		authCookies: apphttp.CookieSettings{
-			Domain: cfg.Auth.CookieDomain,
-			Secure: cfg.Auth.IsCookieSecure(cfg.Server.Environment),
+			Domain:     cfg.Auth.CookieDomain,
+			Secure:     cfg.Auth.IsCookieSecure(cfg.Server.Environment),
+			PathPrefix: apiPathPrefix(cfg),
 		},
 		frontendURL:    cfg.Auth.FrontendURL,
 		vendorCommands: vendorCommands,
@@ -422,6 +482,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/manual", cashflowhttp.CreateTransactions(app.log, app.cashflowCommands))
 	protected("GET /cashflow/analytics/monthly", cashflowhttp.GetMonthlyAnalytics(app.log, app.cashflowQueries))
 	protected("GET /cashflow/analytics/tags", cashflowhttp.GetCashflowTagDistribution(app.log, app.cashflowQueries))
+	protected("GET /cashflow/tags", cashflowhttp.GetCashflowTags(app.log, app.cashflowQueries))
 	protected("POST /cashflow/transactions/date", cashflowhttp.ChangeTransactionDate(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/tag", cashflowhttp.TagTransaction(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/tag/selection", cashflowhttp.TagTransactionsBySelection(app.log, app.cashflowCommands))

@@ -47,6 +47,18 @@ export interface CashflowMonthlyAnalyticsResponse {
 }
 
 /** One tag total. Mirrors `cashflow.TagDistributionEntryResponse`. */
+/** One tag the account has used, from `GET /cashflow/tags`. */
+export interface CashflowTag {
+	tag: string;
+	/** Transactions carrying it, across the whole history. */
+	count: number;
+}
+
+/** `GET /cashflow/tags` response, most used first. */
+export interface CashflowTagsResponse {
+	data: CashflowTag[];
+}
+
 export interface TagDistributionEntry {
 	tag: string;
 	totalCents: number;

@@ -21,6 +21,7 @@ type Queries struct {
 type QueryStore interface {
 	GetMonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error)
 	GetTagDistribution(ctx context.Context, filter AnalyticsFilter) (*TagDistribution, error)
+	ListTags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error)
 	ListTransactions(ctx context.Context, query TransactionListQuery) (*TransactionListResult, error)
 	CountByFilter(ctx context.Context, filters TransactionFilters) (int, error)
 	GetTransaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error)
@@ -63,6 +64,12 @@ type TagDistribution struct {
 	Outgoing []TagDistributionEntry
 }
 
+// TagUsage is one tag an account has used and on how many of its transactions.
+type TagUsage struct {
+	Tag   string
+	Count int
+}
+
 // MonthlyAnalytics returns incoming, outgoing, and net totals grouped by month.
 func (q *Queries) MonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error) {
 	points, err := q.qs.GetMonthlyAnalytics(ctx, filter)
@@ -82,6 +89,17 @@ func (q *Queries) TagDistribution(ctx context.Context, filter AnalyticsFilter) (
 		return &TagDistribution{}, nil
 	}
 	return dist, nil
+}
+
+// Tags lists every tag the account has used, most used first, so a tag can be picked
+// again rather than retyped. Unlike the tag distribution it has no period: a tag last
+// used a year ago is still the user's.
+func (q *Queries) Tags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error) {
+	tags, err := q.qs.ListTags(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow tags: %w", err)
+	}
+	return tags, nil
 }
 
 const (

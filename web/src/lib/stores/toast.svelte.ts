@@ -23,9 +23,8 @@ export interface ToastOptions {
 
 const DEFAULT_DURATION = 4500;
 /**
- * How many auto-dismissing notices exist at once. A band sits in the page flow, so every extra one
- * pushes the content down; beyond a few at a time the jump costs more than the notice is worth. The
- * cap lives here rather than in the region so a notice can never count down unseen: past this many,
+ * How many auto-dismissing notices exist at once. Every extra one covers more of the page's top-right
+ * corner; beyond a few at a time the stack hides more than the notices are worth. The cap lives here rather than in the region so a notice can never count down unseen: past this many,
  * the oldest is dismissed — timer and all — the moment a newer one arrives. A notice with
  * `duration: 0` is outside the cap: it was asked to stay until someone dismisses it, and that is
  * exactly the kind that has to be read before it goes.
@@ -34,16 +33,50 @@ const MAX_ITEMS = 3;
 
 let items = $state<Toast[]>([]);
 let nextId = 0;
-// Plain object (not a Map) since these timer handles are bookkeeping, not reactive state.
-const timers: Record<number, ReturnType<typeof setTimeout>> = {};
+/** A running or paused auto-dismiss. `handle` is null while paused; `remaining` is what is left. */
+type Countdown = {
+	handle: ReturnType<typeof setTimeout> | null;
+	remaining: number;
+	startedAt: number;
+};
+// Plain object (not a Map) since these timers are bookkeeping, not reactive state.
+const countdowns: Record<number, Countdown> = {};
+
+function startCountdown(id: number, ms: number): void {
+	countdowns[id] = {
+		handle: setTimeout(() => dismiss(id), ms),
+		remaining: ms,
+		startedAt: Date.now()
+	};
+}
+
+function stopCountdown(id: number): void {
+	const countdown = countdowns[id];
+	if (!countdown) return;
+	if (countdown.handle) clearTimeout(countdown.handle);
+	delete countdowns[id];
+}
 
 function dismiss(id: number): void {
-	const timer = timers[id];
-	if (timer) {
-		clearTimeout(timer);
-		delete timers[id];
-	}
+	stopCountdown(id);
 	items = items.filter((toastItem) => toastItem.id !== id);
+}
+
+/** Hold a notice's auto-dismiss while it is being read (hovered or focused). */
+function pause(id: number): void {
+	const countdown = countdowns[id];
+	if (!countdown?.handle) return;
+	clearTimeout(countdown.handle);
+	countdown.handle = null;
+	countdown.remaining -= Date.now() - countdown.startedAt;
+}
+
+/** Continue a paused auto-dismiss with the time it had left. */
+function resume(id: number): void {
+	const countdown = countdowns[id];
+	if (!countdown || countdown.handle) return;
+	countdown.startedAt = Date.now();
+	countdown.handle = setTimeout(() => dismiss(id), Math.max(countdown.remaining, 0));
 }
 
 function push(intent: NoticeIntent, message: string, options: ToastOptions = {}): number {
@@ -63,17 +96,12 @@ function push(intent: NoticeIntent, message: string, options: ToastOptions = {})
 	items = [next, ...items];
 	const expiring = items.filter((item) => item.duration > 0);
 	for (const stale of expiring.slice(MAX_ITEMS)) dismiss(stale.id);
-	if (duration > 0) {
-		timers[id] = setTimeout(() => dismiss(id), duration);
-	}
+	if (duration > 0) startCountdown(id, duration);
 	return id;
 }
 
 function clear(): void {
-	for (const key of Object.keys(timers)) {
-		clearTimeout(timers[Number(key)]);
-		delete timers[Number(key)];
-	}
+	for (const key of Object.keys(countdowns)) stopCountdown(Number(key));
 	items = [];
 }
 
@@ -109,6 +137,8 @@ export const toast = {
 	error: (message: string, options?: ToastOptions) => push('error', message, options),
 	push,
 	dismiss,
+	pause,
+	resume,
 	clear,
 	fromStatus
 };

@@ -4,7 +4,16 @@
 	import { cashflowTransactions } from '$lib/data/fixtures/cashflow';
 	import { recurringExpenses, recurringIncome } from '$lib/data/fixtures/recurring';
 
-	const selection = cashflowTransactions.slice(0, 3);
+	// An item runs one way, so the stories select rows that do too, apart from the ones that
+	// show the dialog refusing a selection.
+	const selection = cashflowTransactions
+		.filter((row) => row.direction === 'out' && !row.ignored)
+		.slice(0, 3);
+	const income = cashflowTransactions
+		.filter((row) => row.direction === 'in' && !row.ignored)
+		.slice(0, 1);
+	const mixed = [...selection.slice(0, 1), ...income];
+	const ignored = cashflowTransactions.filter((row) => row.ignored).slice(0, 1);
 	const items = [...recurringExpenses, ...recurringIncome];
 
 	const { Story } = defineMeta({
@@ -26,6 +35,14 @@
 
 <!-- An account with no items yet has only one route, so the dialog opens on it. -->
 <Story name="First item" args={{ open: true, selection, items: [] }} />
+
+<!-- Income only: the existing route offers only the income items, and a new item is income. -->
+<Story name="Income" args={{ open: true, selection: income, items }} />
+
+<!-- An item is either money paid or money received, so a selection running both ways is refused. -->
+<Story name="Both directions" args={{ open: true, selection: mixed, items }} />
+
+<Story name="Ignored row" args={{ open: true, selection: ignored, items }} />
 
 <Story name="Saving" args={{ open: true, selection, items, saving: true }} />
 

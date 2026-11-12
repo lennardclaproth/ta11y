@@ -162,9 +162,10 @@ stateDiagram-v2
 
 ## Refactor state / not implemented
 
-- **Subscriptions are not yet wired.** `eventbus.Subscribe[T]` has zero call sites; the only
-  wiring lives in the stale `cmd/server/main.go`, which uses the removed `internal/bus` API and
-  the old `api.*.MessageTopic()` model. The new entrypoint is an empty stub.
+- **Shutdown drains, but only briefly.** `MemoryBus.Drain` waits until nothing is queued or
+  being handled — follow-up publishes included, since an envelope is counted before it is
+  enqueued — and `main` gives it four seconds after the HTTP server stops. `Close` still drops
+  whatever is left; start-up recovery ([002], [005]) fails the work that was lost.
 - **Delivery is at-most-once, in-memory.** No persistence (events are lost on restart), no
   retries, no dead-letter queue, and no per-handler timeout (there is an explicit `TODO`).
   Handler errors are logged + sent to APM but not retried. Under the wired `BackpressureDrop`

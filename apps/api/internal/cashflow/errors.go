@@ -44,6 +44,9 @@ var (
 	ErrRecurringTransactionsRequired = fmt.Errorf("at least one transaction is required")
 	ErrRecurringTransactionNotFound  = fmt.Errorf("transaction not found in this account")
 	ErrRecurringSuggestionNotFound   = fmt.Errorf("no suggestion found for that pattern")
+	ErrRecurringDirectionMismatch    = fmt.Errorf("a transaction runs the other way than this recurring item")
+	ErrRecurringTransactionIgnored   = fmt.Errorf("an ignored transaction cannot be linked to a recurring item")
+	ErrRecurringTransactionLinked    = fmt.Errorf("these transactions already belong to another recurring item")
 )
 
 // Account Errors

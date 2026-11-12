@@ -125,7 +125,7 @@ erDiagram
 ```
 
 Physical names: Postgres `cashflow.ignore_rules`; SQLite `cashflow_ignore_rules`.
-Migration pair `20261010130000_cashflow_ignore_rules.sql`.
+Migration pair `20261020130000_cashflow_ignore_rules.sql`.
 
 **`ignore_overridden`** is the invariant the whole feature rests on: it records that a
 row's ignored state was decided by a person. Every by-hand ignore/restore sets it, and

@@ -6,7 +6,7 @@
 	//
 	// The desk is presentational: it owns the form's local state and reports every
 	// decision upward. Loading, saving and applying are the page's business.
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
@@ -149,19 +149,20 @@
 					{/each}
 				{:else if error}
 					<li class="px-4 py-6">
-						<Alert intent="error" title="Could not load your rules">
+						<NoticeBand intent="error" gutter="none" title="Could not load your rules">
 							{error}
-							<Button
-								size="sm"
-								variant="outline"
-								intent="secondary"
-								shape="default"
-								class="mt-2"
-								onclick={() => onRetry?.()}
-							>
-								Try again
-							</Button>
-						</Alert>
+							{#snippet action()}
+								<Button
+									size="sm"
+									variant="outline"
+									intent="secondary"
+									shape="default"
+									onclick={() => onRetry?.()}
+								>
+									Try again
+								</Button>
+							{/snippet}
+						</NoticeBand>
 					</li>
 				{:else if rules.length === 0}
 					<li class="px-4 py-10 text-center">

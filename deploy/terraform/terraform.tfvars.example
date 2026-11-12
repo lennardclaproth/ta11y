@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Secrets can instead be passed as
+# TF_VAR_google_client_secret etc. so they never touch disk.
+project_id     = "my-ta11y-project"
+region         = "europe-west1"
+domain         = "ta11y.example.com"
+allowed_emails = ["me@example.com"]
+
+bootstrap_admin_email = "me@example.com"
+
+google_client_id     = "1234567890-abc.apps.googleusercontent.com"
+google_client_secret = "set-via-TF_VAR_google_client_secret"
+
+# Optional; leave empty to manage keys on the admin Credentials page instead.
+marketstack_api_key   = ""
+alpha_vantage_api_key = ""

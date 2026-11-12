@@ -304,6 +304,33 @@ func (s *SQLXCashflowStore) GetMonthlyAnalytics(ctx context.Context, filter cash
 	return points, nil
 }
 
+// ListTags returns every tag the account has used with its transaction count, most used
+// first. Untagged rows are not a tag and are left out.
+func (s *SQLXCashflowStore) ListTags(ctx context.Context, accountID uuid.UUID) ([]cashflow.TagUsage, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT TRIM(tag) AS tag, COUNT(1) AS usage_count
+		FROM %s
+		WHERE account_id = ? AND TRIM(COALESCE(tag, '')) <> ''
+		GROUP BY TRIM(tag)
+		ORDER BY usage_count DESC, tag ASC
+	`, s.tableName))
+
+	type row struct {
+		Tag   string `db:"tag"`
+		Count int    `db:"usage_count"`
+	}
+	var rows []row
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &rows, query, accountID); err != nil {
+		return nil, fmt.Errorf("cashflow store: list tags: %w", err)
+	}
+
+	tags := make([]cashflow.TagUsage, 0, len(rows))
+	for _, r := range rows {
+		tags = append(tags, cashflow.TagUsage{Tag: r.Tag, Count: r.Count})
+	}
+	return tags, nil
+}
+
 // GetTagDistribution returns cashflow tag totals grouped by direction (combined/incoming/outgoing).
 func (s *SQLXCashflowStore) GetTagDistribution(ctx context.Context, filter cashflow.AnalyticsFilter) (*cashflow.TagDistribution, error) {
 	whereClause, args := buildCashflowAnalyticsWhereClause(filter)
@@ -465,23 +492,22 @@ func buildCashflowWhereClause(query cashflowQuery) (string, []any) {
 		args = append(args, direction)
 	}
 
-	if len(query.Tags) > 0 {
-		tagConditions := make([]string, 0, len(query.Tags))
-		for _, tag := range query.Tags {
-			t := strings.TrimSpace(tag)
-			if t == "" {
-				continue
-			}
-			tagConditions = append(tagConditions, "LOWER(COALESCE(tag, '')) = ?")
-			args = append(args, strings.ToLower(t))
+	// Untagged is one more choice in the tag filter, so it widens the tags picked with it
+	// rather than narrowing them: "untagged or groceries", never "untagged and groceries".
+	tagConditions := make([]string, 0, len(query.Tags)+1)
+	for _, tag := range query.Tags {
+		t := strings.TrimSpace(tag)
+		if t == "" {
+			continue
 		}
-		if len(tagConditions) > 0 {
-			conditions = append(conditions, "("+strings.Join(tagConditions, " OR ")+")")
-		}
+		tagConditions = append(tagConditions, "LOWER(COALESCE(tag, '')) = ?")
+		args = append(args, strings.ToLower(t))
 	}
-
 	if query.Untagged {
-		conditions = append(conditions, "TRIM(COALESCE(tag, '')) = ''")
+		tagConditions = append(tagConditions, "TRIM(COALESCE(tag, '')) = ''")
+	}
+	if len(tagConditions) > 0 {
+		conditions = append(conditions, "("+strings.Join(tagConditions, " OR ")+")")
 	}
 
 	if query.HideIgnored {

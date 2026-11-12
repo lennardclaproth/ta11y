@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -61,6 +62,24 @@ func (s *SQLXImporterStore) FetchByID(ctx context.Context, id uuid.UUID) (*impor
 		return nil, err
 	}
 	return &imp, nil
+}
+
+// ListUnfinished returns pending or processing imports last updated before the cutoff,
+// oldest first.
+func (s *SQLXImporterStore) ListUnfinished(ctx context.Context, updatedBefore time.Time) ([]*importer.Import, error) {
+	query := s.db.Rebind(fmt.Sprintf(`
+		SELECT * FROM %s
+		WHERE status IN (?, ?, ?) AND updated_at < ?
+		ORDER BY updated_at ASC
+	`, s.tableName))
+	imports := make([]*importer.Import, 0)
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &imports, query,
+		importer.ImportStatusPending, importer.ImportStatusProcessing, importer.ImportStatusInProgress,
+		updatedBefore.UTC(),
+	); err != nil {
+		return nil, err
+	}
+	return imports, nil
 }
 
 // UpdateState persists the mutable processing fields of an import.

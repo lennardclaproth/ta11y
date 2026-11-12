@@ -1,6 +1,7 @@
 import { apiGet, apiSend } from '$lib/api/client';
 import { useMocks } from '$lib/api/config';
 import type {
+	CashflowTagsResponse,
 	CashflowBulkMutationResponse,
 	CashflowDirection,
 	ChangeCashflowTransactionDateRequest,
@@ -96,8 +97,12 @@ function mockTransactions(query: CashflowTransactionsQuery): CashflowTransaction
 	let rows = mockRows.filter((tx) => {
 		if (query.direction && tx.direction !== query.direction) return false;
 		if (query.hide_ignored && tx.ignored) return false;
-		if (query.untagged && tx.tag !== '') return false;
-		if (tags.length > 0 && !tags.includes(tx.tag)) return false;
+		// Untagged is one more choice next to the tags, as the API treats it.
+		if (
+			(query.untagged || tags.length > 0) &&
+			!((query.untagged && tx.tag === '') || tags.includes(tx.tag))
+		)
+			return false;
 		if (!contains(tx.description, query.description)) return false;
 		if (!contains(tx.note, query.note)) return false;
 		if (!contains(tx.source, query.source)) return false;
@@ -161,7 +166,10 @@ export async function getCashflowMonthly(
 }
 
 /** Sum the (1e6-scaled) magnitudes per tag for one direction, largest first. */
-function tagTotals(rows: CashflowTransaction[], direction: CashflowDirection): TagDistributionEntry[] {
+function tagTotals(
+	rows: CashflowTransaction[],
+	direction: CashflowDirection
+): TagDistributionEntry[] {
 	const totals = new Map<string, number>();
 	for (const tx of rows) {
 		if (tx.direction !== direction) continue;
@@ -201,11 +209,7 @@ export async function createCashflowTransactions(
 		await delay();
 		return { created_count: body.transactions.length, data: [] };
 	}
-	return apiSend<CreateCashflowTransactionsResponse>(
-		'POST',
-		'/cashflow/transactions/manual',
-		body
-	);
+	return apiSend<CreateCashflowTransactionsResponse>('POST', '/cashflow/transactions/manual', body);
 }
 
 /** `POST /cashflow/transactions/date` */
@@ -216,7 +220,11 @@ export async function changeCashflowTransactionDate(
 		await delay();
 		return { id: body.id, date: `${body.date}T00:00:00Z` };
 	}
-	return apiSend<ChangeCashflowTransactionDateResponse>('POST', '/cashflow/transactions/date', body);
+	return apiSend<ChangeCashflowTransactionDateResponse>(
+		'POST',
+		'/cashflow/transactions/date',
+		body
+	);
 }
 
 /** `POST /cashflow/transactions/tag` (single transaction) */
@@ -234,6 +242,8 @@ export async function tagCashflowTransactionsBySelection(
 ): Promise<CashflowBulkMutationResponse> {
 	if (useMocks) {
 		await delay();
+		const tag = body.tag.trim();
+		mockRows = mockRows.map((tx) => (body.ids.includes(tx.id) ? { ...tx, tag } : tx));
 		return { updated_count: body.ids.length, status: 'ok' };
 	}
 	return apiSend<CashflowBulkMutationResponse>(
@@ -241,6 +251,24 @@ export async function tagCashflowTransactionsBySelection(
 		'/cashflow/transactions/tag/selection',
 		body
 	);
+}
+
+/** `GET /cashflow/tags` */
+export async function listCashflowTags(): Promise<CashflowTagsResponse> {
+	if (useMocks) {
+		await delay();
+		const counts = new Map<string, number>();
+		for (const tx of mockRows) {
+			const tag = tx.tag.trim();
+			if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+		}
+		return {
+			data: [...counts.entries()]
+				.map(([tag, count]) => ({ tag, count }))
+				.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+		};
+	}
+	return apiGet<CashflowTagsResponse>('/cashflow/tags');
 }
 
 /** `POST /cashflow/transactions/tag/filter` */
@@ -260,11 +288,7 @@ export async function ignoreCashflowTransactionsBySelection(
 ): Promise<CashflowBulkMutationResponse> {
 	if (useMocks) {
 		await delay();
-		const updated = mutateMockIgnored(
-			(tx) => body.ids.includes(tx.id),
-			body.ignored ?? true,
-			null
-		);
+		const updated = mutateMockIgnored((tx) => body.ids.includes(tx.id), body.ignored ?? true, null);
 		return { updated_count: updated, status: 'ok' };
 	}
 	return apiSend<CashflowBulkMutationResponse>(

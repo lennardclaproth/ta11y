@@ -324,6 +324,20 @@ definitions:
           $ref: '#/definitions/cashflow.MonthlyAnalyticsPointResponse'
         type: array
     type: object
+  cashflow.CashflowTagResponse:
+    properties:
+      count:
+        type: integer
+      tag:
+        type: string
+    type: object
+  cashflow.CashflowTagsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.CashflowTagResponse'
+        type: array
+    type: object
   cashflow.ChangeTransactionDateRequest:
     properties:
       date:
@@ -2721,7 +2735,10 @@ paths:
       consumes:
       - application/json
       description: Starts a recurring item from one or more cashflow transactions.
-        The tag and ignored status of those transactions are left untouched.
+        The tag and ignored status of those transactions are left untouched. Every
+        transaction must run in the item's direction and must not be ignored; a transaction
+        already linked to another item is skipped, and an item whose transactions
+        are all linked elsewhere is refused with 409.
       parameters:
       - description: Create recurring item request
         in: body
@@ -2750,6 +2767,12 @@ paths:
             type: object
         "409":
           description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
@@ -2904,8 +2927,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Links cashflow transactions to an existing recurring item. An ended
-        item takes no new transactions.
+      description: Links cashflow transactions to an existing recurring item, at any
+        amount. An ended item takes no new transactions; every transaction must run
+        in the item's direction and must not be ignored. A transaction already linked
+        to another item is skipped, so linked_count can be lower than the ids sent;
+        when nothing could be linked the request is refused with 409.
       parameters:
       - description: Recurring item id
         in: path
@@ -2933,6 +2959,12 @@ paths:
             type: object
         "404":
           description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
           schema:
             additionalProperties:
               type: string
@@ -3107,6 +3139,27 @@ paths:
       summary: Dismiss a recurring suggestion
       tags:
       - Recurring
+  /cashflow/tags:
+    get:
+      description: Returns every tag the account has put on a cashflow transaction,
+        with the number of transactions carrying it, most used first. Not limited
+        to a period; untagged transactions are not a tag and are left out.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.CashflowTagsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List cashflow tags
+      tags:
+      - Transactions
   /cashflow/transactions:
     get:
       consumes:
@@ -4071,7 +4124,8 @@ paths:
       consumes:
       - application/json
       description: Set a provider's API key and/or base URI. Omitted fields are left
-        unchanged, and the response withholds the stored key.
+        unchanged, and the response withholds the stored key. A base URI must be https
+        on a public (not loopback, private or link-local) host.
       parameters:
       - description: Provider ID
         in: path

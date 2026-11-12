@@ -61,6 +61,9 @@ func (c *RecurringCommands) Create(ctx context.Context, accountID uuid.UUID, inp
 	if len(transactions) != len(input.TransactionIDs) {
 		return nil, fmt.Errorf("create recurring item: %w", ErrRecurringTransactionNotFound)
 	}
+	if err := checkLinkable(transactions, input.Direction); err != nil {
+		return nil, fmt.Errorf("create recurring item: %w", err)
+	}
 	sort.Slice(transactions, func(i, j int) bool { return transactions[i].Date.Before(transactions[j].Date) })
 
 	item, err := NewRecurringItem(accountID, input.Name, input.Direction, input.Rhythm, MatchKeyFor(transactions[0].Description))
@@ -75,17 +78,38 @@ func (c *RecurringCommands) Create(ctx context.Context, accountID uuid.UUID, inp
 
 // createLinked writes an item and its first links together or not at all. An item
 // that lost its links can neither be removed nor linked to again, and it keeps its
-// counterparty from ever being suggested, so it must not outlive a failed link.
+// counterparty from ever being suggested, so it must not outlive a failed link — nor
+// one that linked nothing because every transaction already belongs to another item.
 func (c *RecurringCommands) createLinked(ctx context.Context, item *RecurringItem, transactionIDs []uuid.UUID) error {
 	return c.uow.Do(ctx, func(txCtx context.Context) error {
 		if err := c.cs.CreateRecurringItem(txCtx, item); err != nil {
 			return err
 		}
-		if _, err := c.cs.LinkTransactions(txCtx, item.ID, transactionIDs); err != nil {
+		linked, err := c.cs.LinkTransactions(txCtx, item.ID, transactionIDs)
+		if err != nil {
 			return fmt.Errorf("link transactions: %w", err)
+		}
+		if linked == 0 {
+			return ErrRecurringTransactionLinked
 		}
 		return nil
 	})
+}
+
+// checkLinkable refuses what a user may not point at an item by hand: a transaction
+// running the other way than the item, or one the user ignored. The amount is not
+// checked — choosing a transaction by hand is the user's decision, unlike the
+// tolerance an import links by.
+func checkLinkable(transactions []*Transaction, direction CashFlowDirection) error {
+	for _, transaction := range transactions {
+		if transaction.Direction != direction {
+			return ErrRecurringDirectionMismatch
+		}
+		if transaction.Ignored {
+			return ErrRecurringTransactionIgnored
+		}
+	}
+	return nil
 }
 
 // UpdateRecurringInput renames a recurring item or changes how often it is expected.
@@ -120,7 +144,8 @@ func (c *RecurringCommands) Update(ctx context.Context, accountID, id uuid.UUID,
 	return item, nil
 }
 
-// AddTransactions links further transactions to an existing item.
+// AddTransactions links further transactions to an existing item and reports how
+// many it linked. Every transaction must run the item's way and not be ignored.
 func (c *RecurringCommands) AddTransactions(ctx context.Context, accountID, id uuid.UUID, transactionIDs []uuid.UUID) (int, error) {
 	if len(transactionIDs) == 0 {
 		return 0, fmt.Errorf("link recurring transactions: %w", ErrRecurringTransactionsRequired)
@@ -141,10 +166,18 @@ func (c *RecurringCommands) AddTransactions(ctx context.Context, accountID, id u
 	if len(transactions) != len(transactionIDs) {
 		return 0, fmt.Errorf("link recurring transactions: %w", ErrRecurringTransactionNotFound)
 	}
+	if err := checkLinkable(transactions, item.Direction); err != nil {
+		return 0, fmt.Errorf("link recurring transactions: %w", err)
+	}
 
+	// A transaction belongs to at most one item; the store skips the ones already
+	// linked, so the count tells the caller how many actually moved in.
 	linked, err := c.cs.LinkTransactions(ctx, item.ID, transactionIDs)
 	if err != nil {
 		return 0, fmt.Errorf("link recurring transactions: %w", err)
+	}
+	if linked == 0 {
+		return 0, fmt.Errorf("link recurring transactions: %w", ErrRecurringTransactionLinked)
 	}
 	return linked, nil
 }

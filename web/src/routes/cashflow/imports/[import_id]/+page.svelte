@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import CountStat from '$lib/components/molecules/count-stat/CountStat.svelte';
@@ -256,13 +256,15 @@
 
 			<div class="min-h-0 space-y-4 px-4 py-4 lg:flex-1 lg:overflow-auto lg:px-8">
 				{#if error}
-					<Alert intent="error" title="Could not read this import">{error}</Alert>
+					<NoticeBand intent="error" gutter="none" title="Could not read this import">
+						{error}
+					</NoticeBand>
 				{:else if failed}
-					<Alert intent="warning" title="This import did not finish">
+					<NoticeBand intent="warning" gutter="none" title="This import did not finish">
 						{result?.reason === 'file_not_recognised'
 							? 'The file is not an export this bank produces. Upload the CSV your bank exported.'
 							: 'Something went wrong while reading the file. The counts above are what landed before it stopped.'}
-					</Alert>
+					</NoticeBand>
 				{:else if running}
 					<Text as="p" size="sm" tone="muted">
 						This page fills in as soon as the import reports it is done. You can leave it open.
@@ -275,25 +277,26 @@
 						</section>
 					{/each}
 				{:else if groupsError}
-					<Alert intent="error" title="Could not load what was ignored">
+					<NoticeBand intent="error" gutter="none" title="Could not load what was ignored">
 						{groupsError} The import itself finished; nothing was lost.
-						<Button
-							size="sm"
-							variant="outline"
-							intent="secondary"
-							shape="default"
-							class="mt-2"
-							onclick={() => void loadGroups()}
-						>
-							Try again
-						</Button>
-					</Alert>
+						{#snippet action()}
+							<Button
+								size="sm"
+								variant="outline"
+								intent="secondary"
+								shape="default"
+								onclick={() => void loadGroups()}
+							>
+								Try again
+							</Button>
+						{/snippet}
+					</NoticeBand>
 				{:else if groupsLoading}
 					<Skeleton class="w-56" />
 				{:else if groups.length === 0}
-					<Alert intent="info" title="Nothing was ignored automatically">
+					<NoticeBand intent="info" gutter="none" title="Nothing was ignored automatically">
 						None of your rules matched a row in this import. Everything new is in your ledger.
-					</Alert>
+					</NoticeBand>
 				{:else}
 					<div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
 						<Heading level="h2" size="lg" class="text-slate-900">

@@ -1947,7 +1947,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched.",
+                "description": "Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched. Every transaction must run in the item's direction and must not be ignored; a transaction already linked to another item is skipped, and an item whose transactions are all linked elsewhere is refused with 409.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1996,6 +1996,15 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2376,7 +2385,7 @@ const docTemplate = `{
         },
         "/cashflow/recurring/{item_id}/transactions": {
             "post": {
-                "description": "Links cashflow transactions to an existing recurring item. An ended item takes no new transactions.",
+                "description": "Links cashflow transactions to an existing recurring item, at any amount. An ended item takes no new transactions; every transaction must run in the item's direction and must not be ignored. A transaction already linked to another item is skipped, so linked_count can be lower than the ids sent; when nothing could be linked the request is refused with 409.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2423,6 +2432,15 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2506,6 +2524,35 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/tags": {
+            "get": {
+                "description": "Returns every tag the account has put on a cashflow transaction, with the number of transactions carrying it, most used first. Not limited to a period; untagged transactions are not a tag and are left out.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "List cashflow tags",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.CashflowTagsResponse"
                         }
                     },
                     "500": {
@@ -3948,7 +3995,7 @@ const docTemplate = `{
         },
         "/marketdata/providers/{provider_id}/credentials": {
             "patch": {
-                "description": "Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key.",
+                "description": "Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key. A base URI must be https on a public (not loopback, private or link-local) host.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5321,6 +5368,28 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/cashflow.MonthlyAnalyticsPointResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.CashflowTagResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.CashflowTagsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CashflowTagResponse"
                     }
                 }
             }

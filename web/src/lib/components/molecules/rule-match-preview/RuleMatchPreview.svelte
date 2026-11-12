@@ -2,7 +2,7 @@
 	// The safety net the whole feature rests on: what a rule catches, shown before it is
 	// allowed to catch anything. The count above the sample is what says how wide the rule
 	// is; the sample is there so a match that obviously does not belong is recognisable.
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
@@ -59,7 +59,7 @@
 	</div>
 
 	{#if error}
-		<Alert intent="error" title="Could not check this rule">{error}</Alert>
+		<NoticeBand intent="error" gutter="none" title="Could not check this rule">{error}</NoticeBand>
 	{:else if loading}
 		{#each [0, 1, 2] as index (index)}
 			<Skeleton class="my-1.5" />
@@ -67,10 +67,10 @@
 	{:else if matching === 0}
 		<!-- Blank would read as broken. A rule that catches nothing yet is a legitimate
 		     rule — it is written for next month's import — so it says so and offers the way out. -->
-		<Alert intent="info" title="Nothing matches this rule yet">
+		<NoticeBand intent="info" gutter="none" title="Nothing matches this rule yet">
 			No transaction in your ledger contains “{contains}”. Save it anyway to catch future
 			imports, or widen the text.
-		</Alert>
+		</NoticeBand>
 	{:else}
 		<ul class="text-sm">
 			{#each sample as match (match.id)}

@@ -25,6 +25,22 @@ export function cashflowOriginLabel(tx: CashflowTransaction): string {
 	return tx.source.toUpperCase() || 'Unknown';
 }
 
+/**
+ * The tag filter's "Untagged" choice. The tag totals name the empty bucket `untagged`, but a
+ * transaction without a tag stores an empty one, so this is sent as `untagged=true`, never as
+ * a tag to match.
+ */
+export const UNTAGGED_FILTER = 'untagged';
+
+/** Splits the ledger's tag filter into the tags to match and the "Untagged" choice. */
+export function cashflowTagQuery(selected: string[]): { tags?: string; untagged?: boolean } {
+	const tags = selected.filter((tag) => tag !== UNTAGGED_FILTER);
+	return {
+		tags: tags.join(',') || undefined,
+		untagged: selected.includes(UNTAGGED_FILTER) || undefined
+	};
+}
+
 /** Whether a portfolio transaction was entered by hand rather than imported. */
 export function isManualPortfolioTransaction(tx: PortfolioTransaction): boolean {
 	return tx.origin === 'MANUAL';

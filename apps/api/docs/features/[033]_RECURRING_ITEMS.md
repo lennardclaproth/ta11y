@@ -18,7 +18,9 @@ and the monthly totals on Cashflow do not move.
 
 Items arrive two ways, and both need the user:
 
-- **Marked** — the user points one or more cashflow transactions at an item, existing or new.
+- **Marked** — the user points one or more cashflow transactions at an item, existing or new:
+  a selection through **Mark as recurring** in the Cashflow ledger header, or one transaction
+  through the same button in its drawer. Both open `organisms/mark-recurring-dialog`.
 - **Suggested** — ta11y finds patterns in the account's history and offers them. A suggestion
   counts for nothing until it is confirmed; a dismissed one is never offered again.
 
@@ -88,6 +90,14 @@ when it has at least three transactions and **every** gap between them falls ins
 rhythm's band (24–38, 80–100 or 350–380 days). One gap outside the band leaves the group
 alone — an irregular series gets no expectation rather than a guessed one. Groups whose key
 already belongs to an item, or was dismissed, are skipped.
+
+**Linking by hand** (`RecurringCommands.Create` / `AddTransactions`) accepts any amount — the
+user chose the row — but refuses a transaction running the other way than the item, or an
+ignored one (both 422). The dialog applies the same rules before Save: it offers only items of
+the selection's direction and takes a new item's direction from the selection. One item per
+transaction still holds: a row already linked elsewhere is skipped and `linked_count` says how
+many were linked; linking nothing at all is refused (409), so neither a silent no-op nor an item
+without links can result. Moving a transaction between items means unlinking it first.
 
 **Linking after an import** (`RecurringCommands.LinkImported`, driven by the
 `import.completed` handler for cashflow imports) walks the account's running items and links

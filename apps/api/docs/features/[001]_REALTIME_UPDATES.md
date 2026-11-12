@@ -90,6 +90,11 @@ stateDiagram-v2
     end note
 ```
 
+The web client (`web/src/lib/services/realtime.ts`) closes its socket when the tab is
+hidden and does not reconnect on a timer. It reopens when the tab becomes visible or on the
+next `pointerdown`/`keydown`, at most once per five seconds, and triggers one refresh on
+reopen because nothing is replayed. This keeps idle tabs from holding the API instance alive.
+
 Close reasons are string labels (`idle_no_updates` with code `4001`, `pong_timeout`,
 `write_failed`, `send_queue_full`, `server_shutdown`). An invalid `account_id` is rejected at
 upgrade with `400`.
@@ -153,10 +158,10 @@ then publishes `assets.snapshots.rebuilt`). See [017].
 
 ## Refactor state / not implemented
 
-- **No authentication / authorization.** The route has no auth and no ownership check — any
-  caller who knows an `account_id` UUID can subscribe; `CheckOrigin` defaults to accept-all.
+- `CheckOrigin` defaults to accept-all; the route itself is in the `protected` tier and the
+  hub refuses an `account_id` other than the session's.
 - **No inbound protocol / no replay.** Messages are fire-and-forget into a bounded per-client
   queue; nothing is buffered or redelivered across reconnects, and idle connections are closed
-  after 5 minutes (clients must reconnect).
-- Subscriptions are only wired in the stale `cmd/server/main.go` (via a removed bus API); the
-  handler signatures already fit `eventbus.Subscribe[T]` but no new entrypoint calls it yet.
+  after 5 minutes; the web client refreshes once on reconnect instead.
+- The hub is per process. Notifications only reach sockets on the instance that handled the
+  event, which is correct only while the API runs as a single instance.

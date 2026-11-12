@@ -181,7 +181,7 @@ func newHarnessAllowing(t *testing.T, allowed []string) *harness {
 
 	return &harness{
 		commands: auth.NewCommands(authDB, authDB, accountQueries, accountCommands, time.Hour, allow),
-		queries:  auth.NewQueries(authDB, accountQueries),
+		queries:  auth.NewQueries(authDB, accountQueries, allow),
 		authDB:   authDB,
 		accounts: accounts,
 	}
@@ -445,5 +445,32 @@ func TestAllowlistIsEnforcedOnReturningLogins(t *testing.T) {
 	permitted = false
 	if _, err := commands.Authenticate(t.Context(), claims); !errors.Is(err, auth.ErrEmailNotAllowed) {
 		t.Fatalf("returning sign-in = %v, want ErrEmailNotAllowed", err)
+	}
+}
+
+// Removing an address from the allowlist must end the sessions it already holds, not only
+// refuse its next sign-in.
+func TestResolveSessionRejectsAnAddressRemovedFromTheAllowlist(t *testing.T) {
+	accounts := newMemoryAccountStore()
+	authDB := &memoryAuthStore{}
+	accountQueries := account.NewQueries(accounts)
+	accountCommands := account.NewCommands(accounts, nil)
+
+	permitted := true
+	allow := func(string) bool { return permitted }
+	commands := auth.NewCommands(authDB, authDB, accountQueries, accountCommands, time.Hour, allow)
+	queries := auth.NewQueries(authDB, accountQueries, allow)
+
+	issued, err := commands.Authenticate(t.Context(), googleClaims("sub-1", "owner@example.com", true))
+	if err != nil {
+		t.Fatalf("sign-in: %v", err)
+	}
+	if _, err := queries.ResolveSession(t.Context(), issued.Token); err != nil {
+		t.Fatalf("resolve while allowed: %v", err)
+	}
+
+	permitted = false
+	if _, err := queries.ResolveSession(t.Context(), issued.Token); !errors.Is(err, auth.ErrSessionExpired) {
+		t.Fatalf("resolve after removal = %v, want ErrSessionExpired", err)
 	}
 }

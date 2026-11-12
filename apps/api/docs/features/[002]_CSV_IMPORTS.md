@@ -197,6 +197,13 @@ stateDiagram-v2
 | `failed` | Validation, parsing, or persistence failed; `status_msg` holds the wrapped Go error, server-side only — it never reaches a client. |
 | `in_progress` | Legacy/compat status — present in the schema + Go const, unused by the lifecycle. |
 
+**Start-up recovery.** `Commands.RecoverInterrupted` runs once before the server accepts
+requests and fails every `pending`/`processing`/`in_progress` import untouched for two minutes
+with `ErrImportInterrupted`. The upload lived on the previous process's disk, so it cannot be
+resumed. The two-minute grace spares imports a still-running previous instance may finish
+during a rolling deploy; an interrupted import younger than that stays unfinished until the
+next start-up.
+
 There is no `cancelled` and no `completed_with_errors` — for cashflow/portfolio a
 downstream failure fails the whole import; for EOD any row error fails the whole import.
 

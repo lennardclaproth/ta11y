@@ -128,10 +128,39 @@ func TestWithAuthenticationUsesTheFallbackWhenThereIsNoSession(t *testing.T) {
 			got, _ = httpx.AccountID(w, r)
 		}),
 	)
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/assets/snapshots", nil))
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:6060/assets/snapshots", nil)
+	req.RemoteAddr = "127.0.0.1:50000"
+	handler.ServeHTTP(httptest.NewRecorder(), req)
 
 	if got != fallback.AccountID {
 		t.Fatalf("account = %v, want the fallback %v", got, fallback.AccountID)
+	}
+}
+
+// The fallback is an admin, so it must not answer another host on the network, nor a
+// DNS-rebound page whose request reaches loopback under a foreign host name.
+func TestWithAuthenticationRefusesTheFallbackToNonLocalRequests(t *testing.T) {
+	fallback := &auth.Principal{AccountID: uuid.New(), Admin: true}
+	cases := []struct {
+		name, remote, host string
+	}{
+		{"remote host", "192.168.1.20:50000", "192.168.1.10:6060"},
+		{"dns rebinding", "127.0.0.1:50000", "evil.example:6060"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var ran bool
+			handler := httpx.WithAuthentication(stubResolver{}, fallback, testLogger())(reached(&ran))
+			req := httptest.NewRequest(http.MethodGet, "/assets/snapshots", nil)
+			req.RemoteAddr = tc.remote
+			req.Host = tc.host
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if ran || rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, reached = %v; want 401 and not reached", rec.Code, ran)
+			}
+		})
 	}
 }
 

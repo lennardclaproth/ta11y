@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
-	 * The one notification shape in the app. Everything that reports something — the notice region
-	 * under the masthead, a problem that stays at the content, a refused save in a modal or a form —
+	 * The one notification shape in the app. Everything that reports something — a toast in the
+	 * top-right stack, a problem that stays at the content, a refused save in a modal or a form —
 	 * renders this, so no screen draws a notice of its own.
 	 */
 	import type { Snippet } from 'svelte';

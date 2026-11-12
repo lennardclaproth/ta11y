@@ -330,23 +330,30 @@
 			<!-- Rows an ignore rule caught are out of the totals without anybody reading
 			     them, so the review that shows which rule did it is offered right here. -->
 			{#if autoIgnored > 0}
-				<Alert intent="info" title="{autoIgnored} rows were ignored automatically">
+				<NoticeBand
+					intent="info"
+					surface="inset"
+					gutter="dialog"
+					title="{autoIgnored} rows were ignored automatically"
+					class="-mx-5"
+				>
 					Your ignore rules recognised them, so they are out of your monthly totals.
-					<Button
-						size="sm"
-						variant="outline"
-						intent="secondary"
-						shape="default"
-						class="mt-2"
-						onclick={() => {
-							const id = result?.import_id;
-							close();
-							if (id) onReviewIgnored?.(id);
-						}}
-					>
-						Review what was ignored
-					</Button>
-				</Alert>
+					{#snippet action()}
+						<Button
+							size="sm"
+							variant="outline"
+							intent="secondary"
+							shape="default"
+							onclick={() => {
+								const id = result?.import_id;
+								close();
+								if (id) onReviewIgnored?.(id);
+							}}
+						>
+							Review what was ignored
+						</Button>
+					{/snippet}
+				</NoticeBand>
 			{/if}
 
 			{#if recurringStarted}

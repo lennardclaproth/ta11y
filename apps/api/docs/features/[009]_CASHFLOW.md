@@ -13,7 +13,8 @@ from a CSV import ([002]) or manually entered — and are then queried, analyzed
 ignored:
 
 - **[009] Query** — list transactions with field filters (description/note/source contains,
-  direction, tags, untagged), a fuzzy `q`, `hide_ignored`, date range, sorting, and offset
+  direction, tags, untagged — `untagged` is one more choice next to `tags`, not a narrowing of
+  them), a fuzzy `q`, `hide_ignored`, date range, sorting, and offset
   pagination.
 - **[010] Analytics** — monthly incoming/outgoing/net trends, and tag distribution
   (combined / incoming / outgoing). Both accept a date range and `include_ignored`.
@@ -200,7 +201,8 @@ sequenceDiagram
 | [010] Monthly | `GET /cashflow/analytics/monthly` | query: `from`, `to`, `include_ignored` | 200 `{data[]}` |
 | [010] Tag distribution | `GET /cashflow/analytics/tags` | query: `from`, `to`, `include_ignored` | 200 `{combined, incoming, outgoing}` |
 | [011] Tag one | `POST /cashflow/transactions/tag` | body: `id`, `tag` | 200 |
-| [011] Tag selection | `POST /cashflow/transactions/tag/selection` | body: `tag`, `ids[]` | 200 `{updated_count, status}` |
+| [011] Tag list | `GET /cashflow/tags` | — | 200 `{data: [{tag, count}]}` — every tag the account used, most used first; no period, untagged rows left out |
+| [011] Tag selection | `POST /cashflow/transactions/tag/selection` | body: `tag` (empty removes it), `ids[]` | 200 `{updated_count, status}` |
 | [011] Tag filter | `POST /cashflow/transactions/tag/filter` | body: `tag`, `account_id?`, `filters` | 200 (sync) / 202 (async, dead) |
 | [012] Ignore selection | `POST /cashflow/transactions/ignore/selection` | body: `ignored?` (default true), `ids[]` | 200 `{updated_count, status}` |
 | [012] Ignore filter | `POST /cashflow/transactions/ignore/filter` | body: `ignored?`, `filters` | 200 |

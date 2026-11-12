@@ -57,6 +57,10 @@ type MemoryBus struct {
 	closed atomic.Bool
 	wg     sync.WaitGroup
 
+	// pending counts envelopes queued or being handled, so Drain can tell when the
+	// bus has gone quiet.
+	pending atomic.Int64
+
 	subs   map[string]map[uint64]*subscriber
 	nextID uint64
 
@@ -140,6 +144,9 @@ func (b *MemoryBus) dispatch(ctx context.Context, envelope eventbus.Envelope) er
 		if s.closed.Load() {
 			continue
 		}
+		// Count the envelope before it can reach a worker, so pending never dips to
+		// zero while a handler that is about to publish a follow-up is still running.
+		b.pending.Add(1)
 		switch b.backpressure {
 		case BackpressureDrop:
 			select {
@@ -147,10 +154,12 @@ func (b *MemoryBus) dispatch(ctx context.Context, envelope eventbus.Envelope) er
 				b.schedule(s)
 			default:
 				// drop for this subscriber
+				b.pending.Add(-1)
 			}
 		case BackpressureBlock:
 			select {
 			case <-ctx.Done():
+				b.pending.Add(-1)
 				return ctx.Err()
 			case s.queue <- envelope:
 				b.schedule(s)
@@ -160,6 +169,7 @@ func (b *MemoryBus) dispatch(ctx context.Context, envelope eventbus.Envelope) er
 			case s.queue <- envelope:
 				b.schedule(s)
 			default:
+				b.pending.Add(-1)
 				return ErrBackpressure
 			}
 		}
@@ -197,6 +207,27 @@ func (b *MemoryBus) Subscribe(topic string, h eventbus.HandlerFunc) (eventbus.Su
 	b.subs[topic][id] = s
 	b.mu.Unlock()
 	return subscription{bus: b, sub: s}, nil
+}
+
+// drainPollInterval is how often Drain re-checks for outstanding work.
+const drainPollInterval = 10 * time.Millisecond
+
+// Drain blocks until every queued event has been handled, including the follow-up
+// events handlers publish along the way, or until ctx is done. The bus keeps accepting
+// publishes meanwhile, so a chain such as import completed -> portfolio rebuilt ->
+// assets rebuilt runs to its end. Call it before Close on shutdown; Close itself drops
+// whatever is still queued.
+func (b *MemoryBus) Drain(ctx context.Context) error {
+	ticker := time.NewTicker(drainPollInterval)
+	defer ticker.Stop()
+	for b.pending.Load() > 0 {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("memory bus drain: %d events unhandled: %w", b.pending.Load(), ctx.Err())
+		case <-ticker.C:
+		}
+	}
+	return nil
 }
 
 func (b *MemoryBus) Close() error {
@@ -253,6 +284,7 @@ func (b *MemoryBus) worker() {
 				b.log.Error(hctx, "event bus: handler failed", err, "topic", envelope.Topic)
 			}
 		}
+		b.pending.Add(-1)
 		if len(s.queue) > 0 && !s.closed.Load() {
 			// keep scheduled=1, requeue
 			b.ready <- s
@@ -322,6 +354,7 @@ func (s subscription) Close() error {
 	for {
 		select {
 		case <-s.sub.queue:
+			s.bus.pending.Add(-1)
 		default:
 			return nil
 		}

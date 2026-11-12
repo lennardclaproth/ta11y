@@ -36,6 +36,8 @@
 		onClose?: () => void;
 		/** Read-only rows (amount, note, quantity) rendered above the date. */
 		details?: Snippet;
+		/** What else can be done with this transaction, rendered under the details. */
+		actions?: Snippet;
 	};
 
 	let {
@@ -51,7 +53,8 @@
 		error = null,
 		onSave,
 		onClose,
-		details
+		details,
+		actions
 	}: Props = $props();
 
 	const changed = $derived(date !== originalDate);
@@ -118,6 +121,10 @@
 				</p>
 			</div>
 		</dl>
+
+		{#if actions}
+			<div class="flex flex-wrap gap-2">{@render actions()}</div>
+		{/if}
 
 		{#if editable}
 			<NoticeBand

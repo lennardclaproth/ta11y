@@ -58,6 +58,9 @@ func (s *dateStore) GetMonthlyAnalytics(_ context.Context, _ AnalyticsFilter) ([
 func (s *dateStore) GetTagDistribution(_ context.Context, _ AnalyticsFilter) (*TagDistribution, error) {
 	return nil, nil
 }
+func (s *dateStore) ListTags(_ context.Context, _ uuid.UUID) ([]TagUsage, error) {
+	return nil, nil
+}
 func (s *dateStore) ListTransactions(_ context.Context, _ TransactionListQuery) (*TransactionListResult, error) {
 	return nil, nil
 }
