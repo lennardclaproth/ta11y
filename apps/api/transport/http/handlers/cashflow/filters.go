@@ -20,8 +20,10 @@ type TransactionFilters struct {
 	// caught in this import" asks for.
 	ImportID      string `json:"import_id,omitempty"`
 	IgnoredByRule string `json:"ignored_by_rule,omitempty"`
-	From          string `json:"from,omitempty"`
-	To            string `json:"to,omitempty"`
+	// Purpose is a comma-separated goal purpose filter: income, wealth, none.
+	Purpose string `json:"purpose,omitempty"`
+	From    string `json:"from,omitempty"`
+	To      string `json:"to,omitempty"`
 }
 
 func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[string]string) {
@@ -34,6 +36,11 @@ func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[st
 	if dateErr != nil {
 		problems["filters.date_range"] = dateErr.Error()
 	}
+	purposes, purposeErr := cashflow.SplitPurposes(tf.Purpose)
+	if purposeErr != nil {
+		problems["filters.purpose"] = purposeErr.Error()
+	}
+
 	importID, importErr := optionalUUID(tf.ImportID)
 	if importErr != nil {
 		problems["filters.import_id"] = "import_id must be a valid UUID"
@@ -54,6 +61,7 @@ func (tf TransactionFilters) ToAppFilters() (cashflow.TransactionFilters, map[st
 		HideIgnored:     tf.HideIgnored,
 		ImportID:        importID,
 		IgnoredByRuleID: ruleID,
+		Purposes:        purposes,
 		From:            from,
 		To:              to,
 	}, problems

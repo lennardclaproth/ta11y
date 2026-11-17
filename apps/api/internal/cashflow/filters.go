@@ -22,6 +22,9 @@ type TransactionFilters struct {
 	Tags        []string
 	Untagged    *bool
 	HideIgnored *bool
+	// Purposes OR-matches the goal purpose; PurposeNone matches the rows nobody has
+	// pointed at yet. Empty means no filter on purpose at all.
+	Purposes []Purpose
 
 	// ImportID narrows to the rows one import brought in. Duplicates keep the import
 	// they first arrived with, so this is exactly "new in that import".

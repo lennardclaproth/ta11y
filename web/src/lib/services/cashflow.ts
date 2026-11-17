@@ -93,6 +93,12 @@ function mockTransactions(query: CashflowTransactionsQuery): CashflowTransaction
 		.split(',')
 		.map((t) => t.trim())
 		.filter(Boolean);
+	// "none" on the wire is the empty purpose on a transaction.
+	const purposes = (query.purpose ?? '')
+		.split(',')
+		.map((p) => p.trim())
+		.filter(Boolean)
+		.map((p) => (p === 'none' ? '' : p));
 
 	let rows = mockRows.filter((tx) => {
 		if (query.direction && tx.direction !== query.direction) return false;
@@ -103,6 +109,7 @@ function mockTransactions(query: CashflowTransactionsQuery): CashflowTransaction
 			!((query.untagged && tx.tag === '') || tags.includes(tx.tag))
 		)
 			return false;
+		if (purposes.length > 0 && !purposes.includes(tx.purpose)) return false;
 		if (!contains(tx.description, query.description)) return false;
 		if (!contains(tx.note, query.note)) return false;
 		if (!contains(tx.source, query.source)) return false;

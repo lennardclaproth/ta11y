@@ -9,9 +9,14 @@
 	import DirectionFilter from '$lib/components/molecules/direction-filter/DirectionFilter.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { cashflowOriginLabel, isManualCashflowTransaction } from '$lib/api/transactions';
+	import { purposeLabel } from '$lib/api/wealthgoal';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
+	import { purposeFilterOptions } from './cashflow-transactions-table.types';
 	import Button from '$lib/components/atoms/button/Button.svelte';
-	import type { Column, SortDirection } from '$lib/components/organisms/data-table/data-table.types';
+	import type {
+		Column,
+		SortDirection
+	} from '$lib/components/organisms/data-table/data-table.types';
 	import type { CashflowDirection, CashflowTransaction, IgnoreRule } from '$lib/api/types';
 
 	type Props = {
@@ -36,6 +41,8 @@
 		descriptionFilter?: string;
 		tagFilter?: string[];
 		directionFilter?: CashflowDirection | null;
+		/** Goal purposes to show: `income`, `wealth`, `none`. Empty is no filter. */
+		purposeFilter?: string[];
 		tagOptions?: { value: string; label: string }[];
 		/** Shown when there are no rows; say "nothing yet" and "nothing matched" differently. */
 		emptyText?: string;
@@ -68,6 +75,7 @@
 		descriptionFilter = $bindable(''),
 		tagFilter = $bindable([]),
 		directionFilter = $bindable(null),
+		purposeFilter = $bindable([]),
 		tagOptions = [],
 		emptyText = 'No transactions match your filters',
 		onSort,
@@ -112,6 +120,15 @@
 	<DirectionFilter bind:value={directionFilter} onApply={() => onFilterChange?.()} />
 {/snippet}
 
+{#snippet purposeFilterControl()}
+	<SelectFilter
+		options={purposeFilterOptions}
+		bind:selected={purposeFilter}
+		label="Purpose"
+		onApply={() => onFilterChange?.()}
+	/>
+{/snippet}
+
 {#snippet tagCell(row: CashflowTransaction)}
 	{#if row.tag}
 		<Badge intent="neutral" variant="soft" size="sm">{row.tag}</Badge>
@@ -128,6 +145,18 @@
 
 {#snippet amountCell(row: CashflowTransaction)}
 	<Money amount={scaledToNumber(row.amountCents)} currency="EUR" size="sm" />
+{/snippet}
+
+<!-- What the row counts as towards the monthly goal. Outline rather than soft, so the
+     purpose never reads as a second direction badge. -->
+{#snippet purposeCell(row: CashflowTransaction)}
+	{#if row.purpose === 'income'}
+		<Badge intent="success" variant="outline" size="sm">{purposeLabel.income}</Badge>
+	{:else if row.purpose === 'wealth'}
+		<Badge intent="info" variant="outline" size="sm">{purposeLabel.wealth}</Badge>
+	{:else}
+		<span class="text-slate-500">{purposeLabel['']}</span>
+	{/if}
 {/snippet}
 
 <!-- Where the row came from, as a word rather than only a badge colour: it is what decides
@@ -200,6 +229,13 @@
 				] as Column<CashflowTransaction>[])
 			: []),
 		{ key: 'direction', header: 'Direction', cell: directionCell, filter: directionFilterControl },
+		{
+			key: 'purpose',
+			header: 'Purpose',
+			width: 'w-40',
+			cell: purposeCell,
+			filter: purposeFilterControl
+		},
 		{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell },
 		...(showIgnored
 			? ([

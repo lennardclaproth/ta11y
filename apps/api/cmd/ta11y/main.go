@@ -35,6 +35,7 @@ import (
 	"github.com/lennardclaproth/ta11y/internal/portfolio"
 	"github.com/lennardclaproth/ta11y/internal/storage"
 	"github.com/lennardclaproth/ta11y/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/wealthgoal"
 	"github.com/lennardclaproth/ta11y/migrations"
 	apphttp "github.com/lennardclaproth/ta11y/transport/http"
 	basehandlers "github.com/lennardclaproth/ta11y/transport/http/handlers"
@@ -47,6 +48,7 @@ import (
 	marketdatahttp "github.com/lennardclaproth/ta11y/transport/http/handlers/marketdata"
 	portfoliohttp "github.com/lennardclaproth/ta11y/transport/http/handlers/portfolio"
 	vendorshttp "github.com/lennardclaproth/ta11y/transport/http/handlers/vendors"
+	wealthgoalhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/wealthgoal"
 	assetsevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/assets"
 	cashflowevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/cashflow"
 	importerevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/importer"
@@ -86,6 +88,9 @@ type application struct {
 	cashflowQueries   *cashflow.Queries
 	recurringCommands *cashflow.RecurringCommands
 	recurringQueries  *cashflow.RecurringQueries
+
+	wealthGoalCommands *wealthgoal.Commands
+	wealthGoalQueries  *wealthgoal.Queries
 
 	portfolioCommands *portfolio.Commands
 	portfolioQueries  *portfolio.Queries
@@ -276,6 +281,7 @@ func buildApplication(
 	authStore := storage.NewSQLXAuthStore(db)
 	vendorStore := storage.NewSQLXVendorStore(db)
 	cashflowStore := storage.NewSQLXCashflowStore(db)
+	wealthGoalStore := storage.NewSQLXWealthGoalStore(db)
 	ignoreRuleStore := storage.NewSQLXCashflowIgnoreRuleStore(db)
 	recurringStore := storage.NewSQLXRecurringStore(db)
 	portfolioStore := storage.NewSQLXPortfolioStore(db)
@@ -311,6 +317,8 @@ func buildApplication(
 	vendorQueries := vendor.NewQueries(vendorStore)
 	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, ignoreRuleStore, ignoreRuleStore, accountQueries)
 	cashflowQueries := cashflow.NewQueries(cashflowStore, ignoreRuleStore)
+	wealthGoalCommands := wealthgoal.NewCommands(wealthGoalStore)
+	wealthGoalQueries := wealthgoal.NewQueries(wealthGoalStore)
 	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore, recurringStore)
 	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
 	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
@@ -362,6 +370,9 @@ func buildApplication(
 		cashflowQueries:   cashflowQueries,
 		recurringCommands: recurringCommands,
 		recurringQueries:  recurringQueries,
+
+		wealthGoalCommands: wealthGoalCommands,
+		wealthGoalQueries:  wealthGoalQueries,
 
 		portfolioCommands: portfolioCommands,
 		portfolioQueries:  portfolioQueries,
@@ -507,6 +518,13 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/selection", cashflowhttp.IgnoreTransactionsBySelection(app.log, app.cashflowCommands))
 	protected("POST /cashflow/transactions/ignore/filter", cashflowhttp.IgnoreTransactionsByFilter(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/selection", cashflowhttp.MarkPurposeBySelection(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/filter", cashflowhttp.MarkPurposeByFilter(app.log, app.cashflowCommands))
+
+	protected("GET /wealth-goal", wealthgoalhttp.GetGoal(app.log, app.wealthGoalQueries))
+	protected("PUT /wealth-goal", wealthgoalhttp.SetGoal(app.log, app.wealthGoalCommands))
+	protected("GET /wealth-goal/standing", wealthgoalhttp.GetStanding(app.log, app.wealthGoalQueries))
+
 	protected("GET /cashflow/ignore-rules", cashflowhttp.GetIgnoreRules(app.log, app.cashflowQueries))
 	protected("POST /cashflow/ignore-rules", cashflowhttp.CreateIgnoreRule(app.log, app.cashflowCommands))
 	protected("POST /cashflow/ignore-rules/preview", cashflowhttp.PreviewIgnoreRule(app.log, app.cashflowQueries))

@@ -9,3 +9,4 @@ export * from './vendors';
 export * from './importer';
 export * from './backup';
 export * from './realtime';
+export * from './wealthgoal';

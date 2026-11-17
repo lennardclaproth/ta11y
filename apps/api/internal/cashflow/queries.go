@@ -138,8 +138,11 @@ type TransactionListQuery struct {
 	ImportID *uuid.UUID
 	// IgnoredByRuleID narrows the page to the rows one ignore rule ignored.
 	IgnoredByRuleID *uuid.UUID
-	From            *time.Time
-	To              *time.Time
+	// Purposes OR-matches the goal purpose; PurposeNone matches the rows nobody has
+	// pointed at yet. Empty means no filter on purpose at all.
+	Purposes []Purpose
+	From     *time.Time
+	To       *time.Time
 }
 
 // TransactionListResult contains a page of cashflow transactions and the total match count.

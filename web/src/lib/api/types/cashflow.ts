@@ -1,4 +1,5 @@
 import type { PaginatedResponse } from './common';
+import type { TransactionPurpose } from './wealthgoal';
 
 /** Cashflow direction. */
 export type CashflowDirection = 'in' | 'out';
@@ -18,6 +19,8 @@ export interface CashflowTransaction {
 	date: string;
 	tag: string;
 	ignored: boolean;
+	/** What it counts as towards the monthly wealth goal [038]; `''` is "not assigned". */
+	purpose: TransactionPurpose;
 	/**
 	 * The ignore rule that ignored this row, null when nobody's rule did. The rule's
 	 * name is resolved from the account's rules rather than repeated on every row.
@@ -124,6 +127,8 @@ export interface CashflowTransactionFilters {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Comma-separated goal purposes: `income`, `wealth`, `none`. */
+	purpose?: string;
 	/** Only the rows one import brought in. */
 	import_id?: string;
 	/** Only the rows one ignore rule ignored. */
@@ -253,6 +258,8 @@ export interface CashflowTransactionsQuery {
 	tags?: string;
 	untagged?: boolean;
 	hide_ignored?: boolean;
+	/** Comma-separated goal purposes: `income`, `wealth`, `none`. */
+	purpose?: string;
 	/** Only the rows one import brought in. */
 	import_id?: string;
 	/** Only the rows one ignore rule ignored. */

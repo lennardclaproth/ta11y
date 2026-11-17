@@ -70,6 +70,9 @@ type CreateTransactionResponse struct {
 	Date        time.Time `json:"date"`
 	Tag         string    `json:"tag"`
 	Ignored     bool      `json:"ignored"`
+	// Purpose is what the transaction counts as towards the monthly wealth goal:
+	// "income", "wealth", or "" when nobody has pointed at it yet.
+	Purpose string `json:"purpose"`
 	// IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's
 	// rule did. The rule's name is resolved from the account's rules, not repeated here.
 	IgnoredByRuleID *uuid.UUID `json:"ignored_by_rule_id"`
@@ -97,6 +100,7 @@ func toTransactionResponse(tx *cashflow.Transaction) CreateTransactionResponse {
 		IgnoredByRuleID:  tx.IgnoredByRuleID,
 		IgnoreOverridden: tx.IgnoreOverridden,
 		ImportID:         tx.ImportID,
+		Purpose:          string(tx.Purpose),
 	}
 }
 

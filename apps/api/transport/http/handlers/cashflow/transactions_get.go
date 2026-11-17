@@ -30,6 +30,7 @@ type GetTransactionsRequest struct {
 	ImportID string `query:"import_id"`
 	// IgnoredByRule narrows the page to the rows one ignore rule ignored.
 	IgnoredByRule string `query:"ignored_by_rule"`
+	Purpose       string `query:"purpose"`
 	From          string `query:"from"`
 	To            string `query:"to"`
 }
@@ -80,6 +81,7 @@ type GetTransactionsResponse struct {
 // @Param       tags query string false "Comma-separated tags, e.g. food,travel"
 // @Param       untagged query bool false "Only untagged transactions (empty tag)"
 // @Param       hide_ignored query bool false "Hide ignored transactions"
+// @Param       purpose query string false "Comma-separated goal purpose filter: income, wealth, none"
 // @Param       from query string false "Start date (YYYY-MM-DD)"
 // @Param       to query string false "End date (YYYY-MM-DD)"
 // @Success     200 {object} TransactionsResponse
@@ -159,6 +161,10 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 	if dateErr != nil {
 		problems["date_range"] = dateErr.Error()
 	}
+	purposes, purposeErr := cashflow.SplitPurposes(req.Purpose)
+	if purposeErr != nil {
+		problems["purpose"] = purposeErr.Error()
+	}
 	importID, importErr := optionalUUID(req.ImportID)
 	if importErr != nil {
 		problems["import_id"] = "import_id must be a valid UUID"
@@ -188,6 +194,7 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 		HideIgnored:     req.HideIgnored,
 		ImportID:        importID,
 		IgnoredByRuleID: ruleID,
+		Purposes:        purposes,
 		From:            from,
 		To:              to,
 	}, problems
