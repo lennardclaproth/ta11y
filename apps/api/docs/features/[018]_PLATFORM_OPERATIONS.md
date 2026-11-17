@@ -99,7 +99,9 @@ sequenceDiagram
     M->>MIG: EnsureDBExists (Postgres creates DB if absent, SQLite no-op)
     M->>MIG: RunMigrations (goose Up, embedded FS per dialect)
     M->>BS: Vendors → Accounts → Providers (idempotent seed)
+    M->>M: recoverInterruptedWork (fail imports / catalogue seeds a restart cut off)
     M->>SRV: NewServer + Run (apmhttp + request IDs, graceful shutdown)
+    M->>M: drainBus (≤4s) before the deferred closes
 ```
 
 ## Request through middleware
@@ -171,16 +173,20 @@ gap explicit rather than adding a new function only to wire startup.
 
 ## Configuration
 
-`config.yaml` (read from the working dir) overlaid with environment:
+`config.yaml` from the working dir, or the file named by `CONFIG_PATH`, overlaid with
+environment. A set variable wins over the file; a blank one is ignored. Lists are
+comma-separated.
 
 | Area | YAML keys | Env overlay |
 | --- | --- | --- |
-| server | `environment`, `port` | — |
-| database | `connection_string`, `type` (`sqlite3`\|`postgres`) | — |
-| logging | `level` | — |
+| server | `environment`, `port`, `cors_allowed_origins`, `web_dir` | `SERVER_ENVIRONMENT`, `PORT`, `CORS_ALLOWED_ORIGINS`, `WEB_DIR` — a set `web_dir` serves the web app at `/` and moves the API under `/api` ([036]) |
+| database | `connection_string`, `type` (`sqlite3`\|`postgres`) | `DATABASE_URL`, `DATABASE_TYPE` |
+| logging | `level` | `LOG_LEVEL` |
+| auth | `frontend_url`, `cookie_domain`, `allowed_emails`, `providers.<slug>.redirect_url` | `AUTH_FRONTEND_URL`, `AUTH_COOKIE_DOMAIN`, `AUTH_ALLOWED_EMAILS`, `<SLUG>_REDIRECT_URL`; credentials env-only (`<SLUG>_CLIENT_ID`/`_SECRET`) |
+| marketdata | `max_seed_pages` | `MARKETDATA_MAX_SEED_PAGES` |
 | apm | `server_url`, `service_name`, `environment`, `secret_token`, `verify_server_cert`, `log_level`, `transaction_sample_rate` | exported as `ELASTIC_APM_*` (these configure the implicit default tracer) |
 | providers | `marketstack.base_uri`, `alphavantage.base_uri` | **API keys env-only**: `MARKETSTACK_API_KEY`, `ALPHA_VANTAGE_API_KEY` (comma-separated, deduped) |
-| disk_storage | `base_path` | — |
+| disk_storage | `base_path` | `DISK_STORAGE_PATH` |
 
 There is **no** `agent.enabled` / agent config (it was removed with the jobs subsystem).
 
@@ -211,9 +217,7 @@ Both go through request-identifier + request-logging middleware. The `docs/` pac
 
 ## Refactor state / not implemented
 
-- **No compiling entrypoint wires this stack.** `cmd/ta11y/main.go` is an empty
-  stub; `cmd/server/main.go` imports removed packages (`internal/bus`, `internal/jobs`,
-  `internal/http`, `internal/cashflow/service`) and reads a non-existent `cfg.Agent.*`, so it
-  does not compile. Consequently `transport/http`, `internal/bootstrap`, `internal/eventbus`,
-  and `migrations` are not exercised by any buildable `main`.
+- **Single-instance assumption.** The event bus, the websocket hub and import uploads on
+  `disk_storage.base_path` are per process, and start-up recovery fails other instances'
+  unfinished work. Running more than one instance at a time is not supported.
 - SQLite is not APM-instrumented (only Postgres goes through `apmsql`).

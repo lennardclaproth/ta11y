@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"iter"
 	"math"
 	"net/http"
@@ -157,10 +156,10 @@ func (c *MarketStackClient) fetchEODPage(ctx context.Context, symbols []string, 
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return marketstackEODResponse{}, fmt.Errorf("fetchEODPage failed to execute request: %w", err)
+		return marketstackEODResponse{}, fmt.Errorf("fetchEODPage failed to execute request: %w", marketdata.RedactRequestError(err))
 	}
 
-	bodyBytes, err := io.ReadAll(res.Body)
+	bodyBytes, err := marketdata.ReadProviderBody(res.Body)
 	closeErr := res.Body.Close()
 	if err != nil {
 		if closeErr != nil {
@@ -173,7 +172,7 @@ func (c *MarketStackClient) fetchEODPage(ctx context.Context, symbols []string, 
 	}
 
 	if res.StatusCode >= 300 {
-		return marketstackEODResponse{}, fmt.Errorf("fetchEODPage received status %d: %s", res.StatusCode, string(bodyBytes))
+		return marketstackEODResponse{}, fmt.Errorf("fetchEODPage received status %d: %s", res.StatusCode, marketdata.ErrorBodySnippet(bodyBytes))
 	}
 
 	var parsed marketstackEODResponse

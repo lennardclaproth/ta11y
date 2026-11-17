@@ -3,6 +3,7 @@
 	import type { ListingSearchRow } from '$lib/api/types';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Dropzone from '$lib/components/molecules/dropzone/Dropzone.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { eodCsvAccept, eodCsvColumns, eodCsvDateFormat } from './eod-upload-form.types';
 
 	let {
@@ -96,7 +97,9 @@
 		hint={file ? `${(file.size / 1024).toFixed(1)} KB` : 'One file, .csv'}
 	/>
 
-	{#if failure}<p role="alert" class="text-sm text-red-700">{failure}</p>{/if}
+	{#if failure}
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{failure}</NoticeBand>
+	{/if}
 
 	<div class="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
 		<Button variant="ghost" intent="secondary" disabled={uploading} onclick={onCancel}>

@@ -2,6 +2,7 @@ package memorybus_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -85,5 +86,64 @@ func TestMemoryBusPropagatesCausationChain(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for child delivery")
+	}
+}
+
+// TestMemoryBusDrainWaitsForFollowUpEvents verifies that Drain returns only once a
+// handler's follow-up publish has been handled as well.
+func TestMemoryBusDrainWaitsForFollowUpEvents(t *testing.T) {
+	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(2), memorybus.WithQueueSize(8))
+	defer func() { _ = bus.Close() }()
+
+	var handled atomic.Int32
+	if _, err := bus.Subscribe("topic.first", func(ctx context.Context, _ eventbus.Envelope) error {
+		time.Sleep(50 * time.Millisecond)
+		return bus.Publish(ctx, "topic.second", ping{N: 2})
+	}); err != nil {
+		t.Fatalf("subscribe first: %v", err)
+	}
+	if _, err := bus.Subscribe("topic.second", func(context.Context, eventbus.Envelope) error {
+		time.Sleep(50 * time.Millisecond)
+		handled.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatalf("subscribe second: %v", err)
+	}
+
+	if err := bus.Publish(context.Background(), "topic.first", ping{N: 1}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := bus.Drain(ctx); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if handled.Load() != 1 {
+		t.Fatalf("drain returned before the follow-up event was handled")
+	}
+}
+
+// TestMemoryBusDrainHonoursDeadline verifies that Drain gives up when ctx expires.
+func TestMemoryBusDrainHonoursDeadline(t *testing.T) {
+	bus := memorybus.NewMemoryBus(memorybus.WithWorkers(1), memorybus.WithQueueSize(8))
+	defer func() { _ = bus.Close() }()
+
+	release := make(chan struct{})
+	defer close(release)
+	if _, err := bus.Subscribe("topic.slow", func(context.Context, eventbus.Envelope) error {
+		<-release
+		return nil
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := bus.Publish(context.Background(), "topic.slow", ping{}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := bus.Drain(ctx); err == nil {
+		t.Fatal("expected drain to report the expired deadline")
 	}
 }

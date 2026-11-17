@@ -11,6 +11,7 @@
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
 	import { rhythmLabels } from '$lib/api/recurring';
@@ -46,44 +47,64 @@
 	let mode = $state<MarkRecurringMode>('existing');
 	let existing = $state('');
 	let name = $state('');
-	let direction = $state('out');
 	let rhythm = $state('monthly');
 
+	// An item runs one way, so the selection has to as well, and ignored rows are not
+	// linked at all: the API refuses both, so the dialog says so before Save rather than after.
+	const direction = $derived<CashflowDirection | null>(
+		selection.length > 0 && selection.every((row) => row.direction === selection[0].direction)
+			? selection[0].direction
+			: null
+	);
+	const hasIgnored = $derived(selection.some((row) => row.ignored));
+	const blocked = $derived(
+		hasIgnored
+			? 'Ignored transactions are not linked to recurring items. Restore them first, or leave them out.'
+			: selection.length > 0 && !direction
+				? 'These transactions run both ways. An item is either money you pay or money you receive, so pick one kind.'
+				: null
+	);
+	const matching = $derived(direction ? items.filter((item) => item.direction === direction) : []);
+
 	const itemOptions = $derived(
-		items.map((item) => ({ value: item.id, label: `${item.name} · ${rhythmLabels[item.rhythm]}` }))
+		matching.map((item) => ({
+			value: item.id,
+			label: `${item.name} · ${rhythmLabels[item.rhythm]}`
+		}))
 	);
 	const rhythmOptions = Object.entries(rhythmLabels).map(([value, label]) => ({ value, label }));
 
 	// Opening the dialog seeds the form from the selection: the description is where the
-	// counterparty hides, and the direction is already known from the transactions.
-	// An account with no items yet has only one route, so it opens on "new".
+	// counterparty hides. An account with no items running this way has only one route,
+	// so it opens on "new".
 	// Only opening seeds it: the items arrive after the dialog is already up, and a
 	// realtime refresh replaces the selection, so following those would wipe the form
 	// under the user's hands.
 	$effect(() => {
 		if (!open) return;
 		untrack(() => {
-			const first = selection[0];
-			name = first?.description ?? '';
-			direction = first?.direction ?? 'out';
-			existing = items[0]?.id ?? '';
-			mode = items.length > 0 ? 'existing' : 'new';
+			name = selection[0]?.description ?? '';
+			existing = matching[0]?.id ?? '';
+			mode = matching.length > 0 ? 'existing' : 'new';
 		});
 	});
 
 	const canSubmit = $derived(
-		selection.length > 0 && (mode === 'existing' ? existing !== '' : name.trim() !== '') && !saving
+		selection.length > 0 &&
+			!blocked &&
+			(mode === 'existing' ? existing !== '' : name.trim() !== '') &&
+			!saving
 	);
 
 	function submit() {
-		if (!canSubmit) return;
+		if (!canSubmit || !direction) return;
 		onSubmit?.(
 			mode === 'existing'
 				? { mode: 'existing', itemId: existing }
 				: {
 						mode: 'new',
 						name: name.trim(),
-						direction: direction as CashflowDirection,
+						direction,
 						rhythm: rhythm as RecurringRhythm
 					}
 		);
@@ -110,79 +131,81 @@
 			</ul>
 		</div>
 
-		<fieldset class="flex flex-col gap-3">
-			<legend class="sr-only">Where these transactions go</legend>
+		{#if blocked}
+			<NoticeBand intent="warning" surface="inset" gutter="dialog" class="-mx-5">
+				{blocked}
+			</NoticeBand>
+		{:else}
+			<fieldset class="flex flex-col gap-3">
+				<legend class="sr-only">Where these transactions go</legend>
 
-			{#if items.length > 0}
+				{#if matching.length > 0}
+					<label class="flex items-center gap-2 text-sm text-slate-800">
+						<Radio bind:group={mode} value="existing" name="mark-mode" disabled={saving} />
+						Add to an existing item
+					</label>
+					{#if mode === 'existing'}
+						<div class="pl-7">
+							<FormField label="Recurring item" id="mark-existing">
+								{#snippet children(field)}
+									<Select
+										id={field.id}
+										bind:value={existing}
+										options={itemOptions}
+										disabled={saving}
+									/>
+								{/snippet}
+							</FormField>
+						</div>
+					{/if}
+				{/if}
+
 				<label class="flex items-center gap-2 text-sm text-slate-800">
-					<Radio bind:group={mode} value="existing" name="mark-mode" disabled={saving} />
-					Add to an existing item
+					<Radio bind:group={mode} value="new" name="mark-mode" disabled={saving} />
+					Start a new item
 				</label>
-				{#if mode === 'existing'}
-					<div class="pl-7">
-						<FormField label="Recurring item" id="mark-existing">
+				{#if mode === 'new'}
+					<div class="flex flex-col gap-4 pl-7">
+						<FormField
+							label="To whom"
+							id="mark-name"
+							hint="Taken from the description — change it to the name you recognise."
+						>
+							{#snippet children(field)}
+								<Input
+									id={field.id}
+									bind:value={name}
+									disabled={saving}
+									ariaDescribedby={field.describedby}
+								/>
+							{/snippet}
+						</FormField>
+
+						<!-- The direction is the selection's: an item takes only transactions running its way. -->
+						<div class="flex flex-col gap-1">
+							<Text as="span" size="sm" weight="medium">Direction</Text>
+							<Text as="span" size="sm" tone="muted">
+								{direction === 'in' ? 'Income — money you receive' : 'Expense — money you pay'}
+							</Text>
+						</div>
+
+						<FormField label="How often" id="mark-rhythm">
 							{#snippet children(field)}
 								<Select
 									id={field.id}
-									bind:value={existing}
-									options={itemOptions}
+									bind:value={rhythm}
+									options={rhythmOptions}
 									disabled={saving}
 								/>
 							{/snippet}
 						</FormField>
 					</div>
 				{/if}
-			{/if}
-
-			<label class="flex items-center gap-2 text-sm text-slate-800">
-				<Radio bind:group={mode} value="new" name="mark-mode" disabled={saving} />
-				Start a new item
-			</label>
-			{#if mode === 'new'}
-				<div class="flex flex-col gap-4 pl-7">
-					<FormField
-						label="To whom"
-						id="mark-name"
-						hint="Taken from the description — change it to the name you recognise."
-					>
-						{#snippet children(field)}
-							<Input
-								id={field.id}
-								bind:value={name}
-								disabled={saving}
-								ariaDescribedby={field.describedby}
-							/>
-						{/snippet}
-					</FormField>
-
-					<fieldset class="flex flex-col gap-2">
-						<legend class="mb-1 text-sm font-medium text-slate-800">Direction</legend>
-						<label class="flex items-center gap-2 text-sm text-slate-800">
-							<Radio bind:group={direction} value="out" name="mark-direction" disabled={saving} />
-							Expense — money you pay
-						</label>
-						<label class="flex items-center gap-2 text-sm text-slate-800">
-							<Radio bind:group={direction} value="in" name="mark-direction" disabled={saving} />
-							Income — money you receive
-						</label>
-					</fieldset>
-
-					<FormField label="How often" id="mark-rhythm">
-						{#snippet children(field)}
-							<Select id={field.id} bind:value={rhythm} options={rhythmOptions} disabled={saving} />
-						{/snippet}
-					</FormField>
-				</div>
-			{/if}
-		</fieldset>
+			</fieldset>
+		{/if}
 
 		{#if error}
-			<p
-				class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-				role="alert"
-			>
-				{error}
-			</p>
+			<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 		{/if}
 
 		<Text size="xs" tone="muted">

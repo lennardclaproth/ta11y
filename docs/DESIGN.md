@@ -190,6 +190,7 @@ No dark theme is currently defined. A future dark theme requires explicit role m
 - Convert API fixed-point integers using the helpers in [money.ts](web/src/lib/api/money.ts) before display: these values use a scale of 1,000,000, including fields misleadingly named `amountCents`. Decimal-string endpoints follow their own contract.
 - Align comparable amounts to the right and keep precision consistent within a column. Name the currency and time period where context could be ambiguous.
 - Keep zero, unavailable data, and loading visibly distinct. Never substitute a displayed zero for an unknown amount in a new flow.
+- A count is not money. Use CountStat for figures like rows imported or transactions a rule matched: tabular and labelled, but never given a currency and never coloured by sign. Money and StatCard are for amounts.
 - Use direct sentence-case labels: “Add transaction”, “Save changes”, “Try again”. Error copy should explain what failed and what the person can do next. Avoid blame or judgment about spending.
 
 ## Layout
@@ -227,7 +228,7 @@ shadow to distinguish it from content.
 | Sticky table header | 20 |
 | Popover / table footer | 30 |
 | Floating action button / expanded scrim | 40 |
-| Modal scrim / toast host | 50 |
+| Modal scrim | 50 |
 | Portaled filter popover | 60 |
 | Async search dropdown | 70 |
 
@@ -263,9 +264,47 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Navigation/filtering | NavMenu, Tabs, filter molecules | Show current state and preserve the query/selection context |
 | Period selection | DateRangePicker | One period for the app, chosen in the overview. Supply `presets` to name the ranges and a `trigger` to render your own control; the presets then read inside the picker rather than beside it |
 | Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning. AnalyticsCard's `actions` snippet puts chart-level actions on the section rule |
+| Counts | CountStat | Tabular and labelled; no currency, no colour by sign; a placeholder, not a zero, while unknown |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
-| Feedback | Alert, ToastHost, Skeleton, Spinner | Persistent issues belong near the affected content; transient feedback uses the single shell toast host |
+| Feedback | NoticeBand, NoticeBandRegion, Skeleton, Spinner | Every notification is a NoticeBand; persistent issues belong near the affected content, transient feedback goes through the single shell toast stack |
+
+#### Notifications
+
+One shape reports everything: a band with a hairline rule above and below. A notice that stays is
+in normal document flow; only the short-lived feedback after an action floats, as a toast that never
+covers the navigation.
+
+- **After an action** — `NoticeBandRegion` renders the toast store as a stack in the top-right
+  corner of the content area, under the masthead, over the page rather than in its flow, so a toast
+  never moves the page. Each toast is the band printed as a card (hairline border all round,
+  `rounded-xl`, `shadow-md`, `w-96`; full width minus the 16px gutter on phones), newest on top. It
+  auto-dismisses after 4.5s, holds that countdown while it is hovered or focused, and always has a
+  close button. At most three auto-dismissing toasts exist at once, so the stack does not cover more
+  of the page than it is worth. The store holds the cap, so a fourth does not queue out of sight
+  while its timer runs — the oldest is dismissed as the new one arrives. A toast that is meant to
+  stay until it is dismissed (`duration: 0`) is outside the cap and is never pushed out by a newer
+  one. The stack sits on the `toast` z-layer: over the page and its FAB, under a modal's scrim.
+- **Under an overlay** — a dialog or drawer covers the toast stack with its own scrim, so what it
+  reports it reports itself, in a band inside it. Never send a toast from an overlay that stays open.
+  The band has no timer, so it is dismissible and waits for the reader. The overlay body scrolls
+  and the band is pinned at the top of it, so when the action sits further down the band is
+  scrolled into view as it appears. An action that closes the overlay first may use the region,
+  because by then nothing covers it.
+- **A problem that stays** — the band sits at the content it concerns (above the records), with its
+  recovery action on the same line. Nothing is drawn underneath a failed load: no zero, no
+  empty-filter line, no pagination.
+- **In a modal or form** — a refused save stays where it happened: per field through `FormField`, or
+  as a band full-bleed under the dialog header. The entry is preserved, and no toast repeats it. A
+  band's `title` states that something failed, so it belongs to a real refusal; a validation message
+  that stops the form before it is sent is said on its own. Where one band serves two actions, the
+  title and the message name the one that was pressed — a refused delete does not report a change.
+
+The band's text lines up with the text of its container through `gutter` (`page`, `panel`, `dialog`,
+`none`), and `surface` picks the sheet it is printed on (`paper` on the taupe canvas and in a muted
+panel, `inset` inside a white dialog or drawer). The intent colour appears only in the solid chip;
+the message stays slate, and the intent name is in the band as screen-reader-only text, so colour is
+never the only carrier of meaning.
 
 Do not assume every component implements every intent: Button supports primary/secondary/warning/error/success/info; Badge adds neutral; Input uses default/error/success. Read each component's types before extending it.
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import DatePicker from '$lib/components/molecules/date-picker/DatePicker.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
@@ -36,6 +36,8 @@
 		onClose?: () => void;
 		/** Read-only rows (amount, note, quantity) rendered above the date. */
 		details?: Snippet;
+		/** What else can be done with this transaction, rendered under the details. */
+		actions?: Snippet;
 	};
 
 	let {
@@ -51,7 +53,8 @@
 		error = null,
 		onSave,
 		onClose,
-		details
+		details,
+		actions
 	}: Props = $props();
 
 	const changed = $derived(date !== originalDate);
@@ -72,10 +75,16 @@
 		</div>
 
 		{#if error}
-			<!-- role="alert" so a refusal that appears after Save is announced, not just coloured. -->
-			<div role="alert">
-				<Alert intent="error" title="This date is already taken">{error}</Alert>
-			</div>
+			<!-- The band carries role="alert", so a refusal that appears after Save is announced. -->
+			<NoticeBand
+				intent="error"
+				surface="inset"
+				gutter="dialog"
+				title="This date is already taken"
+				class="-mx-5"
+			>
+				{error}
+			</NoticeBand>
 		{/if}
 
 		<dl class="divide-y divide-slate-200 border-y border-slate-200">
@@ -113,16 +122,32 @@
 			</div>
 		</dl>
 
+		{#if actions}
+			<div class="flex flex-wrap gap-2">{@render actions()}</div>
+		{/if}
+
 		{#if editable}
-			<Alert intent="info" title="Only the date can change">
+			<NoticeBand
+				intent="info"
+				surface="inset"
+				gutter="dialog"
+				title="Only the date can change"
+				class="-mx-5"
+			>
 				Amount, description and tag stay as entered. Change them by removing this transaction and
 				adding it again.
-			</Alert>
+			</NoticeBand>
 		{:else}
-			<Alert intent="info" title="Imported transactions keep their statement date">
+			<NoticeBand
+				intent="info"
+				surface="inset"
+				gutter="dialog"
+				title="Imported transactions keep their statement date"
+				class="-mx-5"
+			>
 				This transaction came from an import, so its date is fixed. Only transactions you entered
 				yourself can be moved to another day.
-			</Alert>
+			</NoticeBand>
 		{/if}
 	</div>
 

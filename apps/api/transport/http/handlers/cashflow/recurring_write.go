@@ -58,7 +58,7 @@ type RecurringMutationResponse struct {
 // CreateRecurringItem starts a recurring item and links the selected transactions.
 //
 // @Summary     Create a recurring item
-// @Description Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched.
+// @Description Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched. Every transaction must run in the item's direction and must not be ignored; a transaction already linked to another item is skipped, and an item whose transactions are all linked elsewhere is refused with 409.
 // @Tags        Recurring
 // @Accept      application/json
 // @Produce     application/json
@@ -67,6 +67,7 @@ type RecurringMutationResponse struct {
 // @Failure     400 {object} map[string]string "Bad request"
 // @Failure     404 {object} map[string]string "Not found"
 // @Failure     409 {object} map[string]string "Conflict"
+// @Failure     422 {object} map[string]string "Unprocessable entity"
 // @Failure     500 {object} map[string]string "Internal server error"
 // @Router      /cashflow/recurring [post]
 func CreateRecurringItem(log logging.Logger, commands *cashflow.RecurringCommands) http.Handler {
@@ -161,7 +162,7 @@ func UpdateRecurringItem(log logging.Logger, commands *cashflow.RecurringCommand
 // LinkRecurringTransactions adds transactions to an existing recurring item.
 //
 // @Summary     Link transactions to a recurring item
-// @Description Links cashflow transactions to an existing recurring item. An ended item takes no new transactions.
+// @Description Links cashflow transactions to an existing recurring item, at any amount. An ended item takes no new transactions; every transaction must run in the item's direction and must not be ignored. A transaction already linked to another item is skipped, so linked_count can be lower than the ids sent; when nothing could be linked the request is refused with 409.
 // @Tags        Recurring
 // @Accept      application/json
 // @Produce     application/json
@@ -170,6 +171,7 @@ func UpdateRecurringItem(log logging.Logger, commands *cashflow.RecurringCommand
 // @Success     200 {object} RecurringMutationResponse
 // @Failure     400 {object} map[string]string "Bad request"
 // @Failure     404 {object} map[string]string "Not found"
+// @Failure     409 {object} map[string]string "Conflict"
 // @Failure     422 {object} map[string]string "Unprocessable entity"
 // @Failure     500 {object} map[string]string "Internal server error"
 // @Router      /cashflow/recurring/{item_id}/transactions [post]
@@ -418,6 +420,12 @@ func writeRecurringError(w http.ResponseWriter, r *http.Request, log logging.Log
 		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"match_key": cashflow.ErrRecurringSuggestionNotFound.Error()})
 	case errors.Is(err, cashflow.ErrRecurringItemExists):
 		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"name": cashflow.ErrRecurringItemExists.Error()})
+	case errors.Is(err, cashflow.ErrRecurringTransactionLinked):
+		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"ids": cashflow.ErrRecurringTransactionLinked.Error()})
+	case errors.Is(err, cashflow.ErrRecurringDirectionMismatch):
+		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"direction": cashflow.ErrRecurringDirectionMismatch.Error()})
+	case errors.Is(err, cashflow.ErrRecurringTransactionIgnored):
+		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"ignored": cashflow.ErrRecurringTransactionIgnored.Error()})
 	case errors.Is(err, cashflow.ErrRecurringItemEnded):
 		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"item_id": cashflow.ErrRecurringItemEnded.Error()})
 	case errors.Is(err, cashflow.ErrRecurringInvalidMonth):

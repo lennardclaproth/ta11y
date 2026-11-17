@@ -35,7 +35,7 @@ func Callback(
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The flow cookie has served its purpose either way; clear it before any exit.
-		http.SetCookie(w, cookies.Clear(httpx.FlowCookieName, httpx.FlowCookiePath))
+		http.SetCookie(w, cookies.Clear(httpx.FlowCookieName, cookies.FlowPath()))
 
 		slug := r.PathValue("provider")
 		provider, err := registry.Get(slug)

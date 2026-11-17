@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The standing could not be loaded. Say what failed and offer the retry; never fall back
 	// to a zero percentage, which would read as a missed month.
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 
 	type Props = {
@@ -15,7 +15,9 @@
 	}: Props = $props();
 </script>
 
-<div class="flex flex-col items-start gap-3">
-	<Alert intent="error" title="Could not load your monthly standing">{message}</Alert>
-	<Button size="sm" variant="outline" onclick={onRetry}>Try again</Button>
-</div>
+<NoticeBand intent="error" gutter="none" title="Could not load your monthly standing">
+	{message}
+	{#snippet action()}
+		<Button size="sm" variant="outline" intent="secondary" onclick={onRetry}>Try again</Button>
+	{/snippet}
+</NoticeBand>

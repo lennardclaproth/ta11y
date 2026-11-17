@@ -6,10 +6,10 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Postgres2026!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in apps/api/.env (make env seeds it)}
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - mft_db_data:/var/lib/postgresql
       - C:/ta11y/db_backup:/backups
@@ -27,7 +27,7 @@ services:
         soft: -1
         hard: -1
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - mft_es_data:/usr/share/elasticsearch/data
 
@@ -38,7 +38,7 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
 
   apm-server:
     image: docker.elastic.co/apm/apm-server:9.2.0
@@ -46,9 +46,9 @@ services:
       - elasticsearch
       - kibana
     ports:
-      - "8200:8200"
-      - "4317:4317"
-      - "4318:4318"
+      - "127.0.0.1:8200:8200"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
     environment:
       - output.elasticsearch.hosts=["http://elasticsearch:9200"]
       - apm-server.kibana.enabled=true

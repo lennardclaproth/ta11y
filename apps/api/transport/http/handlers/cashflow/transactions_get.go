@@ -26,9 +26,13 @@ type GetTransactionsRequest struct {
 	Tags        string `query:"tags"`
 	Untagged    bool   `query:"untagged"`
 	HideIgnored bool   `query:"hide_ignored"`
-	Purpose     string `query:"purpose"`
-	From        string `query:"from"`
-	To          string `query:"to"`
+	// ImportID narrows the page to the rows one import brought in.
+	ImportID string `query:"import_id"`
+	// IgnoredByRule narrows the page to the rows one ignore rule ignored.
+	IgnoredByRule string `query:"ignored_by_rule"`
+	Purpose       string `query:"purpose"`
+	From          string `query:"from"`
+	To            string `query:"to"`
 }
 
 // GetTransactionResponse represents one cashflow transaction in a list response.
@@ -117,21 +121,7 @@ func GetTransactions(log logging.Logger, queries *cashflow.Queries) http.Handler
 			return
 		}
 
-		items := make([]CreateTransactionResponse, 0, len(result.Transactions))
-		for _, tx := range result.Transactions {
-			items = append(items, CreateTransactionResponse{
-				ID:          tx.ID,
-				Description: tx.Description,
-				Note:        tx.Note,
-				Source:      tx.Source,
-				AmountCents: int64(tx.AmountCents),
-				Direction:   string(tx.Direction),
-				Date:        tx.Date,
-				Tag:         tx.Tag,
-				Ignored:     tx.Ignored,
-				Purpose:     string(tx.Purpose),
-			})
-		}
+		items := toTransactionResponses(result.Transactions)
 
 		_ = httpx.JSONEncode(w, http.StatusOK, GetTransactionsResponse{
 			Pagination: PaginationResponse{
@@ -175,6 +165,14 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 	if purposeErr != nil {
 		problems["purpose"] = purposeErr.Error()
 	}
+	importID, importErr := optionalUUID(req.ImportID)
+	if importErr != nil {
+		problems["import_id"] = "import_id must be a valid UUID"
+	}
+	ruleID, ruleErr := optionalUUID(req.IgnoredByRule)
+	if ruleErr != nil {
+		problems["ignored_by_rule"] = "ignored_by_rule must be a valid UUID"
+	}
 
 	limit := req.Limit
 	if limit == 0 {
@@ -182,20 +180,37 @@ func toTransactionListQuery(accountID uuid.UUID, req GetTransactionsRequest) (ca
 	}
 
 	return cashflow.TransactionListQuery{
-		AccountID:   accountID,
-		Limit:       limit,
-		Offset:      req.Offset,
-		Sort:        sort,
-		Q:           req.Q,
-		Description: req.Description,
-		Note:        req.Note,
-		Source:      req.Source,
-		Direction:   direction,
-		Tags:        cashflow.SplitTags(req.Tags),
-		Untagged:    req.Untagged,
-		HideIgnored: req.HideIgnored,
-		Purposes:    purposes,
-		From:        from,
-		To:          to,
+		AccountID:       accountID,
+		Limit:           limit,
+		Offset:          req.Offset,
+		Sort:            sort,
+		Q:               req.Q,
+		Description:     req.Description,
+		Note:            req.Note,
+		Source:          req.Source,
+		Direction:       direction,
+		Tags:            cashflow.SplitTags(req.Tags),
+		Untagged:        req.Untagged,
+		HideIgnored:     req.HideIgnored,
+		ImportID:        importID,
+		IgnoredByRuleID: ruleID,
+		Purposes:        purposes,
+		From:            from,
+		To:              to,
 	}, problems
+}
+
+// optionalUUID reads an identifier filter that is allowed to be absent. An empty value
+// means "do not narrow on it"; anything else has to be a real id rather than silently
+// matching nothing.
+func optionalUUID(raw string) (*uuid.UUID, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }

@@ -24,7 +24,15 @@ charts and the table of whichever page you are on and stays put when you change 
 have no charts and no period, and Recurring looks back over your whole history, so it has none
 either. Actions that recompute a chart, such as rebuilding the portfolio,
 hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
-importing, acting on a selection — lives in the ledger header above the table.
+importing, acting on a selection — lives in the ledger header above the table. The header
+checkbox selects the page you see; when the rows run over several pages, a line above the table
+offers to select every row matching the filters, and a selection holds across pages until the
+filters or the period change.
+
+Every notification uses one shape: a ruled band. Feedback after an action appears as a dismissible
+toast floating in the top-right corner under the masthead; a problem that stays sits at the content it
+concerns with its recovery action; a refused save stays in the modal or form that caused it, with
+the entry preserved and no second notice on top of it.
 
 ### Authentication [030]
 People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow
@@ -40,7 +48,8 @@ is refused, because a provider that accepts arbitrary addresses could otherwise 
 someone else’s data.
 
 Access is allowlisted: authenticating with a provider proves who someone is, `auth.allowed_emails`
-decides who is admitted, and the check runs on every sign-in so removing an address locks it out.
+decides who is admitted. It is checked on every sign-in and again on every request, so removing an
+address ends the sessions it already holds rather than waiting for them to expire.
 
 Authentication is enforced. Routes are default-deny — only health, the API docs and the sign-in
 endpoints are public, and account administration, market-data curation, provider credentials and
@@ -49,8 +58,10 @@ hiding the screen. Every account-scoped request takes its account from the sessi
 longer send an `account_id` anywhere.
 
 Sign-in is off by default (`auth.enabled`) so a fresh checkout boots without provider credentials,
-in which case the API runs as the single bootstrapped account. Configuration refuses that outside
-development, and refuses an empty allowlist there too.
+in which case the API runs as the single bootstrapped account -- for requests that come from and are
+addressed to this machine only, since that account is an admin. Configuration refuses that outside
+development, and refuses an empty allowlist and a `*` CORS origin there too; an unset
+`server.environment` counts as production.
 
 ### Account management
 Users create and list accounts. An account is the shared scope that imports, cashflow,
@@ -66,7 +77,9 @@ for cashflow; DeGiro for portfolio; BrandNewDay for EOD).
 
 `GET /imports/{import_id}` reads one import back: its lifecycle state, its row counters,
 and a classified reason when the vendor's parser refused the file. The stored upload is
-removed once an import finishes, successfully or not.
+removed once an import finishes, successfully or not. An import a restart interrupted is
+failed at the next start-up with a message asking for the file again, since the upload did
+not survive the restart.
 
 → Details: [CSV imports](%5B002%5D_CSV_IMPORTS.md)
 
@@ -90,7 +103,9 @@ transactions. Rows imported before this change are not converted.
 Users query bank/payment transactions with filtering, sorting, and pagination, and add
 manual transactions. They can view monthly and per-tag analytics, tag transactions
 (individually, by selection, or by filter), and ignore/unignore transactions to exclude
-them from totals.
+them from totals. Tagging a selection on Cashflow opens a dialog that searches every tag the
+account has used, with how often, or starts a new one, and shows per row what the tag replaces
+before anything is saved; it can also take the tag off.
 
 A manual transaction is entered on any day up to and including today, and a transaction
 entered by hand can later be moved to another day — the one correction the application
@@ -98,13 +113,31 @@ allows after the fact. Imported transactions keep their statement date: the fing
 that recognises a re-imported row carries its date, so moving one would make the next
 import of the same file add the old row alongside it.
 
-A transaction also carries a **purpose** for the monthly wealth goal ([035]) — income, a
+A transaction also carries a **purpose** for the monthly wealth goal ([038]) — income, a
 contribution towards wealth, or nothing — set per selection or per filter, independently of
 its tag and its ignored state.
 
 → Details: [Cashflow](%5B009%5D_CASHFLOW.md)
 
-### Monthly wealth goal [035]
+### Ignore rules [035]
+Around a third of an imported statement is transfers between the owner's own accounts and
+credit-card settlements. They say nothing about income or spending, so users write **ignore
+rules** that recognise them: text in the description or the note, optionally narrowed to a
+direction and to one bank. Matching rows arrive from an import already ignored, and the
+import reports how many — alongside what was new and what was a duplicate — with the rows
+grouped under the rule that caught each one.
+
+A rule is the same shape as a ledger filter, so what it would catch is shown before it is
+saved and nothing is inferred; there is no learning, and the two sides of a transfer are
+never matched against each other. A rule only ever touches rows the import it ran for
+inserted, unless it is explicitly applied to the ledger, which names its count and asks
+first. Nothing is deleted: ignored rows are shown on Cashflow with the rule that ignored
+them and put back one by one — and a row put back by hand stays back, because rules leave
+anything you decided yourself alone.
+
+→ Details: [Ignore rules](%5B035%5D_IGNORE_RULES.md)
+
+### Monthly wealth goal [038]
 Users set one goal: the share of the income they mark each month that should go towards
 wealth. Marking transactions on Cashflow as income or as a contribution feeds a monthly
 standing that scores each calendar month against the goal that applied in it, shows how many
@@ -113,7 +146,7 @@ encouragement. Only incoming money can be income and only outgoing money a contr
 the two sides of a transfer between your own accounts are never both counted. A new goal
 applies from the month it is set in; the running month is never scored.
 
-→ Details: [Monthly wealth goal](%5B035%5D_WEALTH_GOAL.md)
+→ Details: [Monthly wealth goal](%5B038%5D_WEALTH_GOAL.md)
 
 ### Recurring items [033]
 Users see their subscriptions, fixed costs and recurring income in one place: to or from
@@ -121,6 +154,9 @@ whom, how often (monthly, quarterly or yearly), how the amount moved over time, 
 next one is expected. An item is created by pointing cashflow transactions at it — a new item
 or an existing one — or by confirming a pattern ta11y found in the account's history. Nothing
 becomes an item without that confirmation, and a dismissed suggestion is not offered again.
+Pointing works for income and expenses alike, from a selection in the ledger or from one
+transaction's drawer, at any amount — but only in the item's direction, never for an ignored
+row, and a transaction belongs to one item at most.
 
 Once an item is confirmed, the rows of a later cashflow import that match it (same
 counterparty, same direction, an amount within a quarter of the last one) are linked to it, so
@@ -196,7 +232,10 @@ Portfolio against its cost basis.
 ### Realtime updates (WebSocket)
 Clients subscribe to an account-scoped WebSocket (`/ws/accounts/{account_id}`) and receive
 push notifications when long-running work finishes — import completed, portfolio rebuilt,
-and asset snapshots rebuilt — so the UI can refresh without polling.
+and asset snapshots rebuilt — so the UI can refresh without polling. The client only holds
+the socket while the tab is visible and in use: it closes when the tab is hidden, the server
+closes it after five quiet minutes, and it reopens on the next interaction or when the tab
+comes back, refreshing once to catch what it missed. An idle tab holds no connection.
 
 → Details: [Realtime updates](%5B001%5D_REALTIME_UPDATES.md)
 
@@ -247,7 +286,10 @@ entries are cached and how long ago they were seeded, and **Resync catalogue** s
 run from there: it costs one provider request per page, so the button names the budget it
 spends. The run is detached from the request that starts it, so the drawer polls its progress
 (pages fetched, entries cached) and reports the outcome; reopening while one is in flight
-picks it back up, and the API refuses a second run while one is running. A provider search fetches
+picks it back up, and the API refuses a second run while one is running. A run a restart
+interrupted is marked failed at the next start-up, so it no longer blocks the next one, and a
+deployment can lower the page cap (`marketdata.max_seed_pages`) so a run fits inside the
+lifetime of an instance that stops when idle. A provider search fetches
 a single page: results are relevance-ranked, so the intended instrument is on the first
 page, and the UI says so when the provider matched more than it returned.
 
@@ -286,7 +328,8 @@ manual EOD uploads are allowed.
 **Credentials** (admin) lists each provider with its base URL, request quota and whether an
 API key is configured, and lets you set or replace a key. Stored keys are never included in
 the listing -- only a hint like `****9876` -- so reading one back is a separate, logged
-action. Manual providers ingest uploaded files and have no credentials to configure.
+action. A base URL must be `https` on a public host, since every request carries the key to it.
+Manual providers ingest uploaded files and have no credentials to configure.
 
 Keys supplied through the environment are seeded at startup, so a key that is still set in
 the environment is re-added on restart alongside anything changed here.
@@ -304,7 +347,8 @@ vendors support CSV imports and which are disabled.
 ### Event-driven messaging
 An in-memory event bus fans domain events out to many features — for example, creating an
 account projects it into portfolio, cashflow, assets, and importer, and completion events
-bridge into the realtime WebSocket notifications.
+bridge into the realtime WebSocket notifications. On shutdown the bus drains for up to four
+seconds, follow-up events included, before it closes.
 
 → Details: [Event-driven messaging](%5B017%5D_EVENT_DRIVEN_MESSAGING.md)
 
@@ -316,15 +360,41 @@ sensitive-data redaction, wired through Elastic APM across HTTP and SQL.
 
 ### Database bootstrap & migrations
 The service runs goose migrations (mirrored for Postgres and SQLite) and seeds baseline
-records on startup before serving traffic.
+records on startup before serving traffic. Configuration is `config.yaml` (or the file named by
+`CONFIG_PATH`) with environment overrides for every deployment-specific value, including
+`PORT`, so one image serves local and hosted deployments.
 
 → Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
 
 ### Health & API docs
 A lightweight `/health` endpoint reports liveness, and Swagger/OpenAPI publishes the
-generated API contract with an interactive UI at `/swagger/`.
+generated API contract with an interactive UI at `/swagger/`. When the server also serves the
+web app (deployed), both live under `/api`.
 
 → Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
+
+### GCP deployment [036]
+One Cloud Run container runs the API and serves the built web app from the same origin — the app
+at `/`, the API under `/api` — with Cloud SQL Postgres as the only always-on piece. It scales to
+zero and never beyond one instance, because the event bus, websockets and import uploads live in
+the process. Terraform in `deploy/terraform` defines the infrastructure; pushing to `main` builds
+the image and rolls it out.
+
+→ Details: [GCP deployment](%5B036%5D_GCP_DEPLOYMENT.md)
+
+### Export and import [037]
+The work put into a ledger survives a broken database or a move to another instance. From the
+account menu, **Export and import data** exports one dataset at a time to its own JSON file —
+cashflow (with tags, ignored state, ignore rules and recurring items), portfolio transactions, or
+the asset classes kept by hand — and imports such a file back. Administrators also move the
+shared end-of-day prices this way.
+
+An import is checked first: its counts, new and already here, are shown before anything is
+written. It merges rather than replaces — what the account has is left alone — and the whole
+file lands or nothing does. A file naming a bank or listing this instance lacks is refused with
+those named. Positions and snapshots are not in a file; they are rebuilt after an import.
+
+→ Details: [Export and import](%5B037%5D_EXPORT_IMPORT.md)
 
 ### Web app
 A SvelteKit (Svelte 5) frontend in `web/`, built from an Atomic-Design component library

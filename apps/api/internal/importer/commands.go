@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/account"
@@ -18,6 +19,9 @@ type ImportStore interface {
 	Create(ctx context.Context, imp *Import) error
 	FetchByID(ctx context.Context, id uuid.UUID) (*Import, error)
 	UpdateState(ctx context.Context, imp *Import) error
+	// ListUnfinished returns imports still pending or processing whose state last
+	// changed before the cutoff.
+	ListUnfinished(ctx context.Context, updatedBefore time.Time) ([]*Import, error)
 }
 
 // CommandOption configures optional command dependencies.
@@ -194,13 +198,34 @@ func (c *Commands) Process(ctx context.Context, importID uuid.UUID) error {
 		return c.markFailed(ctx, imp, result, err)
 	}
 
-	imp.MarkCompleted(result.Duplicates, result.TotalRows, result.Imported, result.Failed)
+	imp.MarkCompleted(result)
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err
 	}
 	c.cleanup(imp.Path)
 	c.publishCompleted(ctx, imp)
 	return nil
+}
+
+// RecoverInterrupted fails the imports a previous process left unfinished, so they
+// stop showing as running forever. Their upload lived on that process's disk and is
+// gone, so they cannot be resumed. Only imports idle since before the cutoff are
+// touched: during a rolling deploy the old instance may still be finishing recent ones.
+// It runs once at start-up, before the server accepts requests, and returns how many
+// imports it failed.
+func (c *Commands) RecoverInterrupted(ctx context.Context, updatedBefore time.Time) (int, error) {
+	unfinished, err := c.imports.ListUnfinished(ctx, updatedBefore)
+	if err != nil {
+		return 0, fmt.Errorf("list unfinished imports: %w", err)
+	}
+	recovered := 0
+	for _, imp := range unfinished {
+		if err := c.markFailed(ctx, imp, ProcessResult{}, ErrImportInterrupted); !errors.Is(err, ErrImportInterrupted) {
+			return recovered, fmt.Errorf("fail interrupted import %s: %w", imp.ID, err)
+		}
+		recovered++
+	}
+	return recovered, nil
 }
 
 func (c *Commands) validateAccount(ctx context.Context, accountID uuid.UUID) error {
@@ -320,10 +345,7 @@ func (c *Commands) processorFor(importType ImportType) Processor {
 }
 
 func (c *Commands) markFailed(ctx context.Context, imp *Import, result ProcessResult, reason error) error {
-	imp.Duplicates = result.Duplicates
-	imp.TotalRows = result.TotalRows
-	imp.Imported = result.Imported
-	imp.Failed = result.Failed
+	imp.applyCounters(result)
 	imp.MarkFailed(reason.Error())
 	if err := c.imports.UpdateState(ctx, imp); err != nil {
 		return err

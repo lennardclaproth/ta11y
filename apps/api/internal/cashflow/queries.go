@@ -13,13 +13,15 @@ import (
 
 // Queries exposes read-side cashflow use cases.
 type Queries struct {
-	qs QueryStore
+	qs   QueryStore
+	irqs IgnoreRuleQueryStore
 }
 
 // QueryStore reads cashflow transactions and analytics.
 type QueryStore interface {
 	GetMonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error)
 	GetTagDistribution(ctx context.Context, filter AnalyticsFilter) (*TagDistribution, error)
+	ListTags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error)
 	ListTransactions(ctx context.Context, query TransactionListQuery) (*TransactionListResult, error)
 	CountByFilter(ctx context.Context, filters TransactionFilters) (int, error)
 	GetTransaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error)
@@ -27,8 +29,8 @@ type QueryStore interface {
 }
 
 // NewQueries creates cashflow read-side use cases.
-func NewQueries(qs QueryStore) *Queries {
-	return &Queries{qs: qs}
+func NewQueries(qs QueryStore, ruleQueryStore IgnoreRuleQueryStore) *Queries {
+	return &Queries{qs: qs, irqs: ruleQueryStore}
 }
 
 // AnalyticsFilter describes the filters used for cashflow analytics queries.
@@ -62,6 +64,12 @@ type TagDistribution struct {
 	Outgoing []TagDistributionEntry
 }
 
+// TagUsage is one tag an account has used and on how many of its transactions.
+type TagUsage struct {
+	Tag   string
+	Count int
+}
+
 // MonthlyAnalytics returns incoming, outgoing, and net totals grouped by month.
 func (q *Queries) MonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error) {
 	points, err := q.qs.GetMonthlyAnalytics(ctx, filter)
@@ -81,6 +89,17 @@ func (q *Queries) TagDistribution(ctx context.Context, filter AnalyticsFilter) (
 		return &TagDistribution{}, nil
 	}
 	return dist, nil
+}
+
+// Tags lists every tag the account has used, most used first, so a tag can be picked
+// again rather than retyped. Unlike the tag distribution it has no period: a tag last
+// used a year ago is still the user's.
+func (q *Queries) Tags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error) {
+	tags, err := q.qs.ListTags(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow tags: %w", err)
+	}
+	return tags, nil
 }
 
 const (
@@ -109,10 +128,16 @@ type TransactionListQuery struct {
 	Description string
 	Note        string
 	Source      string
+	// SourceExact narrows to one bank by name rather than by text it contains.
+	SourceExact string
 	Direction   *CashFlowDirection
 	Tags        []string
 	Untagged    bool
 	HideIgnored bool
+	// ImportID narrows the page to the rows one import brought in.
+	ImportID *uuid.UUID
+	// IgnoredByRuleID narrows the page to the rows one ignore rule ignored.
+	IgnoredByRuleID *uuid.UUID
 	// Purposes OR-matches the goal purpose; PurposeNone matches the rows nobody has
 	// pointed at yet. Empty means no filter on purpose at all.
 	Purposes []Purpose

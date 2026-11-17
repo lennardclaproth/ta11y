@@ -40,3 +40,14 @@
 	name="Unlinking"
 	args={{ open: true, item: opened, unlinking: recurringLinkedTransactions['rc-006'][3].id }}
 />
+
+<!-- Unlinking leaves this drawer open, and the drawer covers the notice region under the
+     masthead, so what it reports is stated in the drawer itself. -->
+<Story
+	name="Unlinked"
+	args={{
+		open: true,
+		item: opened,
+		notice: { intent: 'success', message: 'Transaction unlinked — it stays in Cashflow' }
+	}}
+/>

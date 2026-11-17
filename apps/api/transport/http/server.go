@@ -18,6 +18,22 @@ type Server struct {
 	log         logging.Logger
 	mux         *http.ServeMux
 	corsOrigins []string
+
+	apiPrefix string
+	site      http.Handler
+}
+
+// ServerOption configures optional Server behaviour.
+type ServerOption func(*Server)
+
+// WithSite serves site (the web app) at the root and moves the API under apiPrefix, so one
+// origin carries both. The prefix is stripped before the API's middleware and routes run,
+// which therefore see the same paths as without a site.
+func WithSite(apiPrefix string, site http.Handler) ServerOption {
+	return func(s *Server) {
+		s.apiPrefix = strings.TrimSuffix(apiPrefix, "/")
+		s.site = site
+	}
 }
 
 const (
@@ -29,13 +45,16 @@ const (
 
 // NewServer creates and returns a new Server for the given address and database.
 // corsOrigins are the browser origins permitted to call the API cross-origin.
-func NewServer(addr string, router *Router, log logging.Logger, corsOrigins []string) *Server {
+func NewServer(addr string, router *Router, log logging.Logger, corsOrigins []string, options ...ServerOption) *Server {
 	s := &Server{
 		addr:        addr,
 		router:      router,
 		log:         log,
 		mux:         http.NewServeMux(),
 		corsOrigins: corsOrigins,
+	}
+	for _, option := range options {
+		option(s)
 	}
 
 	s.registerRoutes()
@@ -69,6 +88,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// so a rejected cross-site mutation never reaches a handler.
 	handler = WithOriginCheck(s.corsOrigins)(handler)
 	handler = WithCORS(s.corsOrigins)(handler)
+	handler = s.withSite(handler)
 
 	server := s.newHTTPServer(handler)
 
@@ -129,6 +149,17 @@ func (s *Server) newHTTPServer(handler http.Handler) *http.Server {
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 	}
+}
+
+// withSite mounts api under the API prefix next to the web app, when a site is configured.
+func (s *Server) withSite(api http.Handler) http.Handler {
+	if s.site == nil {
+		return api
+	}
+	root := http.NewServeMux()
+	root.Handle(s.apiPrefix+"/", http.StripPrefix(s.apiPrefix, api))
+	root.Handle("/", s.site)
+	return root
 }
 
 func (s *Server) registerRoutes() {

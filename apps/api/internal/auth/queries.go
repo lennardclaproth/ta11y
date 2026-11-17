@@ -15,18 +15,25 @@ const touchInterval = time.Hour
 
 // Queries exposes authentication read-side use cases.
 type Queries struct {
-	sessions SessionStore
-	accounts *account.Queries
+	sessions   SessionStore
+	accounts   *account.Queries
+	allowEmail EmailAllowFunc
 }
 
-// NewQueries creates authentication read-side use cases.
-func NewQueries(sessions SessionStore, accounts *account.Queries) *Queries {
-	return &Queries{sessions: sessions, accounts: accounts}
+// NewQueries creates authentication read-side use cases. allowEmail is the same admission
+// policy sign-in applies; nil admits everyone.
+func NewQueries(sessions SessionStore, accounts *account.Queries, allowEmail EmailAllowFunc) *Queries {
+	if allowEmail == nil {
+		allowEmail = func(string) bool { return true }
+	}
+	return &Queries{sessions: sessions, accounts: accounts, allowEmail: allowEmail}
 }
 
 // ResolveSession turns a raw session token into the authenticated caller. It returns
-// ErrSessionNotFound for an unknown token and ErrSessionExpired for one that has lapsed
-// or been revoked, so callers can distinguish "never logged in" from "log in again".
+// ErrSessionNotFound for an unknown token and ErrSessionExpired for one that has lapsed,
+// been revoked, or belongs to an address no longer on the allowlist, so callers can
+// distinguish "never logged in" from "log in again". Re-checking the allowlist here is
+// what makes removing someone take effect at once rather than when their session ends.
 func (q *Queries) ResolveSession(ctx context.Context, token string) (*Principal, error) {
 	if token == "" {
 		return nil, ErrSessionNotFound
@@ -51,15 +58,19 @@ func (q *Queries) ResolveSession(ctx context.Context, token string) (*Principal,
 		return nil, fmt.Errorf("resolve session: load account: %w", err)
 	}
 
+	email := ""
+	if acc.Email != nil {
+		email = *acc.Email
+	}
+	if !q.allowEmail(NormalizeEmail(email)) {
+		return nil, ErrSessionExpired
+	}
+
 	if now.Sub(session.LastSeenAt) > touchInterval {
 		if err := q.sessions.TouchLastSeen(ctx, session.ID, now); err != nil {
 			return nil, fmt.Errorf("resolve session: record activity: %w", err)
 		}
 	}
 
-	email := ""
-	if acc.Email != nil {
-		email = *acc.Email
-	}
 	return &Principal{AccountID: acc.ID, Email: email, Admin: acc.Admin}, nil
 }

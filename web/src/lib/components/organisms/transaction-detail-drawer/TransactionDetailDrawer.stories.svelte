@@ -2,6 +2,8 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import TransactionDetailDrawer from './TransactionDetailDrawer.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
+	import Button from '$lib/components/atoms/button/Button.svelte';
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 
 	const { Story } = defineMeta({
 		title: 'Organisms/TransactionDetailDrawer',
@@ -28,6 +30,13 @@
 		<dt class="text-sm text-slate-500">Note</dt>
 		<dd class="text-sm text-slate-800">Entered late</dd>
 	</div>
+{/snippet}
+
+{#snippet markRecurring()}
+	<Button variant="ruled">
+		<Icon icon="heroicons:arrow-path-rounded-square" />
+		Mark as recurring
+	</Button>
 {/snippet}
 
 <Story name="Manual, unchanged" asChild>
@@ -98,5 +107,20 @@
 		{originalDate}
 		{today}
 		details={amountAndNote}
+	/>
+</Story>
+
+<!-- Cashflow hands in what else can be done with the row: pointing it at a recurring item. -->
+<Story name="With an action" asChild>
+	<TransactionDetailDrawer
+		open
+		title="Monthly salary"
+		originLabel="ING"
+		subtitle="salary"
+		date={originalDate}
+		{originalDate}
+		{today}
+		details={amountAndNote}
+		actions={markRecurring}
 	/>
 </Story>

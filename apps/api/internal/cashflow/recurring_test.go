@@ -64,8 +64,28 @@ func (s *recurringStore) LinkTransactions(_ context.Context, itemID uuid.UUID, i
 	if s.linkErr != nil {
 		return 0, s.linkErr
 	}
-	s.linkedTo[itemID] = append(s.linkedTo[itemID], ids...)
-	return len(ids), nil
+	// One item per transaction, as the database's unique link holds it: a row
+	// already linked anywhere is skipped.
+	linked := 0
+	for _, id := range ids {
+		if s.isLinked(id) {
+			continue
+		}
+		s.linkedTo[itemID] = append(s.linkedTo[itemID], id)
+		linked++
+	}
+	return linked, nil
+}
+
+func (s *recurringStore) isLinked(transactionID uuid.UUID) bool {
+	for _, ids := range s.linkedTo {
+		for _, id := range ids {
+			if id == transactionID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Do runs fn and undoes the items and links it wrote when it fails, which is the
@@ -519,6 +539,112 @@ func TestCreatingAnItemLeavesNothingBehindWhenLinkingFails(t *testing.T) {
 			t.Fatalf("a failed link left %d items behind, want none", len(store.items))
 		}
 	})
+}
+
+func TestAddTransactionsLinksAnyAmountInTheItemsDirection(t *testing.T) {
+	for _, direction := range []CashFlowDirection{CashIn, CashOut} {
+		t.Run(string(direction), func(t *testing.T) {
+			accountID := uuid.New()
+			store := newRecurringStore()
+			item, _ := NewRecurringItem(accountID, "Pixel Stream", direction, RhythmMonthly, MatchKeyFor("PIXEL STREAM"))
+			store.items = []*RecurringItem{item}
+
+			// Far outside the tolerance an import links by: by hand, the amount is the user's call.
+			small := recurringTransaction("PIXEL STREAM", direction, 100, day(2026, 8, 18))
+			large := recurringTransaction("SOMETHING ELSE", direction, 99900, day(2026, 9, 18))
+			store.transactions[small.ID] = small
+			store.transactions[large.ID] = large
+
+			linked, err := NewRecurringCommands(store, store, store).AddTransactions(context.Background(), accountID, item.ID, []uuid.UUID{small.ID, large.ID})
+			if err != nil {
+				t.Fatalf("add transactions: %v", err)
+			}
+			if linked != 2 {
+				t.Fatalf("linked %d transactions, want 2", linked)
+			}
+		})
+	}
+}
+
+func TestManualLinkingRefusesTheOtherDirectionAndIgnoredRows(t *testing.T) {
+	accountID := uuid.New()
+	income := recurringTransaction("SALARY ACME", CashIn, 300000, day(2026, 9, 25))
+	ignored := recurringTransaction("PIXEL STREAM", CashOut, 1200, day(2026, 9, 18))
+	ignored.Ignored = true
+
+	cases := []struct {
+		name        string
+		transaction *Transaction
+		want        error
+	}{
+		{"other direction", income, ErrRecurringDirectionMismatch},
+		{"ignored", ignored, ErrRecurringTransactionIgnored},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newRecurringStore()
+			item, _ := NewRecurringItem(accountID, "Pixel Stream", CashOut, RhythmMonthly, MatchKeyFor("PIXEL STREAM"))
+			store.items = []*RecurringItem{item}
+			store.transactions[tc.transaction.ID] = tc.transaction
+			commands := NewRecurringCommands(store, store, store)
+
+			if _, err := commands.AddTransactions(context.Background(), accountID, item.ID, []uuid.UUID{tc.transaction.ID}); !errors.Is(err, tc.want) {
+				t.Fatalf("add: expected %v, got %v", tc.want, err)
+			}
+			_, err := commands.Create(context.Background(), accountID, CreateRecurringInput{
+				Name:           "Another",
+				Direction:      CashOut,
+				Rhythm:         RhythmMonthly,
+				TransactionIDs: []uuid.UUID{tc.transaction.ID},
+			})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("create: expected %v, got %v", tc.want, err)
+			}
+			if len(store.items) != 1 {
+				t.Fatalf("a refused create left %d items, want only the existing one", len(store.items))
+			}
+		})
+	}
+}
+
+func TestManualLinkingSkipsTransactionsOfAnotherItem(t *testing.T) {
+	accountID := uuid.New()
+	store := newRecurringStore()
+	commands := NewRecurringCommands(store, store, store)
+	first, _ := NewRecurringItem(accountID, "Pixel Stream", CashOut, RhythmMonthly, MatchKeyFor("PIXEL STREAM"))
+	second, _ := NewRecurringItem(accountID, "Cloud Locker", CashOut, RhythmMonthly, MatchKeyFor("CLOUDLOCKER"))
+	store.items = []*RecurringItem{first, second}
+
+	taken := recurringTransaction("PIXEL STREAM", CashOut, 1200, day(2026, 8, 18))
+	free := recurringTransaction("CLOUDLOCKER*SUB", CashOut, 400, day(2026, 9, 6))
+	store.transactions[taken.ID] = taken
+	store.transactions[free.ID] = free
+	store.linkedTo[first.ID] = []uuid.UUID{taken.ID}
+
+	linked, err := commands.AddTransactions(context.Background(), accountID, second.ID, []uuid.UUID{taken.ID, free.ID})
+	if err != nil {
+		t.Fatalf("add transactions: %v", err)
+	}
+	if linked != 1 {
+		t.Fatalf("linked %d transactions, want only the free one", linked)
+	}
+
+	if _, err := commands.AddTransactions(context.Background(), accountID, second.ID, []uuid.UUID{taken.ID}); !errors.Is(err, ErrRecurringTransactionLinked) {
+		t.Fatalf("expected ErrRecurringTransactionLinked when nothing could be linked, got %v", err)
+	}
+
+	_, err = commands.Create(context.Background(), accountID, CreateRecurringInput{
+		Name:           "Third",
+		Direction:      CashOut,
+		Rhythm:         RhythmMonthly,
+		TransactionIDs: []uuid.UUID{taken.ID},
+	})
+	if !errors.Is(err, ErrRecurringTransactionLinked) {
+		t.Fatalf("create: expected ErrRecurringTransactionLinked, got %v", err)
+	}
+	if len(store.items) != 2 {
+		t.Fatalf("an item with no links was left behind: %d items, want 2", len(store.items))
+	}
 }
 
 func TestItemReadsOnlyItsOwnLinks(t *testing.T) {

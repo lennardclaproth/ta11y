@@ -94,7 +94,7 @@ func TestPurposeRequiredDirection(t *testing.T) {
 // what the purpose could actually apply to.
 func TestMarkPurposeByIDsReportsWhatThePurposeStuckTo(t *testing.T) {
 	store := &purposeStore{updated: 2}
-	commands := NewCommands(store, store, &alwaysExists{})
+	commands := NewCommands(store, store, nil, nil, &alwaysExists{})
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
 
 	result, err := commands.MarkPurposeByIDs(context.Background(), uuid.New(), ids, PurposeIncome)
@@ -112,7 +112,7 @@ func TestMarkPurposeByIDsReportsWhatThePurposeStuckTo(t *testing.T) {
 // The account is authoritative over anything the filters carried in.
 func TestMarkPurposeByFilterScopesToTheAccount(t *testing.T) {
 	store := &purposeStore{matched: 8, updated: 5}
-	commands := NewCommands(store, store, &alwaysExists{})
+	commands := NewCommands(store, store, nil, nil, &alwaysExists{})
 	accountID := uuid.New()
 
 	result, err := commands.MarkPurposeByFilter(

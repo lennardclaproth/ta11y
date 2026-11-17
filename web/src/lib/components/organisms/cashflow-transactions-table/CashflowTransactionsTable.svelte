@@ -12,14 +12,27 @@
 	import { purposeLabel } from '$lib/api/wealthgoal';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { purposeFilterOptions } from './cashflow-transactions-table.types';
-	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
-	import type { CashflowDirection, CashflowTransaction } from '$lib/api/types';
+	import Button from '$lib/components/atoms/button/Button.svelte';
+	import type {
+		Column,
+		SortDirection
+	} from '$lib/components/organisms/data-table/data-table.types';
+	import type { CashflowDirection, CashflowTransaction, IgnoreRule } from '$lib/api/types';
 
 	type Props = {
 		rows: CashflowTransaction[];
 		loading?: boolean;
 		error?: string | null;
 		total?: number;
+		/**
+		 * Ignored rows are in the list. The "Ignored by" column and the row-level Restore
+		 * only make sense then, so they appear with them rather than sitting empty.
+		 */
+		showIgnored?: boolean;
+		/** The account's ignore rules, used to name the rule that ignored a row. */
+		ignoreRules?: IgnoreRule[];
+		/** Put one ignored transaction back in the ledger. */
+		onRestore?: (row: CashflowTransaction) => void;
 		limit?: number;
 		offset?: number;
 		selectedIds?: string[];
@@ -39,6 +52,8 @@
 		onFilterChange?: () => void;
 		/** Open one transaction (e.g. in a detail drawer). */
 		onRowClick?: (row: CashflowTransaction) => void;
+		/** Retry a failed load; offered next to the failure notice. */
+		onRetry?: () => void;
 		/** Bulk actions for the footer when rows are selected. */
 		bulkActions?: Snippet;
 		class?: string;
@@ -49,6 +64,9 @@
 		loading = false,
 		error = null,
 		total = 0,
+		showIgnored = false,
+		ignoreRules = [],
+		onRestore,
 		limit = $bindable(25),
 		offset = $bindable(0),
 		selectedIds = $bindable([]),
@@ -65,12 +83,19 @@
 		onLimitChange,
 		onFilterChange,
 		onRowClick,
+		onRetry,
 		bulkActions,
 		class: className = ''
 	}: Props = $props();
 
 	function fmtDate(value: string): string {
 		return formatDisplayDate(value.slice(0, 10));
+	}
+
+	/** The rule that ignored a row, resolved from the account's rules. */
+	function ruleFor(row: CashflowTransaction): IgnoreRule | undefined {
+		if (!row.ignored_by_rule_id) return undefined;
+		return ignoreRules.find((rule) => rule.id === row.ignored_by_rule_id);
 	}
 </script>
 
@@ -142,6 +167,33 @@
 	</Badge>
 {/snippet}
 
+<!-- The rule is the reason a row left the totals, so it is named rather than implied. A row
+     nobody ignored says so in words too, not by being the only one without a badge. -->
+{#snippet ignoredByCell(row: CashflowTransaction)}
+	{@const rule = ruleFor(row)}
+	{#if row.ignored && rule}
+		<Badge intent="info" variant="soft" size="sm">{rule.name}</Badge>
+	{:else if row.ignored}
+		<Badge intent="neutral" variant="soft" size="sm">By hand</Badge>
+	{:else}
+		<span class="text-sm text-slate-500">Counted</span>
+	{/if}
+{/snippet}
+
+{#snippet restoreCell(row: CashflowTransaction)}
+	{#if row.ignored}
+		<Button
+			size="sm"
+			variant="ghost"
+			intent="secondary"
+			shape="default"
+			onclick={() => onRestore?.(row)}
+		>
+			Restore
+		</Button>
+	{/if}
+{/snippet}
+
 <DataTable
 	{rows}
 	{loading}
@@ -152,6 +204,7 @@
 	{sortDirection}
 	{onSort}
 	{onRowClick}
+	{onRetry}
 	{emptyText}
 	class={className}
 	columns={[
@@ -170,6 +223,11 @@
 		},
 		{ key: 'tag', header: 'Tag', sortKey: 'tag', cell: tagCell, filter: tagFilterControl },
 		{ key: 'source', header: 'Entered', sortKey: 'source', width: 'w-32', cell: enteredCell },
+		...(showIgnored
+			? ([
+					{ key: 'ignoredBy', header: 'Ignored by', width: 'w-52', cell: ignoredByCell }
+				] as Column<CashflowTransaction>[])
+			: []),
 		{ key: 'direction', header: 'Direction', cell: directionCell, filter: directionFilterControl },
 		{
 			key: 'purpose',
@@ -178,7 +236,12 @@
 			cell: purposeCell,
 			filter: purposeFilterControl
 		},
-		{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell }
+		{ key: 'amount', header: 'Amount', sortKey: 'amount', align: 'right', cell: amountCell },
+		...(showIgnored
+			? ([
+					{ key: 'restore', header: '', align: 'right', width: 'w-28', cell: restoreCell }
+				] as Column<CashflowTransaction>[])
+			: [])
 	]}
 >
 	{#snippet footer()}

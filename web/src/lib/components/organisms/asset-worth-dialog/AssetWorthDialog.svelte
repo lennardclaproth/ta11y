@@ -7,7 +7,7 @@
 	import DatePicker from '$lib/components/molecules/date-picker/DatePicker.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
@@ -188,7 +188,15 @@
 		</Text>
 
 		{#if saveError}
-			<Alert intent="error" title="This change could not be saved">{saveError}</Alert>
+			<NoticeBand
+				intent="error"
+				surface="inset"
+				gutter="dialog"
+				title="This change could not be saved"
+				class="-mx-5"
+			>
+				{saveError}
+			</NoticeBand>
 		{/if}
 
 		{#if mode === ADJUST}

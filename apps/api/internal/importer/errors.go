@@ -40,4 +40,7 @@ var (
 	// ErrImportFileNotRecognised indicates the uploaded file is not the export the
 	// selected vendor's parser expects.
 	ErrImportFileNotRecognised = fmt.Errorf("this is not the export this vendor produces")
+	// ErrImportInterrupted indicates the server stopped before the import finished; the
+	// uploaded file did not survive the restart, so the file has to be uploaded again.
+	ErrImportInterrupted = fmt.Errorf("the import was interrupted by a server restart; upload the file again")
 )

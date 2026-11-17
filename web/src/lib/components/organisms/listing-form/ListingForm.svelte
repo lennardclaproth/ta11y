@@ -3,6 +3,7 @@
 	import type { CreateListingRequest } from '$lib/api/types';
 	import { ApiError } from '$lib/api/client';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
 	import Select from '$lib/components/atoms/select/Select.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
@@ -168,7 +169,9 @@
 			</div>
 		</details>
 	</fieldset>
-	{#if failure}<p role="alert" class="text-red-700">{failure}</p>{/if}
+	{#if failure}
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{failure}</NoticeBand>
+	{/if}
 	<div class="flex justify-end gap-2 border-t border-slate-200 pt-4">
 		<Button variant="ghost" intent="secondary" disabled={saving} onclick={onCancel}>Cancel</Button>
 		<Button type="submit" disabled={saving} loading={saving}

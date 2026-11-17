@@ -9,12 +9,34 @@
 and Tailwind 4, catalogued in Storybook. It talks to the Go API over REST plus a per-account
 WebSocket, and runs standalone against fixtures when no API URL is configured.
 
+It builds as a client-only SPA (`adapter-static` with an `index.html` fallback, `ssr = false` in
+the root layout). In production the Go server serves that build and the API lives under `/api`
+on the same origin, so `VITE_API_URL` may be relative ([036]).
+
 ## Component architecture
 
 Strict Atomic Design under `web/src/lib/components/<tier>/`, importing only from the same or a
 lower tier. Populated today: **atoms** (23), **molecules** (24), **organisms** (16),
 **templates** (2 — `app-shell`, `page-content`). The `pages/` tier is not created yet; route
 components live in `src/routes/` instead.
+
+### Notifications
+
+One molecule reports everything: `molecules/notice-band` (`NoticeBand`), a ruled band.
+`organisms/notice-band-region` renders the `toast` store as dismissible cards in the top-right
+corner of the shell's content area, floating over the page (`toast` z-layer, under the modal
+scrim) rather than in its flow. A toast holds its countdown while hovered or focused
+(`toast.pause` / `toast.resume`); the store keeps at most three auto-dismissing notices and drops
+the oldest for a newer one, so nothing counts down unseen — a notice with `duration: 0` stays
+outside that cap until it is dismissed. A dialog
+or drawer covers that region with its own scrim, so an overlay that stays open reports its own
+outcomes in a band inside it (`ProviderCatalogueDrawer`, the two Recurring drawers,
+`AssetClassDrawer`); its body
+scrolls, so that band is scrolled into view when it appears. A problem that
+stays is rendered
+by the component that owns the content (`DataTable` on a failed load, with an optional `onRetry`);
+a refused save is rendered inside its dialog, drawer or form, and never also as a toast. Per-field
+errors stay in `FormField`, carrying the same icon as the band.
 
 The rules are enforced by convention, not tooling — see
 [.claude/rules/atomic-design.md](../../../../.claude/rules/atomic-design.md) for the tier

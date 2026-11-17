@@ -64,6 +64,9 @@ func (s *dateStore) GetMonthlyAnalytics(_ context.Context, _ AnalyticsFilter) ([
 func (s *dateStore) GetTagDistribution(_ context.Context, _ AnalyticsFilter) (*TagDistribution, error) {
 	return nil, nil
 }
+func (s *dateStore) ListTags(_ context.Context, _ uuid.UUID) ([]TagUsage, error) {
+	return nil, nil
+}
 func (s *dateStore) ListTransactions(_ context.Context, _ TransactionListQuery) (*TransactionListResult, error) {
 	return nil, nil
 }
@@ -96,7 +99,7 @@ func TestChangeDateMovesManualTransaction(t *testing.T) {
 	accID := uuid.New()
 	current := manualTransaction(t, accID, SourceManual, time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC))
 	store := &dateStore{current: current, byChecksum: map[string]*Transaction{}}
-	commands := NewCommands(store, store, nil)
+	commands := NewCommands(store, store, nil, nil, nil)
 
 	moved, err := commands.ChangeDate(context.Background(), accID, current.ID, "2026-07-14")
 	if err != nil {
@@ -118,7 +121,7 @@ func TestChangeDateRefusesImportedTransaction(t *testing.T) {
 	accID := uuid.New()
 	current := manualTransaction(t, accID, "ing", time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC))
 	store := &dateStore{current: current, byChecksum: map[string]*Transaction{}}
-	commands := NewCommands(store, store, nil)
+	commands := NewCommands(store, store, nil, nil, nil)
 
 	if _, err := commands.ChangeDate(context.Background(), accID, current.ID, "2026-07-14"); !errors.Is(err, ErrCashflowDateNotEditable) {
 		t.Fatalf("expected ErrCashflowDateNotEditable, got %v", err)
@@ -129,7 +132,7 @@ func TestChangeDateRefusesFutureDate(t *testing.T) {
 	accID := uuid.New()
 	current := manualTransaction(t, accID, SourceManual, time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC))
 	store := &dateStore{current: current, byChecksum: map[string]*Transaction{}}
-	commands := NewCommands(store, store, nil)
+	commands := NewCommands(store, store, nil, nil, nil)
 
 	tomorrow := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
 	if _, err := commands.ChangeDate(context.Background(), accID, current.ID, tomorrow); !errors.Is(err, ErrCashflowDateInFuture) {
@@ -143,7 +146,7 @@ func TestChangeDateRefusesDuplicate(t *testing.T) {
 	clash := current.MovedTo(time.Date(2026, 7, 14, 0, 0, 0, 0, time.UTC))
 	clash.ID = uuid.New()
 	store := &dateStore{current: current, byChecksum: map[string]*Transaction{clash.Checksum: clash}}
-	commands := NewCommands(store, store, nil)
+	commands := NewCommands(store, store, nil, nil, nil)
 
 	if _, err := commands.ChangeDate(context.Background(), accID, current.ID, "2026-07-14"); !errors.Is(err, ErrDuplicateTransaction) {
 		t.Fatalf("expected ErrDuplicateTransaction, got %v", err)

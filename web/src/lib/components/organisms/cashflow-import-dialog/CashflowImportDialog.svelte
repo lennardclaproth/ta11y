@@ -5,7 +5,7 @@
 	// trail says it started rather than claiming a finish it cannot observe.
 	import { ApiError } from '$lib/api/client';
 	import type { ImportResult, Vendor } from '$lib/api/types';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
@@ -42,9 +42,17 @@
 		onFinished?: () => void;
 		/** Called when the user switches to the brokerage import for a DEGIRO statement. */
 		onBrokerageImport?: () => void;
+		/** Called with the import id when the user goes to review what it ignored. */
+		onReviewIgnored?: (importId: string) => void;
 	};
 
-	let { open = $bindable(false), vendors = [], onFinished, onBrokerageImport }: Props = $props();
+	let {
+		open = $bindable(false),
+		vendors = [],
+		onFinished,
+		onBrokerageImport,
+		onReviewIgnored
+	}: Props = $props();
 
 	/** How often an import in flight is re-read. Processing is detached, so it only arrives by asking. */
 	const POLL_MS = 1000;
@@ -74,6 +82,7 @@
 	const status = $derived<DestinationStatus>(
 		!result || result.status === 'failed' ? 'failed' : result.failed > 0 ? 'partial' : 'completed'
 	);
+	const autoIgnored = $derived(result?.auto_ignored ?? 0);
 	const everythingKnown = $derived(
 		result?.status === 'completed' &&
 			result.total_rows > 0 &&
@@ -282,10 +291,16 @@
 			{@render trail()}
 
 			{#if everythingKnown}
-				<Alert intent="info" title="No new transactions">
+				<NoticeBand
+					intent="info"
+					surface="inset"
+					gutter="dialog"
+					title="No new transactions"
+					class="-mx-5"
+				>
 					Every row in this statement was already imported earlier. Nothing was added, and nothing
 					was duplicated.
-				</Alert>
+				</NoticeBand>
 			{/if}
 
 			<section class="border-t border-slate-400 pt-3" aria-label="Cashflow result">
@@ -312,6 +327,35 @@
 				{/if}
 			</section>
 
+			<!-- Rows an ignore rule caught are out of the totals without anybody reading
+			     them, so the review that shows which rule did it is offered right here. -->
+			{#if autoIgnored > 0}
+				<NoticeBand
+					intent="info"
+					surface="inset"
+					gutter="dialog"
+					title="{autoIgnored} rows were ignored automatically"
+					class="-mx-5"
+				>
+					Your ignore rules recognised them, so they are out of your monthly totals.
+					{#snippet action()}
+						<Button
+							size="sm"
+							variant="outline"
+							intent="secondary"
+							shape="default"
+							onclick={() => {
+								const id = result?.import_id;
+								close();
+								if (id) onReviewIgnored?.(id);
+							}}
+						>
+							Review what was ignored
+						</Button>
+					{/snippet}
+				</NoticeBand>
+			{/if}
+
 			{#if recurringStarted}
 				<Text as="p" size="sm" tone="muted">
 					New rows that match a recurring item you confirmed are linked to it.
@@ -325,13 +369,27 @@
 			</Text>
 
 			{#if failure}
-				<Alert intent="error" title="That file was not imported">{failure}</Alert>
+				<NoticeBand
+					intent="error"
+					surface="inset"
+					gutter="dialog"
+					title="That file was not imported"
+					class="-mx-5"
+				>
+					{failure}
+				</NoticeBand>
 			{/if}
 
 			{#if vendorOptions.length === 0}
-				<Alert intent="warning" title="No bank account">
+				<NoticeBand
+					intent="warning"
+					surface="inset"
+					gutter="dialog"
+					title="No bank account"
+					class="-mx-5"
+				>
 					Add an active bank vendor before importing a bank statement.
-				</Alert>
+				</NoticeBand>
 			{/if}
 
 			<FormField label="Bank account" id="cfi-account" hint="The account this statement belongs to">

@@ -6,7 +6,7 @@
 	// collapsing them into a single verdict.
 	import { ApiError } from '$lib/api/client';
 	import type { ImportResult, Vendor } from '$lib/api/types';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Dialog from '$lib/components/molecules/dialog/Dialog.svelte';
@@ -38,9 +38,17 @@
 		onFinished?: () => void;
 		/** Called when the user leaves for the portfolio from the result. */
 		onGoToPortfolio?: () => void;
+		/** Called with the cashflow import id when the user goes to review what it ignored. */
+		onReviewIgnored?: (importId: string) => void;
 	};
 
-	let { open = $bindable(false), vendors = [], onFinished, onGoToPortfolio }: Props = $props();
+	let {
+		open = $bindable(false),
+		vendors = [],
+		onFinished,
+		onGoToPortfolio,
+		onReviewIgnored
+	}: Props = $props();
 
 	/** How often an import in flight is re-read. Processing is detached, so it only arrives by asking. */
 	const POLL_MS = 1000;
@@ -115,6 +123,7 @@
 	}
 
 	const unlinkedProducts = $derived(portfolioResult?.unlinked_products ?? []);
+	const autoIgnored = $derived(cashflowResult?.auto_ignored ?? 0);
 
 	function trailState(result: ImportResult | null): TrailState {
 		if (phase === 'form') return 'pending';
@@ -367,10 +376,39 @@
 			{@render trail()}
 
 			{#if everythingKnown}
-				<Alert intent="info" title="No new transactions">
+				<NoticeBand intent="info" surface="inset" gutter="dialog" title="No new transactions" class="-mx-5">
 					Every row in this export was already imported earlier. Nothing was added, and nothing was
 					duplicated.
-				</Alert>
+				</NoticeBand>
+			{/if}
+
+			<!-- Rows an ignore rule caught are out of the totals without anybody reading
+			     them, so the review that shows which rule did it is offered right here. -->
+			{#if autoIgnored > 0}
+				<NoticeBand
+					intent="info"
+					surface="inset"
+					gutter="dialog"
+					title="{autoIgnored} rows were ignored automatically"
+					class="-mx-5"
+				>
+					Your ignore rules recognised them, so they are out of your monthly totals.
+					{#snippet action()}
+						<Button
+							size="sm"
+							variant="outline"
+							intent="secondary"
+							shape="default"
+							onclick={() => {
+								const id = cashflowResult?.import_id;
+								close();
+								if (id) onReviewIgnored?.(id);
+							}}
+						>
+							Review what was ignored
+						</Button>
+					{/snippet}
+				</NoticeBand>
 			{/if}
 
 			<div class="grid gap-4 sm:grid-cols-2">
@@ -417,13 +455,27 @@
 			</Text>
 
 			{#if failure}
-				<Alert intent="error" title="That file was not imported">{failure}</Alert>
+				<NoticeBand
+					intent="error"
+					surface="inset"
+					gutter="dialog"
+					title="That file was not imported"
+					class="-mx-5"
+				>
+					{failure}
+				</NoticeBand>
 			{/if}
 
 			{#if vendorOptions.length === 0}
-				<Alert intent="warning" title="No brokerage account">
+				<NoticeBand
+					intent="warning"
+					surface="inset"
+					gutter="dialog"
+					title="No brokerage account"
+					class="-mx-5"
+				>
 					Add an active brokerage vendor before importing a broker export.
-				</Alert>
+				</NoticeBand>
 			{/if}
 
 			<FormField label="Account" id="imp-account" hint="The brokerage account this export belongs to">

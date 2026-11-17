@@ -20,6 +20,9 @@
 	`asm` shows the interesting rows: one already tracked, one with no name, and one
 	with no price history — all three unselectable. `vwrl` then demonstrates the
 	metered provider search, because some VWRL listings exist only upstream.
+
+	Adopting a row fills the outcome box above the table; searching again clears it, since it
+	reports one batch and not the rows now on screen. The band stays until it is dismissed.
 -->
 <Story name="Marketstack catalogue" asChild>
 	<div>

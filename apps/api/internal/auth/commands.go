@@ -83,7 +83,8 @@ func NewCommands(
 // adopts by email, so the flow is self-healing.
 func (c *Commands) Authenticate(ctx context.Context, claims Claims) (*IssuedSession, error) {
 	// Checked before resolving the account, and on every sign-in rather than only the
-	// first, so removing someone from the allowlist locks them out at their next login.
+	// first. ResolveSession applies the same policy on every request, so removing someone
+	// from the allowlist also ends the sessions they already hold.
 	if !c.allowEmail(NormalizeEmail(claims.Email)) {
 		return nil, ErrEmailNotAllowed
 	}

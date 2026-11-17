@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"iter"
 	"net/http"
 	"sort"
@@ -99,9 +98,9 @@ func (c *Client) fetchDaily(ctx context.Context, currency DigitalCurrency) (map[
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("alphavantage: execute request: %w", err)
+		return nil, fmt.Errorf("alphavantage: execute request: %w", marketdata.RedactRequestError(err))
 	}
-	body, err := io.ReadAll(res.Body)
+	body, err := marketdata.ReadProviderBody(res.Body)
 	closeErr := res.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("alphavantage: read response body: %w", err)

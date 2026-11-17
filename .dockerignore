@@ -1,0 +1,21 @@
+# Only the two apps go into the build context; local config, secrets and build output never do.
+*
+!apps/api/
+!web/
+
+apps/api/.env
+apps/api/*.env
+apps/api/config.yaml
+apps/api/.fixture-data
+apps/api/bin
+apps/api/test
+apps/api/docs/features
+apps/api/**/*_test.go
+
+web/node_modules
+web/build
+web/.svelte-kit
+web/storybook-static
+web/.env
+web/.env.*
+!web/.env.example

@@ -13,10 +13,12 @@
 	import Heading from '$lib/components/atoms/typography/Heading.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { scaledToNumber } from '$lib/api/money';
 	import { recurringDirectionLabel, rhythmLabels } from '$lib/api/recurring';
+	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { RecurringRhythm, RecurringSuggestion } from '$lib/api/types';
 
 	type Props = {
@@ -26,6 +28,12 @@
 		error?: string | null;
 		/** The match key currently being confirmed or dismissed, if any. */
 		pending?: string | null;
+		/**
+		 * What confirming or dismissing reported. This drawer stays open afterwards and covers the
+		 * notice region under the masthead with its own scrim, so the outcome is stated here.
+		 */
+		notice?: NoticeMessage | null;
+		onDismissNotice?: () => void;
 		onConfirm?: (suggestion: RecurringSuggestion, name: string, rhythm: RecurringRhythm) => void;
 		onDismiss?: (suggestion: RecurringSuggestion) => void;
 	};
@@ -36,9 +44,19 @@
 		loading = false,
 		error = null,
 		pending = null,
+		notice = null,
+		onDismissNotice,
 		onConfirm,
 		onDismiss
 	}: Props = $props();
+
+	// Confirming and dismissing happen in a card that can sit below the fold of this scrolling
+	// drawer, while the band that reports the outcome is pinned at the top of it. So the band is
+	// brought into view when it appears instead of waiting above a list nobody scrolls back up.
+	let bandEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (notice) bandEl?.scrollIntoView({ block: 'nearest' });
+	});
 
 	// Adjusting opens in place: changing a name should not cost you the list you were
 	// reading, and the transactions behind the suggestion do not change either way.
@@ -76,6 +94,23 @@
 </script>
 
 <Drawer bind:open title="Suggestions from your history" width="max-w-lg">
+	{#if notice}
+		<!-- No timer behind this band, so it is dismissible: the drawer stays open while you work
+		     through the list, and the outcome waits for the reader. -->
+		<div bind:this={bandEl}>
+			<NoticeBand
+				intent={notice.intent}
+				surface="inset"
+				gutter="dialog"
+				class="-mx-5 -mt-4 mb-4"
+				dismissible
+				onDismiss={onDismissNotice}
+			>
+				{notice.message}
+			</NoticeBand>
+		</div>
+	{/if}
+
 	<Text size="sm" tone="muted" class="mb-4">
 		Patterns found in transactions you have not ignored. Nothing is added until you confirm it, and
 		a dismissed suggestion does not come back.
@@ -91,12 +126,7 @@
 			{/each}
 		</div>
 	{:else if error}
-		<p
-			class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-			role="alert"
-		>
-			{error}
-		</p>
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5">{error}</NoticeBand>
 	{:else if suggestions.length === 0}
 		<p class="py-8 text-center text-sm text-slate-500">
 			No patterns found in your history right now. Mark a transaction in Cashflow to start an item

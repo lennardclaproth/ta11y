@@ -97,9 +97,10 @@ func (s *Syncer) SyncEOD(ctx context.Context, lsID uuid.UUID, from, to *time.Tim
 		// This is desired.
 		from = listing.AccumulatedEnd
 	}
-	// If to is nil, accumulate only through the latest completed business date (exclude today).
-	if to == nil {
-		latestCompletedBusinessDate := date.LatestBusinessDate(time.Now(), time.Local)
+	// Accumulate only through the latest completed business date (exclude today). A later
+	// end would be recorded as accumulated and stop the listing from ever refreshing.
+	latestCompletedBusinessDate := date.LatestBusinessDate(time.Now(), time.Local)
+	if to == nil || to.After(latestCompletedBusinessDate) {
 		to = &latestCompletedBusinessDate
 	}
 	// Find EOD fetcher for listing source

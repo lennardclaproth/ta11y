@@ -1,6 +1,6 @@
-# [009]–[012],[023],[032],[035] Cashflow
+# [009]–[012],[023],[032],[035],[038] Cashflow
 
-> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · 032 (date changes) · 035 (goal purpose) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
+> **Feature IDs:** 009 (querying) · 010 (analytics) · 011 (tagging) · 012 (ignore) · 023 (manual transactions) · 032 (date changes) · 035 (ignore rules) · 038 (goal purpose) · **Area:** Core (user-facing) · **Status:** live; routes registered in `cmd/ta11y/main.go`
 >
 > **Backend packages:** `internal/cashflow` · `transport/http/handlers/cashflow` · `internal/storage/sqlx_cashflow_store.go` · `internal/importer/cashflow`
 >
@@ -13,22 +13,24 @@ from a CSV import ([002]) or manually entered — and are then queried, analyzed
 ignored:
 
 - **[009] Query** — list transactions with field filters (description/note/source contains,
-  direction, tags, untagged), a fuzzy `q`, `hide_ignored`, date range, sorting, and offset
+  direction, tags, untagged — `untagged` is one more choice next to `tags`, not a narrowing of
+  them), a fuzzy `q`, `hide_ignored`, date range, sorting, and offset
   pagination.
 - **[010] Analytics** — monthly incoming/outgoing/net trends, and tag distribution
   (combined / incoming / outgoing). Both accept a date range and `include_ignored`.
 - **[011] Tagging** — tag a single transaction, a selection of IDs, or everything matching a
   filter.
 - **[012] Ignore** — mark a selection or a filter match as ignored / not-ignored; ignored
-  rows drop out of analytics totals.
+  rows drop out of analytics totals. Both paths are by-hand paths, so they also set
+  `ignore_overridden`, which keeps an ignore rule ([035]) from undoing the decision later.
 - **[023] Manual create** — bulk-create up to 100 manual transactions for an account, on any
   day up to and including today.
 - **[032] Change date** — move one manually entered transaction to another day, today or
   earlier. Nothing else about it changes, and imported rows are refused.
-- **[035] Purpose** — mark a selection or a filter match as `income`, as `wealth`, or as
+- **[038] Purpose** — mark a selection or a filter match as `income`, as `wealth`, or as
   nothing, for the monthly wealth goal. Independent of the tag and the ignored flag; only
   incoming money can be income and only outgoing money a contribution. See
-  [Monthly wealth goal](%5B035%5D_WEALTH_GOAL.md) for what the marks are scored against.
+  [Monthly wealth goal](%5B038%5D_WEALTH_GOAL.md) for what the marks are scored against.
 
 ## Domain model
 
@@ -113,6 +115,7 @@ erDiagram
         uuid id PK
         uuid account_id FK
         uuid import_id FK "nullable (manual rows = NULL)"
+        uuid ignored_by_rule_id FK "nullable - the rule that ignored it [035]"
         string description
         string source
         bigint amount_cents
@@ -122,6 +125,7 @@ erDiagram
         string purpose "CHECK ''|income|wealth, default ''"
         string account_type "CHECK checking|savings|credit|brokerage, nullable"
         bool ignored "default false"
+        bool ignore_overridden "default false - decided by hand [035]"
         int row_number
         string checksum UK "unique - dedup key"
     }
@@ -154,13 +158,14 @@ stateDiagram-v2
         Tagged --> Untagged : clear tag
         --
         [*] --> Active
-        Active --> Ignored : ignore (selection / filter)
+        Active --> Ignored : ignore (selection / filter / rule [035])
         Ignored --> Active : un-ignore
     }
 ```
 
 Ignored transactions are excluded from analytics totals unless the request sets
-`include_ignored`.
+`include_ignored`. Which rows are ignored is also decided by ignore rules ([035]); how
+ignored rows count is unchanged.
 
 ## Filter-based tagging flow
 
@@ -201,12 +206,13 @@ sequenceDiagram
 | [010] Monthly | `GET /cashflow/analytics/monthly` | query: `from`, `to`, `include_ignored` | 200 `{data[]}` |
 | [010] Tag distribution | `GET /cashflow/analytics/tags` | query: `from`, `to`, `include_ignored` | 200 `{combined, incoming, outgoing}` |
 | [011] Tag one | `POST /cashflow/transactions/tag` | body: `id`, `tag` | 200 |
-| [011] Tag selection | `POST /cashflow/transactions/tag/selection` | body: `tag`, `ids[]` | 200 `{updated_count, status}` |
+| [011] Tag list | `GET /cashflow/tags` | — | 200 `{data: [{tag, count}]}` — every tag the account used, most used first; no period, untagged rows left out |
+| [011] Tag selection | `POST /cashflow/transactions/tag/selection` | body: `tag` (empty removes it), `ids[]` | 200 `{updated_count, status}` |
 | [011] Tag filter | `POST /cashflow/transactions/tag/filter` | body: `tag`, `account_id?`, `filters` | 200 (sync) / 202 (async, dead) |
 | [012] Ignore selection | `POST /cashflow/transactions/ignore/selection` | body: `ignored?` (default true), `ids[]` | 200 `{updated_count, status}` |
 | [012] Ignore filter | `POST /cashflow/transactions/ignore/filter` | body: `ignored?`, `filters` | 200 |
-| [035] Purpose selection | `POST /cashflow/transactions/purpose/selection` | body: `purpose`, `ids[]` | 200 `{updated_count, matched_count, status}` |
-| [035] Purpose filter | `POST /cashflow/transactions/purpose/filter` | body: `purpose`, `filters` | 200 `{updated_count, matched_count, status}` |
+| [038] Purpose selection | `POST /cashflow/transactions/purpose/selection` | body: `purpose`, `ids[]` | 200 `{updated_count, matched_count, status}` |
+| [038] Purpose filter | `POST /cashflow/transactions/purpose/filter` | body: `purpose`, `filters` | 200 `{updated_count, matched_count, status}` |
 
 **Error mapping (common):** decode / validation / `ParseDirection` / bad sort / bad date range /
 a date after today → 400; manual create `ErrAccountNotFound` and an unknown transaction id → 404;
@@ -236,9 +242,10 @@ rows updated).
   same file compares against, so it would insert the old row again.
 - **Filtering.** `description`/`note`/`source` use case-insensitive `LIKE %v%`; `direction`
   exact; `tags` OR-matched; `untagged` = empty tag; `hide_ignored` = `ignored = false`;
-  `purpose` OR-matches `income` / `wealth` / `none` (the empty purpose); `from`/`to`
-  bound `date`; `q` fuzzy-matches description/note/tag. Conditions are AND-joined.
-- **Marking a purpose ([035]).** The direction a purpose needs is part of the match, so a
+  `purpose` OR-matches `income` / `wealth` / `none` (the empty purpose) ([038]);
+  `import_id` / `ignored_by_rule` exact ([035]); `from`/`to` bound `date`; `q` fuzzy-matches
+  description/note/tag. Conditions are AND-joined.
+- **Marking a purpose ([038]).** The direction a purpose needs is part of the match, so a
   mixed selection updates only the rows it can and the response reports `updated_count`
   against `matched_count`; clearing a purpose carries no direction predicate. The mark is
   independent of the tag and the ignored flag.

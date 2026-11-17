@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import Icon from '$lib/components/atoms/icon/Icon.svelte';
   import Label from '$lib/components/atoms/label/Label.svelte';
   import Text from '$lib/components/atoms/typography/Text.svelte';
   import type { LabelSize } from '$lib/components/atoms/label/label.types';
@@ -51,7 +52,9 @@
   {@render children?.(context)}
 
   {#if error}
-    <div id={errorId} role="alert">
+    <!-- The same icon the notices use, so a per-field error reads as part of one family. -->
+    <div id={errorId} role="alert" class="flex items-center gap-1.5 text-red-700">
+      <Icon icon="heroicons:exclamation-circle" size="sm" />
       <Text as="span" size="sm" tone="danger">{error}</Text>
     </div>
   {:else if hint}

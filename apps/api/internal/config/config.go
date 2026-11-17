@@ -12,7 +12,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const configPath = "config.yaml"
+// defaultConfigPath is read relative to the working directory unless CONFIG_PATH names
+// another file.
+const defaultConfigPath = "config.yaml"
 
 type Config struct {
 	Server      Server      `yaml:"server"`
@@ -22,6 +24,15 @@ type Config struct {
 	Auth        Auth        `yaml:"auth"`
 	DiskStorage DiskStorage `yaml:"disk_storage"`
 	Providers   Providers   `yaml:"providers"`
+	MarketData  MarketData  `yaml:"marketdata"`
+}
+
+// MarketData tunes market-data behaviour that differs per deployment.
+type MarketData struct {
+	// MaxSeedPages caps how many provider pages one catalogue seed may request. Zero
+	// keeps the package default. Deployments whose instance can be stopped while idle
+	// keep it low so a seed finishes before the instance does.
+	MaxSeedPages int `yaml:"max_seed_pages"`
 }
 
 // Auth configures OpenID Connect sign-in. Client credentials are never read from
@@ -94,7 +105,13 @@ type Server struct {
 	// cross-origin (e.g. the SvelteKit dev server). Empty falls back to the
 	// local dev origin; a single "*" entry allows any origin.
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"`
+	// WebDir, when set, is a built web app (web/build) served at the root, with the API
+	// moved under APIPrefix so both share one origin. Empty serves the API alone at the root.
+	WebDir string `yaml:"web_dir"`
 }
+
+// APIPrefix is the path the API is mounted under when WebDir serves the web app.
+const APIPrefix = "/api"
 
 // Addr returns the listen address for the HTTP server: ":<port>" when no host is
 // configured, otherwise "<host>:<port>" (IPv6 hosts are bracketed).
@@ -144,7 +161,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("server host must be empty, localhost or an IP address, got %q", host)
 	}
 	if c.Database.ConnStr == "" {
-		return fmt.Errorf("database connection string cannot be empty")
+		return fmt.Errorf("database connection string cannot be empty: set database.connection_string or DATABASE_URL")
 	}
 	if c.Database.Type != "sqlite3" && c.Database.Type != "postgres" {
 		return fmt.Errorf("unsupported database type: %s", c.Database.Type)
@@ -166,6 +183,9 @@ func (c *Config) Validate() error {
 	}
 	if c.DiskStorage.BasePath == "" {
 		return fmt.Errorf("disk storage base path cannot be empty")
+	}
+	if c.MarketData.MaxSeedPages < 0 {
+		return fmt.Errorf("marketdata max_seed_pages cannot be negative")
 	}
 	if err := c.Auth.validate(); err != nil {
 		return err
@@ -189,16 +209,22 @@ func (c *Config) validateAuthPosture() error {
 	if len(c.Auth.AllowedEmails) == 0 {
 		return fmt.Errorf("auth.allowed_emails must list at least one address outside development: an empty allowlist lets anyone with an account at the identity provider sign in")
 	}
+	for _, origin := range c.Server.CORSAllowedOrigins {
+		if strings.TrimSpace(origin) == "*" {
+			return fmt.Errorf(`server.cors_allowed_origins cannot be "*" outside development: it lets any origin make credentialed requests and switches off the cross-origin check`)
+		}
+	}
 	return nil
 }
 
 // isDevelopment reports whether an environment may run without authentication. The
 // list is an allowlist rather than a "not production" check: an unfamiliar name such as
 // "staging" is treated as production-like, so a new environment is strict by default
-// instead of silently unauthenticated.
+// instead of silently unauthenticated. An unset environment is strict too, so a deployment
+// that forgets to name one cannot run unauthenticated.
 func isDevelopment(environment string) bool {
 	switch strings.ToLower(strings.TrimSpace(environment)) {
-	case "", "development", "dev", "local", "test", "ci":
+	case "development", "dev", "local", "test", "ci":
 		return true
 	default:
 		return false
@@ -267,7 +293,13 @@ func envPrefix(slug string) string {
 	return strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(strings.TrimSpace(slug)))
 }
 
+// ReadConfig loads the YAML file named by CONFIG_PATH (default config.yaml), then applies
+// environment overrides, so one image can serve several deployments.
 func ReadConfig() (*Config, error) {
+	configPath := strings.TrimSpace(os.Getenv("CONFIG_PATH"))
+	if configPath == "" {
+		configPath = defaultConfigPath
+	}
 	f, err := os.ReadFile(configPath)
 
 	if err != nil {
@@ -280,6 +312,9 @@ func ReadConfig() (*Config, error) {
 		return nil, fmt.Errorf("config: error decoding config: %w", err)
 	}
 
+	if err := cfg.applyEnvOverrides(); err != nil {
+		return nil, err
+	}
 	cfg.hydrateProviderEnv()
 	cfg.hydrateAuthEnv()
 	cfg.applyAPMDefaults()
@@ -307,6 +342,56 @@ func ReadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// applyEnvOverrides lets the environment replace the deployment-specific values of the
+// YAML file. A set variable wins over the file; an unset or blank one leaves it alone.
+// PORT follows the Cloud Run contract.
+func (c *Config) applyEnvOverrides() error {
+	if raw := strings.TrimSpace(os.Getenv("PORT")); raw != "" {
+		port, err := strconv.Atoi(raw)
+		if err != nil {
+			return fmt.Errorf("config: PORT must be a number, got %q", raw)
+		}
+		c.Server.Port = port
+	}
+	if raw := strings.TrimSpace(os.Getenv("MARKETDATA_MAX_SEED_PAGES")); raw != "" {
+		pages, err := strconv.Atoi(raw)
+		if err != nil {
+			return fmt.Errorf("config: MARKETDATA_MAX_SEED_PAGES must be a number, got %q", raw)
+		}
+		c.MarketData.MaxSeedPages = pages
+	}
+
+	overrideString(&c.Server.Environment, "SERVER_ENVIRONMENT")
+	overrideString(&c.Database.Type, "DATABASE_TYPE")
+	overrideString(&c.Database.ConnStr, "DATABASE_URL")
+	overrideString(&c.Logging.Level, "LOG_LEVEL")
+	overrideString(&c.DiskStorage.BasePath, "DISK_STORAGE_PATH")
+	overrideString(&c.Server.WebDir, "WEB_DIR")
+	overrideString(&c.Auth.FrontendURL, "AUTH_FRONTEND_URL")
+	overrideString(&c.Auth.CookieDomain, "AUTH_COOKIE_DOMAIN")
+	overrideList(&c.Server.CORSAllowedOrigins, "CORS_ALLOWED_ORIGINS")
+	overrideList(&c.Auth.AllowedEmails, "AUTH_ALLOWED_EMAILS")
+
+	for slug, provider := range c.Auth.Providers {
+		overrideString(&provider.RedirectURL, envPrefix(slug)+"_REDIRECT_URL")
+		c.Auth.Providers[slug] = provider
+	}
+	return nil
+}
+
+func overrideString(target *string, key string) {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		*target = v
+	}
+}
+
+// overrideList reads a comma-separated variable; blank entries and duplicates are dropped.
+func overrideList(target *[]string, key string) {
+	if values := splitAndDedupeCommaValues(os.Getenv(key)); len(values) > 0 {
+		*target = values
+	}
 }
 
 func (c *Config) hydrateProviderEnv() {

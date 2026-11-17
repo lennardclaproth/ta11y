@@ -96,6 +96,20 @@
 	/>
 </Story>
 
+<!-- Save and Delete report in the same band, so the heading names the button that was pressed
+     rather than describing a change that was never attempted. -->
+<Story name="Refused delete" asChild>
+	<PortfolioTransactionDrawer
+		open
+		transaction={manualBuy}
+		editable
+		originLabel="Manual"
+		{today}
+		errorTitle="This transaction was not deleted"
+		error="Could not delete the transaction. Try again."
+	/>
+</Story>
+
 <Story name="Imported, read-only" asChild>
 	<PortfolioTransactionDrawer open transaction={importedDividend} originLabel="DEGIRO" {today} />
 </Story>

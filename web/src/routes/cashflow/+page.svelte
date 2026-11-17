@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
@@ -29,6 +30,7 @@
 	import GoalLoadingCard from '$lib/components/organisms/wealth-goal-cards/GoalLoadingCard.svelte';
 	import SetGoalDialog from '$lib/components/organisms/set-goal-dialog/SetGoalDialog.svelte';
 	import MarkRecurringDialog from '$lib/components/organisms/mark-recurring-dialog/MarkRecurringDialog.svelte';
+	import TagTransactionsDialog from '$lib/components/organisms/tag-transactions-dialog/TagTransactionsDialog.svelte';
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import {
 		listCashflowTransactions,
@@ -36,8 +38,12 @@
 		getCashflowTagDistribution,
 		createCashflowTransactions,
 		changeCashflowTransactionDate,
+		ignoreCashflowTransactionsBySelection,
+		listCashflowTags,
 		tagCashflowTransactionsBySelection
 	} from '$lib/services/cashflow';
+	import { listIgnoreRules } from '$lib/services/ignoreRules';
+	import Switch from '$lib/components/atoms/switch/Switch.svelte';
 	import {
 		getWealthGoalStanding,
 		markCashflowPurposeByFilter,
@@ -63,16 +69,23 @@
 	} from '$lib/url/routeQuery';
 	import { pushQuery } from '$lib/url/queryState';
 	import { scaledToNumber } from '$lib/api/money';
-	import { cashflowOriginLabel, isManualCashflowTransaction } from '$lib/api/transactions';
+	import {
+		cashflowOriginLabel,
+		cashflowTagQuery,
+		isManualCashflowTransaction,
+		UNTAGGED_FILTER
+	} from '$lib/api/transactions';
 	import { ApiError } from '$lib/api/client';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { chartColors, donutRamps } from '$lib/charts/theme';
 	import type {
 		CashflowDirection,
+		CashflowTag,
 		CashflowTransaction,
 		CashflowTransactionsQuery,
 		CashflowMonthlyPoint,
 		MonthStanding,
+		IgnoreRule,
 		RecurringItem,
 		TagDistributionEntry,
 		TransactionPurpose,
@@ -80,6 +93,7 @@
 		WealthGoalStandingResponse
 	} from '$lib/api/types';
 	import type { MarkRecurringValue } from '$lib/components/organisms/mark-recurring-dialog/mark-recurring-dialog.types';
+	import type { TagTransactionsValue } from '$lib/components/organisms/tag-transactions-dialog/tag-transactions-dialog.types';
 	import type { SortDirection } from '$lib/components/organisms/data-table/data-table.types';
 	import type { MenuItem } from '$lib/components/molecules/action-menu/menu.types';
 
@@ -118,6 +132,19 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedIds = $state<string[]>([]);
+	// The rows behind the selection, by id. A selection outlives the page it was made on, and
+	// "select all" reaches rows no page has shown, so the current page alone cannot answer what
+	// is selected.
+	const knownRows = new SvelteMap<string, CashflowTransaction>();
+	let selectingAll = $state(false);
+
+	/**
+	 * Ignored rows are out of the ledger by default — that is what ignoring them is for.
+	 * Switching them back on is how you check what a rule did and put something back.
+	 */
+	let showIgnored = $state(false);
+	/** Named on every ignored row, so the rule that did it is visible rather than implied. */
+	let ignoreRules = $state<IgnoreRule[]>([]);
 
 	let monthly = $state<CashflowMonthlyPoint[]>([]);
 	let incoming = $state<TagDistributionEntry[]>([]);
@@ -145,9 +172,19 @@
 	let bankVendors = $state<Vendor[]>([]);
 	let brokerageVendors = $state<Vendor[]>([]);
 
+	let tagOpen = $state(false);
+	let tagging = $state(false);
+	let tagError = $state<string | null>(null);
+	/** What the tag dialog tags: the selection as it was when the dialog opened. */
+	let tagRows = $state<CashflowTransaction[]>([]);
+	let cashflowTags = $state<CashflowTag[]>([]);
+	let tagsLoading = $state(false);
+
 	let markOpen = $state(false);
 	let marking = $state(false);
 	let markError = $state<string | null>(null);
+	/** What the dialog marks: the table's selection, or the one row opened in the drawer. */
+	let markRows = $state<CashflowTransaction[]>([]);
 	let recurringItems = $state<RecurringItem[]>([]);
 
 	let detailRow = $state<CashflowTransaction | null>(null);
@@ -156,22 +193,28 @@
 	let savingDate = $state(false);
 	let dateError = $state<string | null>(null);
 
-	const tagOptions = $derived(
-		incoming
-			.concat(outgoing)
-			.map((entry) => entry.tag)
-			.filter((tag, index, all) => tag !== '' && all.indexOf(tag) === index)
-			.map((tag) => ({ value: tag, label: tag }))
-	);
+	// Untagged rows are a bucket in the tag totals, offered first so it can be picked on its own
+	// or next to a tag. An account that has tagged nothing yet has only this choice.
+	const tagOptions = $derived.by(() => {
+		const tags = incoming.concat(outgoing).map((entry) => entry.tag);
+		const named = tags.filter(
+			(tag, index) => tag !== '' && tag !== UNTAGGED_FILTER && tags.indexOf(tag) === index
+		);
+		const hasUntagged = tags.some((tag) => tag === '' || tag === UNTAGGED_FILTER);
+		return [
+			...(hasUntagged ? [{ value: UNTAGGED_FILTER, label: 'Untagged' }] : []),
+			...named.map((tag) => ({ value: tag, label: tag }))
+		];
+	});
 
 	// An empty ledger and an empty result set are different situations, so they read differently.
 	// The period is app-wide and always set, so it is not what makes this a filtered view.
 	const filtering = $derived(
 		Boolean(
 			descriptionFilter.trim() ||
-				tagFilter.length > 0 ||
-				directionFilter ||
-				purposeFilter.length > 0
+			tagFilter.length > 0 ||
+			directionFilter ||
+			purposeFilter.length > 0
 		)
 	);
 	const emptyText = $derived(
@@ -189,7 +232,7 @@
 	function currentQuery(): CashflowTransactionsQuery {
 		return {
 			description: descriptionFilter || undefined,
-			tags: tagFilter.join(',') || undefined,
+			...cashflowTagQuery(tagFilter),
 			direction: directionFilter ?? undefined,
 			purpose: purposeFilter.join(',') || undefined,
 			sort_by: (sortKey || 'date') as CashflowTransactionsQuery['sort_by'],
@@ -198,7 +241,7 @@
 			offset,
 			from: from || undefined,
 			to: to || undefined,
-			hide_ignored: true
+			hide_ignored: !showIgnored
 		};
 	}
 
@@ -229,6 +272,7 @@
 		try {
 			const result = await listCashflowTransactions(query);
 			if (id !== requestId) return;
+			for (const row of result.data) knownRows.set(row.id, row);
 			rows = result.data;
 			total = result.pagination.total;
 		} catch {
@@ -280,6 +324,8 @@
 	// Keep the URL in step with the period after it is changed elsewhere (the overview, or a
 	// drag on the chart). The first run is the page's own initial state, which the URL already
 	// holds -- rewriting it there would discard a deep-linked page offset.
+	// Only the period is a dependency: `syncUrl` reads the page offset and every filter, and
+	// tracking those would make each page change rerun this and send the table back to page one.
 	let periodSynced = false;
 	$effect(() => {
 		void periodStore.from;
@@ -288,8 +334,11 @@
 			periodSynced = true;
 			return;
 		}
-		offset = 0;
-		syncUrl();
+		untrack(() => {
+			offset = 0;
+			selectedIds = [];
+			syncUrl();
+		});
 	});
 
 	// Marking, saving a goal, an import and the realtime refresh all reload the standing, so two
@@ -465,7 +514,19 @@
 		}
 	}
 
+	// The rules are read once and only to name the rule on an ignored row; the ledger does
+	// not otherwise depend on them, so a failure leaves the rows reading "By hand" rather
+	// than taking the page down with it.
+	async function loadIgnoreRules() {
+		try {
+			ignoreRules = await listIgnoreRules();
+		} catch {
+			ignoreRules = [];
+		}
+	}
+
 	onMount(() => {
+		void loadIgnoreRules();
 		let realtime: { disconnect: () => void } | null = null;
 		void accountStore.ensureLoaded().then(() => {
 			if (!accountStore.hasAccount) return;
@@ -499,6 +560,7 @@
 		// header stops claiming you are still looking at it.
 		scopedMonth = null;
 		offset = 0;
+		selectedIds = [];
 		syncUrl();
 	}
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
@@ -531,11 +593,12 @@
 			void load(currentQuery());
 			void loadAnalytics();
 		} catch (err) {
+			// The modal stays open with the entry, so the refusal belongs in it. A toast on top of it
+			// would say the same thing twice.
 			createError =
 				err instanceof ApiError && err.status === 409
 					? `A transaction with the same amount and description already exists on ${formatDisplayDate(value.date)}. Pick another day.`
 					: 'Failed to create transaction';
-			toast.error('Failed to create transaction');
 		} finally {
 			creating = false;
 		}
@@ -578,28 +641,125 @@
 		return 'Could not change the date. Try again.';
 	}
 
-	async function handleBulkTag() {
-		const tag = window.prompt('Tag for the selected transactions')?.trim();
-		if (!tag) return;
-		const ids = selectedIds;
+	// The dialog opens at once and reads the tags while it is up: they are the account's whole
+	// history rather than this period's, so they are read when tagging starts, not with the page.
+	async function openTag() {
+		tagRows = selectedRows;
+		tagError = null;
+		tagOpen = true;
+		tagsLoading = true;
 		try {
-			await tagCashflowTransactionsBySelection({ tag, ids });
-			toast.success(`Tagged ${ids.length} transactions`);
-			selectedIds = [];
-			void load(currentQuery());
-			void loadAnalytics();
+			cashflowTags = (await listCashflowTags()).data;
 		} catch {
-			toast.error('Failed to tag transactions');
+			// Typing a tag still works without the list, so the dialog stays usable; it just
+			// offers nothing to pick from.
+			cashflowTags = [];
+		} finally {
+			tagsLoading = false;
 		}
 	}
 
-	const selectedRows = $derived(rows.filter((row) => selectedIds.includes(row.id)));
+	async function handleTag({ tag }: TagTransactionsValue) {
+		const ids = tagRows.filter((row) => row.tag.trim() !== tag).map((row) => row.id);
+		tagging = true;
+		tagError = null;
+		try {
+			await tagCashflowTransactionsBySelection({ tag, ids });
+			tagOpen = false;
+			const picked = new Set(tagRows.map((row) => row.id));
+			selectedIds = selectedIds.filter((id) => !picked.has(id));
+			const count = `${ids.length} ${ids.length === 1 ? 'transaction' : 'transactions'}`;
+			toast.success(tag ? `Tagged ${count} as “${tag}”` : `Removed the tag from ${count}`);
+			void load(currentQuery());
+			void loadAnalytics();
+		} catch {
+			tagError = 'Could not tag these transactions. Try again.';
+		} finally {
+			tagging = false;
+		}
+	}
+
+	/**
+	 * Puts ignored rows back in the ledger. The API records that the decision was made by
+	 * hand, so no rule ignores them again — which is the whole point of restoring one.
+	 */
+	async function restore(ids: string[]) {
+		if (ids.length === 0) return;
+		try {
+			await ignoreCashflowTransactionsBySelection({ ignored: false, ids });
+			selectedIds = selectedIds.filter((id) => !ids.includes(id));
+			toast.success(
+				ids.length === 1
+					? 'Put back in your ledger. Rules leave it alone from now on.'
+					: `Put ${ids.length} transactions back in your ledger`
+			);
+			void load(currentQuery());
+			void loadAnalytics();
+		} catch {
+			toast.error('Could not restore the transactions');
+		}
+	}
+
+	/**
+	 * Hands the selection to the rules page as a draft. The rule is still written and
+	 * previewed in the one place that owns rules, rather than guessed at from here: the
+	 * shared text of the selected descriptions is a starting point, not a decision.
+	 */
+	function makeRuleFromSelection() {
+		if (selectedRows.length === 0) return;
+		const contains = sharedPrefix(selectedRows.map((row) => row.description));
+		void goto(`/cashflow/ignore-rules?contains=${encodeURIComponent(contains)}`);
+	}
+
+	/** The longest leading text every selected description shares, trimmed at a word. */
+	function sharedPrefix(values: string[]): string {
+		if (values.length === 0) return '';
+		let prefix = values[0];
+		for (const value of values.slice(1)) {
+			while (prefix && !value.toLowerCase().startsWith(prefix.toLowerCase())) {
+				prefix = prefix.slice(0, -1);
+			}
+		}
+		const trimmed = prefix.trim();
+		// A prefix that stops mid-word would make a rule nobody can read, so fall back to
+		// the first description in full and let the preview show what it catches.
+		return trimmed.length >= 3 ? trimmed : values[0];
+	}
+
+	const selectedRows = $derived(
+		selectedIds.flatMap((id) => {
+			const row = knownRows.get(id);
+			return row ? [row] : [];
+		})
+	);
+
+	// Select-all in the table header takes the page; past it, every row matching the filters is
+	// one click away. Those are read in one request and selected by id, so every bulk action
+	// keeps working on ids whatever page they were picked on.
+	const pageSelected = $derived(
+		rows.length > 0 && rows.every((row) => selectedIds.includes(row.id))
+	);
+	const allSelected = $derived(total > 0 && selectedIds.length >= total);
+
+	async function selectAllMatching() {
+		selectingAll = true;
+		try {
+			const result = await listCashflowTransactions({ ...currentQuery(), limit: total, offset: 0 });
+			for (const row of result.data) knownRows.set(row.id, row);
+			selectedIds = result.data.map((row) => row.id);
+		} catch {
+			toast.error('Could not select every transaction. Try again.');
+		} finally {
+			selectingAll = false;
+		}
+	}
 
 	// The dialog offers "add to an existing item" first, so the items are read when it
 	// opens rather than on every page load: most visits never mark anything. They are read
 	// *before* opening, because the dialog picks its route once from the list it sees on
 	// opening — arriving late would point an account that already has items at "new".
-	async function openMark() {
+	async function openMark(selection: CashflowTransaction[]) {
+		markRows = selection;
 		markError = null;
 		try {
 			const overview = await getRecurringOverview();
@@ -612,13 +772,27 @@
 		markOpen = true;
 	}
 
+	/** The row opened in the drawer goes to the same dialog as a selection of one. */
+	function markDetailRow() {
+		const row = detailRow;
+		if (!row) return;
+		detailOpen = false;
+		void openMark([row]);
+	}
+
 	async function handleMarkRecurring(value: MarkRecurringValue) {
-		const ids = selectedIds;
+		const ids = markRows.map((row) => row.id);
 		marking = true;
 		markError = null;
 		try {
+			// A transaction belongs to one item at most; the API skips the ones that already do,
+			// so the count it reports is the one worth repeating.
+			let message: string;
 			if (value.mode === 'existing') {
-				await linkRecurringTransactions(value.itemId, { ids });
+				const { linked_count } = await linkRecurringTransactions(value.itemId, { ids });
+				const skipped = ids.length - linked_count;
+				message = `Linked ${linked_count} ${linked_count === 1 ? 'transaction' : 'transactions'}`;
+				if (skipped > 0) message += ` · ${skipped} already in another item`;
 			} else {
 				await createRecurringItem({
 					name: value.name,
@@ -626,14 +800,11 @@
 					rhythm: value.rhythm,
 					ids
 				});
+				message = `${value.name} added to recurring`;
 			}
 			markOpen = false;
-			selectedIds = [];
-			toast.success(
-				value.mode === 'existing'
-					? `Linked ${ids.length} transactions`
-					: `${value.name} added, with ${ids.length} transactions`
-			);
+			selectedIds = selectedIds.filter((id) => !ids.includes(id));
+			toast.success(message);
 		} catch (err) {
 			markError = markRecurringMessage(err);
 		} finally {
@@ -642,12 +813,24 @@
 	}
 
 	// The refusals worth naming are the ones the reader can act on: a name already taken,
-	// or an item that was ended and no longer takes transactions.
+	// transactions that already belong to another item, one running the other way or ignored,
+	// or an item that was ended and no longer takes transactions. The body's key tells them apart.
 	function markRecurringMessage(err: unknown): string {
-		if (err instanceof ApiError && err.status === 409) {
+		if (!(err instanceof ApiError)) return 'Could not mark these as recurring. Try again.';
+		const body = (err.body ?? {}) as Record<string, unknown>;
+		if (err.status === 409 && 'ids' in body) {
+			return 'These transactions already belong to another recurring item. Unlink them there first.';
+		}
+		if (err.status === 409) {
 			return 'A recurring item with that name already exists. Pick another name, or add these to it.';
 		}
-		if (err instanceof ApiError && err.status === 422) {
+		if (err.status === 422 && 'direction' in body) {
+			return 'That item runs the other way. Pick an item of the same direction, or start a new one.';
+		}
+		if (err.status === 422 && 'ignored' in body) {
+			return 'Ignored transactions are not linked to recurring items. Restore them first.';
+		}
+		if (err.status === 422) {
 			return 'That item was ended, so it takes no new transactions.';
 		}
 		return 'Could not mark these as recurring. Try again.';
@@ -684,6 +867,9 @@
 		void load(currentQuery());
 		void loadAnalytics();
 		void loadStanding();
+		// An import can switch a rule's harvest, and the rule names on the ledger's rows
+		// come from the list this page holds.
+		void loadIgnoreRules();
 	}
 
 	const cardGroups = [
@@ -709,8 +895,16 @@
 	]);
 
 	const filterMarkItems: MenuItem[] = $derived([
-		{ label: 'Mark as income', disabled: markingPurpose, onSelect: () => handleMarkFilter('income') },
-		{ label: 'Mark as wealth', disabled: markingPurpose, onSelect: () => handleMarkFilter('wealth') },
+		{
+			label: 'Mark as income',
+			disabled: markingPurpose,
+			onSelect: () => handleMarkFilter('income')
+		},
+		{
+			label: 'Mark as wealth',
+			disabled: markingPurpose,
+			onSelect: () => handleMarkFilter('wealth')
+		},
 		{ label: 'Clear purpose', disabled: markingPurpose, onSelect: () => handleMarkFilter('') }
 	]);
 </script>
@@ -852,14 +1046,50 @@
 					</Button>
 				{/if}
 			{/snippet}
+			<!-- What is in the list is a filter over these rows, so the ignored switch and the
+			     page that owns the rules sit with the filters rather than with the actions. -->
+			{#snippet filters()}
+				<div class="flex items-center gap-2 text-sm text-slate-700">
+					<Switch
+						checked={showIgnored}
+						aria-label="Show ignored rows"
+						onchange={(event) => {
+							showIgnored = (event.currentTarget as HTMLInputElement).checked;
+							offset = 0;
+							selectedIds = [];
+						}}
+					/>
+					<span>Show ignored rows</span>
+				</div>
+				<a
+					href="/cashflow/ignore-rules"
+					class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+				>
+					<Icon icon="heroicons:eye-slash" size="sm" />Ignore rules
+				</a>
+			{/snippet}
 			{#snippet actions()}
 				{#if selectedIds.length > 0}
-					<Button variant="ruled" onclick={handleBulkTag}>
+					<Button variant="ruled" onclick={() => void openTag()}>
 						<Icon icon="heroicons:tag" />
 						Tag {selectedIds.length} selected
 					</Button>
 					<ActionMenu label="Mark {selectedIds.length} selected…" items={selectionMarkItems} />
-					<Button variant="ruled" onclick={() => void openMark()}>
+					{#if showIgnored}
+						<Button
+							variant="ruled"
+							onclick={() =>
+								void restore(selectedRows.filter((row) => row.ignored).map((row) => row.id))}
+						>
+							<Icon icon="heroicons:arrow-uturn-left" />
+							Restore
+						</Button>
+					{/if}
+					<Button variant="ruled" onclick={makeRuleFromSelection}>
+						<Icon icon="heroicons:eye-slash" />
+						Make an ignore rule
+					</Button>
+					<Button variant="ruled" onclick={() => void openMark(selectedRows)}>
 						<Icon icon="heroicons:arrow-path-rounded-square" />
 						Mark as recurring
 					</Button>
@@ -878,11 +1108,41 @@
 				</Button>
 			{/snippet}
 		</LedgerToolbar>
+		{#if total > rows.length && (allSelected || pageSelected)}
+			<div
+				class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-amber-50 px-4 py-2 text-sm text-slate-700"
+				role="status"
+			>
+				{#if allSelected}
+					<span>All {total} transactions are selected.</span>
+					<button
+						type="button"
+						class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+						onclick={() => (selectedIds = [])}
+					>
+						Clear selection
+					</button>
+				{:else}
+					<span>All {rows.length} on this page are selected.</span>
+					<button
+						type="button"
+						class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:text-slate-400"
+						disabled={selectingAll}
+						onclick={() => void selectAllMatching()}
+					>
+						{selectingAll ? 'Selecting…' : `Select all ${total} transactions`}
+					</button>
+				{/if}
+			</div>
+		{/if}
 		<CashflowTransactionsTable
 			{rows}
 			{loading}
 			{error}
 			{total}
+			{showIgnored}
+			{ignoreRules}
+			onRestore={(row) => void restore([row.id])}
 			bind:limit
 			bind:offset
 			bind:selectedIds
@@ -899,6 +1159,7 @@
 			{onLimitChange}
 			{onFilterChange}
 			onRowClick={openDetail}
+			onRetry={() => void load(currentQuery())}
 		/>
 	</PageContentTemplate>
 </AppShellTemplate>
@@ -920,9 +1181,19 @@
 	onSave={handleSaveGoal}
 />
 
+<TagTransactionsDialog
+	bind:open={tagOpen}
+	selection={tagRows}
+	tags={cashflowTags}
+	{tagsLoading}
+	saving={tagging}
+	error={tagError}
+	onSubmit={handleTag}
+/>
+
 <MarkRecurringDialog
 	bind:open={markOpen}
-	selection={selectedRows}
+	selection={markRows}
 	items={recurringItems}
 	saving={marking}
 	error={markError}
@@ -934,6 +1205,7 @@
 	vendors={bankVendors}
 	onFinished={refreshAfterImport}
 	onBrokerageImport={() => (brokerageImportOpen = true)}
+	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
 />
 
 <ImportDialog
@@ -941,6 +1213,7 @@
 	vendors={brokerageVendors}
 	onFinished={refreshAfterImport}
 	onGoToPortfolio={() => void goto('/portfolio')}
+	onReviewIgnored={(id) => void goto(`/cashflow/imports/${id}`)}
 />
 
 {#snippet detailFields()}
@@ -956,6 +1229,14 @@
 	{/if}
 {/snippet}
 
+<!-- An ignored row is not linked to recurring items, so it gets no button to try. -->
+{#snippet detailActions()}
+	<Button variant="ruled" onclick={markDetailRow}>
+		<Icon icon="heroicons:arrow-path-rounded-square" />
+		Mark as recurring
+	</Button>
+{/snippet}
+
 {#if detailRow}
 	<TransactionDetailDrawer
 		bind:open={detailOpen}
@@ -969,5 +1250,6 @@
 		error={dateError}
 		onSave={handleDateChange}
 		details={detailFields}
+		actions={detailRow.ignored ? undefined : detailActions}
 	/>
 {/if}

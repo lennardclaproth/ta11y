@@ -47,9 +47,12 @@ See the [Podman Compose documentation](https://docs.podman.io/en/latest/markdown
 
 ```bash
 # 1. Start Postgres in Podman (the API auto-creates the DB and runs migrations on first start).
+#    The first run creates apps/api/.env from config.example.env: set your own
+#    POSTGRES_PASSWORD there, and the same password in DATABASE_URL, before starting.
 make db-up
 
-# 2. Build and run the API on http://localhost:6060 (reads apps/api/config.yaml).
+# 2. Build and run the API on http://localhost:6060 (reads apps/api/config.yaml, and
+#    DATABASE_URL from apps/api/.env).
 make run
 
 # 3. In a second terminal: point the frontend at the API and start it on http://localhost:5199.
@@ -127,6 +130,19 @@ is running, the UI is served at `http://localhost:6060/swagger/index.html`.
 ### Health
 
 `GET /health` returns `{"status":"ok"}`.
+
+### Deployment (GCP)
+
+Production is one Cloud Run service built from the root `Dockerfile`: the API serves the built web
+app at `/` and itself under `/api`, backed by Cloud SQL Postgres. Infrastructure lives in
+`deploy/terraform`, and `.github/workflows/deploy.yml` ships `main`. First-time setup and the
+design constraints (single instance, scale to zero) are in
+[[036] GCP deployment](apps/api/docs/features/%5B036%5D_GCP_DEPLOYMENT.md); the hands-on setup
+guide, DNS steps and gcloud commands are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+```bash
+docker build -t ta11y .
+```
 
 ## Frontend (`web`)
 

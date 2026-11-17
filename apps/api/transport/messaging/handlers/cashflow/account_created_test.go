@@ -45,7 +45,7 @@ func (s *recordingCashflowStore) UpdatePurposeByFilter(_ context.Context, _ cash
 
 func TestAccountCreatedCreatesCashflowProjection(t *testing.T) {
 	store := &recordingCashflowStore{}
-	commands := cashflow.NewCommands(store, nil, nil)
+	commands := cashflow.NewCommands(store, nil, nil, nil, nil)
 	handler := NewAccountCreatedHandler(commands, nil)
 
 	accID := uuid.New()

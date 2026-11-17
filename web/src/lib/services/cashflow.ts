@@ -1,6 +1,7 @@
 import { apiGet, apiSend } from '$lib/api/client';
 import { useMocks } from '$lib/api/config';
 import type {
+	CashflowTagsResponse,
 	CashflowBulkMutationResponse,
 	CashflowDirection,
 	ChangeCashflowTransactionDateRequest,
@@ -40,6 +41,53 @@ function compare(a: CashflowTransaction, b: CashflowTransaction, sortBy: string)
 	}
 }
 
+/**
+ * The ledger fixture mode works against. It is a copy rather than the fixture itself
+ * because ignoring and restoring have to stick for the session: a rule applied on the
+ * rules page has to be visible on Cashflow, and a row put back has to stay back — exactly
+ * what the feature is about. Nothing is persisted beyond a reload.
+ */
+let mockRows: CashflowTransaction[] = clone(cashflowTransactions);
+
+/** The session's ledger, for the fixture branches of the ignore-rule service. */
+export function mockCashflowRows(): CashflowTransaction[] {
+	return mockRows;
+}
+
+/**
+ * Attributes every row an ignore rule claimed to one import. Fixture rows carry no import
+ * of their own, so the review the person opened stands in for it — without this the group
+ * it shows could not be filtered back to, and "show the rest" would return the ledger.
+ */
+export function mutateMockImportId(importId: string): void {
+	mockRows = mockRows.map((tx) =>
+		tx.ignored_by_rule_id && !tx.import_id ? { ...tx, import_id: importId } : tx
+	);
+}
+
+/** Sets the ignored state of every session row the predicate picks, and counts them. */
+export function mutateMockIgnored(
+	predicate: (tx: CashflowTransaction) => boolean,
+	ignored: boolean,
+	ruleId: string | null
+): number {
+	let updated = 0;
+	mockRows = mockRows.map((tx) => {
+		if (!predicate(tx)) return tx;
+		updated += 1;
+		return {
+			...tx,
+			ignored,
+			// A rule's own apply keeps its attribution and leaves the row open to rules.
+			// A by-hand change marks the row, and only an ignore clears the attribution:
+			// restoring keeps it so the import review can still name the rule.
+			ignored_by_rule_id: ruleId ?? (ignored ? null : (tx.ignored_by_rule_id ?? null)),
+			ignore_overridden: ruleId === null ? true : (tx.ignore_overridden ?? false)
+		};
+	});
+	return updated;
+}
+
 function mockTransactions(query: CashflowTransactionsQuery): CashflowTransactionsResponse {
 	const tags = (query.tags ?? '')
 		.split(',')
@@ -52,15 +100,21 @@ function mockTransactions(query: CashflowTransactionsQuery): CashflowTransaction
 		.filter(Boolean)
 		.map((p) => (p === 'none' ? '' : p));
 
-	let rows = cashflowTransactions.filter((tx) => {
+	let rows = mockRows.filter((tx) => {
 		if (query.direction && tx.direction !== query.direction) return false;
 		if (query.hide_ignored && tx.ignored) return false;
-		if (query.untagged && tx.tag !== '') return false;
-		if (tags.length > 0 && !tags.includes(tx.tag)) return false;
+		// Untagged is one more choice next to the tags, as the API treats it.
+		if (
+			(query.untagged || tags.length > 0) &&
+			!((query.untagged && tx.tag === '') || tags.includes(tx.tag))
+		)
+			return false;
 		if (purposes.length > 0 && !purposes.includes(tx.purpose)) return false;
 		if (!contains(tx.description, query.description)) return false;
 		if (!contains(tx.note, query.note)) return false;
 		if (!contains(tx.source, query.source)) return false;
+		if (query.import_id && tx.import_id !== query.import_id) return false;
+		if (query.ignored_by_rule && tx.ignored_by_rule_id !== query.ignored_by_rule) return false;
 		if (query.from && tx.date.slice(0, 10) < query.from) return false;
 		if (query.to && tx.date.slice(0, 10) > query.to) return false;
 		if (query.q) {
@@ -195,6 +249,8 @@ export async function tagCashflowTransactionsBySelection(
 ): Promise<CashflowBulkMutationResponse> {
 	if (useMocks) {
 		await delay();
+		const tag = body.tag.trim();
+		mockRows = mockRows.map((tx) => (body.ids.includes(tx.id) ? { ...tx, tag } : tx));
 		return { updated_count: body.ids.length, status: 'ok' };
 	}
 	return apiSend<CashflowBulkMutationResponse>(
@@ -202,6 +258,24 @@ export async function tagCashflowTransactionsBySelection(
 		'/cashflow/transactions/tag/selection',
 		body
 	);
+}
+
+/** `GET /cashflow/tags` */
+export async function listCashflowTags(): Promise<CashflowTagsResponse> {
+	if (useMocks) {
+		await delay();
+		const counts = new Map<string, number>();
+		for (const tx of mockRows) {
+			const tag = tx.tag.trim();
+			if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+		}
+		return {
+			data: [...counts.entries()]
+				.map(([tag, count]) => ({ tag, count }))
+				.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+		};
+	}
+	return apiGet<CashflowTagsResponse>('/cashflow/tags');
 }
 
 /** `POST /cashflow/transactions/tag/filter` */
@@ -221,7 +295,8 @@ export async function ignoreCashflowTransactionsBySelection(
 ): Promise<CashflowBulkMutationResponse> {
 	if (useMocks) {
 		await delay();
-		return { updated_count: body.ids.length, status: 'ok' };
+		const updated = mutateMockIgnored((tx) => body.ids.includes(tx.id), body.ignored ?? true, null);
+		return { updated_count: updated, status: 'ok' };
 	}
 	return apiSend<CashflowBulkMutationResponse>(
 		'POST',
@@ -236,7 +311,19 @@ export async function ignoreCashflowTransactionsByFilter(
 ): Promise<CashflowBulkMutationResponse> {
 	if (useMocks) {
 		await delay();
-		return { updated_count: 0, status: 'ok' };
+		const f = body.filters;
+		const updated = mutateMockIgnored(
+			(tx) =>
+				(!f.import_id || tx.import_id === f.import_id) &&
+				(!f.ignored_by_rule || tx.ignored_by_rule_id === f.ignored_by_rule) &&
+				(!f.direction || tx.direction === f.direction) &&
+				contains(tx.description, f.description) &&
+				contains(tx.note, f.note) &&
+				contains(tx.source, f.source),
+			body.ignored ?? true,
+			null
+		);
+		return { updated_count: updated, status: 'ok' };
 	}
 	return apiSend<CashflowBulkMutationResponse>(
 		'POST',

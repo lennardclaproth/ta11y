@@ -9,7 +9,7 @@
 	import FormField from '$lib/components/molecules/form-field/FormField.svelte';
 	import SearchInput from '$lib/components/molecules/search-input/SearchInput.svelte';
 	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
-	import Alert from '$lib/components/molecules/alert/Alert.svelte';
+	import NoticeBand from '$lib/components/molecules/notice-band/NoticeBand.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import CurrencyInput from '$lib/components/atoms/currency-input/CurrencyInput.svelte';
@@ -281,9 +281,15 @@
 				</Text>
 
 				{#if quotesError}
-					<Alert intent="error" title="The instruments could not be loaded">
+					<NoticeBand
+						intent="error"
+						surface="inset"
+						gutter="dialog"
+						title="The instruments could not be loaded"
+						class="-mx-5"
+					>
 						{quotesError}
-					</Alert>
+					</NoticeBand>
 				{:else if quotesLoading}
 					<p class="px-4 py-8 text-center text-sm text-slate-500" aria-busy="true">
 						Loading instruments…
@@ -364,7 +370,15 @@
 				{/if}
 			{:else}
 				{#if saveError}
-					<Alert intent="error" title="This item could not be saved">{saveError}</Alert>
+					<NoticeBand
+						intent="error"
+						surface="inset"
+						gutter="dialog"
+						title="This item could not be saved"
+						class="-mx-5"
+					>
+						{saveError}
+					</NoticeBand>
 				{/if}
 				<FormField label="Name" id="add-manual-name" error={fieldErrors.name}>
 					{#snippet children(ctx)}
@@ -441,9 +455,17 @@
 			</div>
 
 			{#if saveError}
-				<!-- What was typed stays on screen; the alert says what failed and the field says what
+				<!-- What was typed stays on screen; the band says what failed and the field says what
 				     to change. -->
-				<Alert intent="error" title="This purchase could not be saved">{saveError}</Alert>
+				<NoticeBand
+					intent="error"
+					surface="inset"
+					gutter="dialog"
+					title="This purchase could not be saved"
+					class="-mx-5"
+				>
+					{saveError}
+				</NoticeBand>
 			{/if}
 
 			<div class="grid gap-3 sm:grid-cols-3">
