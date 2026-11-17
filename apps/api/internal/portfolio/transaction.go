@@ -251,6 +251,41 @@ func (t *Transaction) MovedTo(day time.Time) *Transaction {
 	return &moved
 }
 
+// maxRecoverableDedupSeq bounds the search RekeyedChecksum makes for the sequence a
+// stored checksum was built with. Identical rows inside one file are rare, so a few
+// dozen sequences cover every import seen in practice.
+const maxRecoverableDedupSeq = 64
+
+// RekeyedChecksum returns the checksum the transaction would carry had it been created
+// in accID with the same dedup sequence, so a row restored into another account still
+// dedupes against a later import of the same statement there. The sequence is not
+// stored: it is recovered by reproducing the stored checksum under the transaction's own
+// AccountID, without the position mapping a rebuild writes later. It reports false when
+// no sequence reproduces it.
+func (t *Transaction) RekeyedChecksum(accID uuid.UUID) (string, bool) {
+	probe := *t
+	probe.PositionID = nil
+	// A row without an explicit sequence was digested with its row number.
+	if sum, ok := probe.rekeyedWith(t.RowNumber, accID); ok {
+		return sum, true
+	}
+	for seq := 1; seq <= maxRecoverableDedupSeq; seq++ {
+		if sum, ok := probe.rekeyedWith(seq, accID); ok {
+			return sum, true
+		}
+	}
+	return "", false
+}
+
+func (t *Transaction) rekeyedWith(seq int, accID uuid.UUID) (string, bool) {
+	if t.generateChecksum(seq) != t.Checksum {
+		return "", false
+	}
+	rekeyed := *t
+	rekeyed.AccountID = &accID
+	return rekeyed.generateChecksum(seq), true
+}
+
 // GetID returns the identifier for the transaction, which is either the ISIN or Symbol. This is used for mapping transactions to positions. If both ISIN and Symbol are missing, it returns an error.
 // ISIN takes precedence over Symbol for the ID.
 func (t *Transaction) GetID() (string, error) {

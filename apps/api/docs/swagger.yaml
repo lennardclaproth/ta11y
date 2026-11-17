@@ -48,6 +48,22 @@ definitions:
       updated_at:
         type: string
     type: object
+  assets.ChangeDirection:
+    enum:
+    - INCREASE
+    - DECREASE
+    type: string
+    x-enum-varnames:
+    - ChangeDirectionIncrease
+    - ChangeDirectionDecrease
+  assets.ChangeType:
+    enum:
+    - SET
+    - ADJUST
+    type: string
+    x-enum-varnames:
+    - ChangeTypeSet
+    - ChangeTypeAdjust
   assets.ClassDetailsResponse:
     properties:
       assets:
@@ -310,6 +326,454 @@ definitions:
           type: string
         type: array
     type: object
+  backup.AssetClass:
+    properties:
+      archived:
+        type: boolean
+      created_at:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/backup.AssetItem'
+        type: array
+      name:
+        type: string
+    type: object
+  backup.AssetItem:
+    properties:
+      archived:
+        type: boolean
+      created_at:
+        type: string
+      current_worth_cents:
+        type: integer
+      listing:
+        $ref: '#/definitions/backup.ListingRef'
+      mutations:
+        items:
+          $ref: '#/definitions/backup.AssetMutation'
+        type: array
+      name:
+        type: string
+      purchases:
+        items:
+          $ref: '#/definitions/backup.AssetPurchase'
+        type: array
+    type: object
+  backup.AssetMutation:
+    properties:
+      amount_cents:
+        type: integer
+      change_type:
+        $ref: '#/definitions/assets.ChangeType'
+      class_total_worth_cents:
+        type: integer
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/assets.ChangeDirection'
+      effective_date:
+        format: date
+        type: string
+      new_worth_cents:
+        type: integer
+      note:
+        type: string
+      previous_worth_cents:
+        type: integer
+    type: object
+  backup.AssetPurchase:
+    properties:
+      created_at:
+        type: string
+      purchased_on:
+        format: date
+        type: string
+      quantity:
+        type: number
+      unit_price_cents:
+        type: integer
+    type: object
+  backup.AssetsFile:
+    properties:
+      classes:
+        items:
+          $ref: '#/definitions/backup.AssetClass'
+        type: array
+      exported_at:
+        type: string
+      format:
+        type: string
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      version:
+        type: integer
+    type: object
+  backup.AssetsImportResponse:
+    properties:
+      classes:
+        $ref: '#/definitions/backup.CountResponse'
+      dry_run:
+        type: boolean
+      items:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      mutations:
+        $ref: '#/definitions/backup.CountResponse'
+      purchases:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.CashflowFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      ignore_rules:
+        items:
+          $ref: '#/definitions/backup.IgnoreRule'
+        type: array
+      imports:
+        items:
+          $ref: '#/definitions/backup.Import'
+        type: array
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      recurring_dismissals:
+        items:
+          $ref: '#/definitions/backup.Dismissal'
+        type: array
+      recurring_items:
+        items:
+          $ref: '#/definitions/backup.RecurringItem'
+        type: array
+      source_account_id:
+        description: |-
+          SourceAccountID is the account the file was exported from. Dedup checksums
+          digest the account, so it is what lets a restore into another account re-derive
+          them.
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/backup.CashflowTransaction'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.CashflowImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      ignore_rules:
+        $ref: '#/definitions/backup.CountResponse'
+      imports:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      recurring_dismissals:
+        $ref: '#/definitions/backup.CountResponse'
+      recurring_items:
+        $ref: '#/definitions/backup.CountResponse'
+      recurring_links:
+        $ref: '#/definitions/backup.CountResponse'
+      transactions:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.CashflowTransaction:
+    properties:
+      account_type:
+        $ref: '#/definitions/cashflow.AccountType'
+      amount_cents:
+        type: integer
+      checksum:
+        type: string
+      created_at:
+        type: string
+      date:
+        format: date
+        type: string
+      description:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      ignore_overridden:
+        type: boolean
+      ignored:
+        type: boolean
+      ignored_by_rule_ref:
+        type: string
+      import_ref:
+        type: string
+      note:
+        type: string
+      ref:
+        type: string
+      row_number:
+        type: integer
+      source:
+        type: string
+      tag:
+        type: string
+    type: object
+  backup.CountResponse:
+    properties:
+      existing:
+        type: integer
+      new:
+        type: integer
+    type: object
+  backup.Dismissal:
+    properties:
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      match_key:
+        type: string
+    type: object
+  backup.EOD:
+    properties:
+      close_cents:
+        type: integer
+      date:
+        format: date
+        type: string
+      high_cents:
+        type: integer
+      low_cents:
+        type: integer
+      open_cents:
+        type: integer
+      split_factor:
+        type: number
+      volume:
+        type: integer
+    type: object
+  backup.EODFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      listings:
+        items:
+          $ref: '#/definitions/backup.EODListing'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.EODImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      eods:
+        $ref: '#/definitions/backup.CountResponse'
+      listings:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+    type: object
+  backup.EODListing:
+    properties:
+      eods:
+        items:
+          $ref: '#/definitions/backup.EOD'
+        type: array
+      name:
+        type: string
+      source:
+        $ref: '#/definitions/marketdata.Source'
+      symbol:
+        type: string
+    type: object
+  backup.IgnoreRule:
+    properties:
+      contains:
+        type: string
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      enabled:
+        type: boolean
+      ignored_total:
+        type: integer
+      last_applied_at:
+        type: string
+      match_field:
+        $ref: '#/definitions/cashflow.MatchField'
+      name:
+        type: string
+      ref:
+        type: string
+      source:
+        type: string
+    type: object
+  backup.Import:
+    properties:
+      auto_ignored:
+        type: integer
+      created_at:
+        type: string
+      duplicates:
+        type: integer
+      failed:
+        type: integer
+      imported:
+        type: integer
+      ref:
+        type: string
+      source:
+        type: string
+      status:
+        $ref: '#/definitions/importer.ImportStatus'
+      status_msg:
+        type: string
+      total_rows:
+        type: integer
+      type:
+        $ref: '#/definitions/importer.ImportType'
+      vendor:
+        type: string
+    type: object
+  backup.Kind:
+    enum:
+    - cashflow
+    - portfolio
+    - assets
+    - eods
+    type: string
+    x-enum-varnames:
+    - KindCashflow
+    - KindPortfolio
+    - KindAssets
+    - KindEOD
+  backup.ListingRef:
+    properties:
+      source:
+        $ref: '#/definitions/marketdata.Source'
+      symbol:
+        type: string
+    type: object
+  backup.ListingRefResponse:
+    properties:
+      source:
+        type: string
+      symbol:
+        type: string
+    type: object
+  backup.MissingResponse:
+    properties:
+      listings:
+        items:
+          $ref: '#/definitions/backup.ListingRefResponse'
+        type: array
+      vendors:
+        items:
+          type: string
+        type: array
+    type: object
+  backup.PortfolioFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      imports:
+        items:
+          $ref: '#/definitions/backup.Import'
+        type: array
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      source_account_id:
+        description: SourceAccountID is the account the file was exported from; see
+          CashflowFile.
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/backup.PortfolioTransaction'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.PortfolioImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      imports:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      transactions:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.PortfolioTransaction:
+    properties:
+      amount_cents:
+        type: integer
+      checksum:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      import_ref:
+        type: string
+      isin:
+        type: string
+      occurred_at:
+        format: date
+        type: string
+      origin:
+        $ref: '#/definitions/portfolio.TransactionOrigin'
+      quantity:
+        type: number
+      ref:
+        type: string
+      row_number:
+        type: integer
+      source:
+        type: string
+      symbol:
+        type: string
+      type:
+        $ref: '#/definitions/portfolio.TransactionType'
+      unit_price_cents:
+        type: integer
+    type: object
+  backup.RecurringItem:
+    properties:
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      ended_from:
+        format: date
+        type: string
+      match_key:
+        type: string
+      name:
+        type: string
+      rhythm:
+        $ref: '#/definitions/cashflow.Rhythm'
+      transaction_refs:
+        items:
+          type: string
+        type: array
+    type: object
+  cashflow.AccountType:
+    enum:
+    - checking
+    - savings
+    - credit
+    - brokerage
+    type: string
+    x-enum-varnames:
+    - AccountTypeChecking
+    - AccountTypeSavings
+    - AccountTypeCredit
+    - AccountTypeBrokerage
   cashflow.ApplyIgnoreRuleResponse:
     properties:
       ignored_count:
@@ -317,6 +781,14 @@ definitions:
       status:
         type: string
     type: object
+  cashflow.CashFlowDirection:
+    enum:
+    - in
+    - out
+    type: string
+    x-enum-varnames:
+    - CashIn
+    - CashOut
   cashflow.CashflowMonthlyAnalyticsResponse:
     properties:
       data:
@@ -561,6 +1033,14 @@ definitions:
           type: string
         type: array
     type: object
+  cashflow.MatchField:
+    enum:
+    - description
+    - note
+    type: string
+    x-enum-varnames:
+    - MatchFieldDescription
+    - MatchFieldNote
   cashflow.MonthlyAnalyticsPointResponse:
     properties:
       incoming_cents:
@@ -712,6 +1192,16 @@ definitions:
       source:
         type: string
     type: object
+  cashflow.Rhythm:
+    enum:
+    - monthly
+    - quarterly
+    - yearly
+    type: string
+    x-enum-varnames:
+    - RhythmMonthly
+    - RhythmQuarterly
+    - RhythmYearly
   cashflow.TagDistributionEntryResponse:
     properties:
       tag:
@@ -1120,6 +1610,30 @@ definitions:
       updated_at:
         type: string
     type: object
+  importer.ImportStatus:
+    enum:
+    - pending
+    - processing
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ImportStatusPending
+    - ImportStatusProcessing
+    - ImportStatusInProgress
+    - ImportStatusCompleted
+    - ImportStatusFailed
+  importer.ImportType:
+    enum:
+    - cashflow
+    - portfolio
+    - eod
+    type: string
+    x-enum-varnames:
+    - ImportTypeCashflow
+    - ImportTypePortfolio
+    - ImportTypeEOD
   importer.UnlinkedProductResponse:
     properties:
       isin:
@@ -1163,6 +1677,16 @@ definitions:
       volume:
         type: integer
     type: object
+  marketdata.Source:
+    enum:
+    - alpha_vantage
+    - market_stack
+    - brandnewday
+    type: string
+    x-enum-varnames:
+    - SourceAlphaVantage
+    - SourceMarketStack
+    - SourceBrandNewDay
   portfolio.ChangePortfolioTransactionDateRequest:
     properties:
       id:
@@ -1358,6 +1882,32 @@ definitions:
       value_index:
         type: number
     type: object
+  portfolio.TransactionOrigin:
+    enum:
+    - IMPORT
+    - MANUAL
+    type: string
+    x-enum-varnames:
+    - TransactionOriginImport
+    - TransactionOriginManual
+  portfolio.TransactionType:
+    enum:
+    - BUY
+    - SELL
+    - DIVIDEND
+    - TAX
+    - FEE
+    - CASH
+    - SPLIT
+    type: string
+    x-enum-varnames:
+    - TxBuy
+    - TxSell
+    - TxDividend
+    - TxTax
+    - TxFee
+    - TxCash
+    - TxSplit
   portfolio.UpdatePortfolioTransactionRequest:
     properties:
       amount:
@@ -2374,6 +2924,318 @@ paths:
       summary: List identity providers
       tags:
       - auth
+  /backup/assets/export:
+    get:
+      description: Returns the asset classes the signed-in account keeps by hand,
+        with their items, worth changes and purchases, as one JSON file. The portfolio-sourced
+        class is left out and rebuilt from the portfolio.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.AssetsFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export asset classes
+      tags:
+      - backup
+  /backup/assets/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges an assets backup file into the signed-in account: classes
+        are matched by name and items by class and name; an item the account already
+        holds keeps its own history, new ones come in with theirs. The whole file
+        lands or nothing does; asset snapshots are rebuilt afterwards. With dry_run
+        the counts are reported and nothing is written. A file naming listings this
+        instance lacks is refused with 409 and the missing ones listed.'
+      parameters:
+      - description: Assets backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.AssetsImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Listings missing
+          schema:
+            $ref: '#/definitions/backup.AssetsImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable assets backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import asset classes
+      tags:
+      - backup
+  /backup/cashflow/export:
+    get:
+      description: Returns every cashflow transaction of the signed-in account with
+        its tag and ignored state, the imports that brought them in, the ignore rules,
+        and the recurring items with their links and dismissals, as one JSON file.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.CashflowFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export cashflow
+      tags:
+      - backup
+  /backup/cashflow/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges a cashflow backup file into the signed-in account: transactions,
+        rules and recurring items the account has are skipped, new ones are added,
+        and the whole file lands or nothing does. With dry_run the counts are reported
+        and nothing is written. A file naming vendors this instance lacks is refused
+        with 409 and the missing ones listed.'
+      parameters:
+      - description: Cashflow backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.CashflowImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Vendors missing
+          schema:
+            $ref: '#/definitions/backup.CashflowImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable cashflow backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import cashflow
+      tags:
+      - backup
+  /backup/eods/export:
+    get:
+      description: Returns the end-of-day prices of every listing that has any, with
+        their split factors, as one JSON file. Listings are named by symbol and source.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.EODFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export the end-of-day prices
+      tags:
+      - backup
+  /backup/eods/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges an EOD backup file: days a listing has are skipped, new
+        ones are added with their split factor, and the whole file lands or nothing
+        does. With dry_run the counts are reported and nothing is written. A file
+        naming listings this instance lacks is refused with 409 and the missing ones
+        listed.'
+      parameters:
+      - description: EOD backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.EODImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Listings missing
+          schema:
+            $ref: '#/definitions/backup.EODImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable EOD backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import end-of-day prices
+      tags:
+      - backup
+  /backup/portfolio/export:
+    get:
+      description: Returns every portfolio transaction of the signed-in account with
+        the imports that brought them in, as one JSON file. Positions and snapshots
+        are left out and rebuilt on import.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.PortfolioFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export portfolio
+      tags:
+      - backup
+  /backup/portfolio/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges a portfolio backup file into the signed-in account: transactions
+        the account has are skipped, new ones are added, and the whole file lands
+        or nothing does; the portfolio is rebuilt afterwards. With dry_run the counts
+        are reported and nothing is written. A file naming vendors this instance lacks
+        is refused with 409 and the missing ones listed.'
+      parameters:
+      - description: Portfolio backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.PortfolioImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Vendors missing
+          schema:
+            $ref: '#/definitions/backup.PortfolioImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable portfolio backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import portfolio
+      tags:
+      - backup
   /cashflow/analytics/monthly:
     get:
       consumes:

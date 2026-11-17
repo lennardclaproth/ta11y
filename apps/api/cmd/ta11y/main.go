@@ -13,6 +13,7 @@ import (
 	"github.com/lennardclaproth/ta11y/internal/account"
 	"github.com/lennardclaproth/ta11y/internal/assets"
 	"github.com/lennardclaproth/ta11y/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/backup"
 	"github.com/lennardclaproth/ta11y/internal/bootstrap"
 	"github.com/lennardclaproth/ta11y/internal/cashflow"
 	"github.com/lennardclaproth/ta11y/internal/config"
@@ -40,6 +41,7 @@ import (
 	accounthttp "github.com/lennardclaproth/ta11y/transport/http/handlers/account"
 	assethttp "github.com/lennardclaproth/ta11y/transport/http/handlers/assets"
 	authhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/auth"
+	backuphttp "github.com/lennardclaproth/ta11y/transport/http/handlers/backup"
 	cashflowhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/cashflow"
 	importerhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/importer"
 	marketdatahttp "github.com/lennardclaproth/ta11y/transport/http/handlers/marketdata"
@@ -103,6 +105,9 @@ type application struct {
 	marketDataCatalog  *marketdata.Catalogue
 	marketDataCreds    *marketdata.Credentials
 	marketDataQuotes   *marketdata.Quotes
+
+	backupCommands *backup.Commands
+	backupQueries  *backup.Queries
 }
 
 func main() {
@@ -277,6 +282,7 @@ func buildApplication(
 	assetsStore := storage.NewSQLXAssetsStore(db)
 	importerStore := storage.NewSQLXImporterStore(db)
 	marketDataStore := storage.NewSQLXMarketDataStore(db)
+	backupStore := storage.NewSQLXBackupStore(db)
 	fileStore := files.NewDisk(cfg.DiskStorage.BasePath)
 
 	marketStackClient := marketstack.NewMarketStackClient(marketDataStore, marketdata.ProviderMarketStack)
@@ -331,6 +337,8 @@ func buildApplication(
 		importer.WithProcessors(cashflowProcessor, portfolioProcessor, eodProcessor),
 	)
 	importerQueries := importer.NewQueries(importerStore, portfolioQueries)
+	backupCommands := backup.NewCommands(backupStore, backupStore, bus)
+	backupQueries := backup.NewQueries(backupStore, backupStore)
 
 	return &application{
 		log: log,
@@ -373,6 +381,9 @@ func buildApplication(
 		marketDataCatalog:  marketDataCatalog,
 		marketDataCreds:    marketDataCreds,
 		marketDataQuotes:   marketDataQuotes,
+
+		backupCommands: backupCommands,
+		backupQueries:  backupQueries,
 	}
 }
 
@@ -404,7 +415,14 @@ func registerEventHandlers(bus eventbus.Bus, app *application) error {
 	if err := subscribe(bus, portfolio.TopicRebuilt, notify.NewPortfolioRebuiltHandler(app.hub).Handle); err != nil {
 		return err
 	}
-	if err := subscribe(bus, assets.TopicSnapshotsRebuildRequested, assetsevents.NewSnapshotsRebuildRequestedHandler(app.assetsHoldings, app.assetsBuilder, bus, app.log).Handle); err != nil {
+	snapshotsRebuild := assetsevents.NewSnapshotsRebuildRequestedHandler(app.assetsHoldings, app.assetsBuilder, bus, app.log)
+	if err := subscribe(bus, assets.TopicSnapshotsRebuildRequested, snapshotsRebuild.Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, backup.TopicPortfolioRestored, portfolioevents.NewRestoredHandler(app.portfolioBuilder, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, backup.TopicAssetsRestored, assetsevents.NewRestoredHandler(snapshotsRebuild).Handle); err != nil {
 		return err
 	}
 	if err := subscribe(bus, assets.TopicSnapshotsRebuilt, notify.NewAssetsSnapshotsRebuiltHandler(app.hub).Handle); err != nil {
@@ -539,6 +557,17 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("PUT /assets/{asset_id}/purchases/{purchase_id}", assethttp.UpdatePurchase(app.log, *app.assetsCommands))
 	protected("DELETE /assets/{asset_id}/purchases/{purchase_id}", assethttp.DeletePurchase(app.log, *app.assetsCommands))
 	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
+
+	// A backup of cashflow, portfolio or assets holds only the signed-in account's
+	// records. End-of-day prices are shared reference data, so only administrators move them.
+	protected("GET /backup/cashflow/export", backuphttp.ExportCashflow(app.log, app.backupQueries))
+	protected("POST /backup/cashflow/import", backuphttp.ImportCashflow(app.log, app.backupCommands))
+	protected("GET /backup/portfolio/export", backuphttp.ExportPortfolio(app.log, app.backupQueries))
+	protected("POST /backup/portfolio/import", backuphttp.ImportPortfolio(app.log, app.backupCommands))
+	protected("GET /backup/assets/export", backuphttp.ExportAssets(app.log, app.backupQueries))
+	protected("POST /backup/assets/import", backuphttp.ImportAssets(app.log, app.backupCommands))
+	adminOnly("GET /backup/eods/export", backuphttp.ExportEODs(app.log, app.backupQueries))
+	adminOnly("POST /backup/eods/import", backuphttp.ImportEODs(app.log, app.backupCommands))
 }
 
 func closeDB(log logging.Logger, db *storage.DB) {

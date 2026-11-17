@@ -123,3 +123,33 @@ func checksumOf(t *testing.T, data TransactionData, accountID uuid.UUID) string 
 	}
 	return tx.Checksum
 }
+
+func TestRekeyedChecksum_MatchesAFreshImportIntoTheTargetAccount(t *testing.T) {
+	source, target := uuid.New(), uuid.New()
+	build := func(accID uuid.UUID, dedupSeq int) *Transaction {
+		tx, err := NewTransaction("Rent", "", "ING", "", CashOut, 95000,
+			time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), 7, dedupSeq, nil, nil, accID)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		return tx
+	}
+
+	for _, seq := range []int{0, 1, 3} {
+		got, ok := build(source, seq).RekeyedChecksum(target)
+		if !ok {
+			t.Fatalf("seq %d: expected the sequence to be recovered", seq)
+		}
+		if want := build(target, seq).Checksum; got != want {
+			t.Fatalf("seq %d: expected %s, got %s", seq, want, got)
+		}
+	}
+}
+
+func TestRekeyedChecksum_ReportsAChecksumItCannotReproduce(t *testing.T) {
+	tx := newImportedTransaction(t, 1, 1)
+	tx.Note = "edited after import"
+	if _, ok := tx.RekeyedChecksum(uuid.New()); ok {
+		t.Fatal("expected no recovery once a digested field changed")
+	}
+}

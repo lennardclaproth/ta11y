@@ -367,6 +367,20 @@ the image and rolls it out.
 
 → Details: [GCP deployment](%5B036%5D_GCP_DEPLOYMENT.md)
 
+### Export and import [037]
+The work put into a ledger survives a broken database or a move to another instance. From the
+account menu, **Export and import data** exports one dataset at a time to its own JSON file —
+cashflow (with tags, ignored state, ignore rules and recurring items), portfolio transactions, or
+the asset classes kept by hand — and imports such a file back. Administrators also move the
+shared end-of-day prices this way.
+
+An import is checked first: its counts, new and already here, are shown before anything is
+written. It merges rather than replaces — what the account has is left alone — and the whole
+file lands or nothing does. A file naming a bank or listing this instance lacks is refused with
+those named. Positions and snapshots are not in a file; they are rebuilt after an import.
+
+→ Details: [Export and import](%5B037%5D_EXPORT_IMPORT.md)
+
 ### Web app
 A SvelteKit (Svelte 5) frontend in `web/`, built from an Atomic-Design component library
 catalogued in Storybook. It consumes the API over REST plus a per-account WebSocket, and runs
