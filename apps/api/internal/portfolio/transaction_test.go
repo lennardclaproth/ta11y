@@ -188,3 +188,38 @@ func checksumOf(t *testing.T, data TransactionData, importID uuid.UUID) string {
 func ptrString(v string) *string {
 	return &v
 }
+
+func TestRekeyedChecksum_MatchesAFreshImportIntoTheTargetAccount(t *testing.T) {
+	source, target := uuid.New(), uuid.New()
+	importID := uuid.New()
+	build := func(accID uuid.UUID, dedupSeq int) *Transaction {
+		tx, err := NewTransaction(TransactionData{
+			Source:     "DEGIRO",
+			OccurredAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+			ISIN:       ptrString("NLTEST0001"),
+			Type:       TxBuy,
+			Quantity:   2,
+			Price:      1250,
+			DedupSeq:   dedupSeq,
+		}, 12, importID, &accID, nil)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		return tx
+	}
+
+	for _, seq := range []int{0, 1, 2} {
+		restored := build(source, seq)
+		// A rebuild maps the row to a position long after its checksum was generated.
+		position := uuid.New()
+		restored.PositionID = &position
+
+		got, ok := restored.RekeyedChecksum(target)
+		if !ok {
+			t.Fatalf("seq %d: expected the sequence to be recovered", seq)
+		}
+		if want := build(target, seq).Checksum; got != want {
+			t.Fatalf("seq %d: expected %s, got %s", seq, want, got)
+		}
+	}
+}

@@ -1423,6 +1423,442 @@ const docTemplate = `{
                 }
             }
         },
+        "/backup/assets/export": {
+            "get": {
+                "description": "Returns the asset classes the signed-in account keeps by hand, with their items, worth changes and purchases, as one JSON file. The portfolio-sourced class is left out and rebuilt from the portfolio.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Export asset classes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.AssetsFile"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/assets/import": {
+            "post": {
+                "description": "Merges an assets backup file into the signed-in account: classes are matched by name and items by class and name; an item the account already holds keeps its own history, new ones come in with theirs. The whole file lands or nothing does; asset snapshots are rebuilt afterwards. With dry_run the counts are reported and nothing is written. A file naming listings this instance lacks is refused with 409 and the missing ones listed.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Import asset classes",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Assets backup JSON",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Report what would change without writing",
+                        "name": "dry_run",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.AssetsImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Listings missing",
+                        "schema": {
+                            "$ref": "#/definitions/backup.AssetsImportResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "File too large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Not a readable assets backup",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/cashflow/export": {
+            "get": {
+                "description": "Returns every cashflow transaction of the signed-in account with its tag and ignored state, the imports that brought them in, the ignore rules, and the recurring items with their links and dismissals, as one JSON file.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Export cashflow",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.CashflowFile"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/cashflow/import": {
+            "post": {
+                "description": "Merges a cashflow backup file into the signed-in account: transactions, rules and recurring items the account has are skipped, new ones are added, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A file naming vendors this instance lacks is refused with 409 and the missing ones listed.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Import cashflow",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Cashflow backup JSON",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Report what would change without writing",
+                        "name": "dry_run",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.CashflowImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Vendors missing",
+                        "schema": {
+                            "$ref": "#/definitions/backup.CashflowImportResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "File too large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Not a readable cashflow backup",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/eods/export": {
+            "get": {
+                "description": "Returns the end-of-day prices of every listing that has any, with their split factors, as one JSON file. Listings are named by symbol and source.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Export the end-of-day prices",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.EODFile"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/eods/import": {
+            "post": {
+                "description": "Merges an EOD backup file: days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A file naming listings this instance lacks is refused with 409 and the missing ones listed.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Import end-of-day prices",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "EOD backup JSON",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Report what would change without writing",
+                        "name": "dry_run",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.EODImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Listings missing",
+                        "schema": {
+                            "$ref": "#/definitions/backup.EODImportResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "File too large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Not a readable EOD backup",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/portfolio/export": {
+            "get": {
+                "description": "Returns every portfolio transaction of the signed-in account with the imports that brought them in, as one JSON file. Positions and snapshots are left out and rebuilt on import.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Export portfolio",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.PortfolioFile"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/backup/portfolio/import": {
+            "post": {
+                "description": "Merges a portfolio backup file into the signed-in account: transactions the account has are skipped, new ones are added, and the whole file lands or nothing does; the portfolio is rebuilt afterwards. With dry_run the counts are reported and nothing is written. A file naming vendors this instance lacks is refused with 409 and the missing ones listed.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Import portfolio",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Portfolio backup JSON",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Report what would change without writing",
+                        "name": "dry_run",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/backup.PortfolioImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Vendors missing",
+                        "schema": {
+                            "$ref": "#/definitions/backup.PortfolioImportResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "File too large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Not a readable portfolio backup",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/cashflow/analytics/monthly": {
             "get": {
                 "description": "Returns monthly incoming, outgoing and net totals for the selected range.",
@@ -1545,6 +1981,359 @@ const docTemplate = `{
                 }
             }
         },
+        "/cashflow/ignore-rules": {
+            "get": {
+                "description": "Returns every ignore rule of the signed-in account, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "List cashflow ignore rules",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRulesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Stores a rule that ignores matching transactions on arrival. It takes effect on what is imported from then on; applying it to transactions already in the ledger is a separate action.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Create a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/preview": {
+            "post": {
+                "description": "Reports how many transactions a rule matches, how many applying it would ignore, and a sample of the most recent matches.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Preview a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRulePreviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/{rule_id}": {
+            "put": {
+                "description": "Rewrites what a rule matches on, or switches it off. Transactions it already ignored keep their state — the edit says what the rule catches from now on.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Update a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ignore rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes a rule. Nothing it ignored is restored: those transactions stay as they are and are put back one by one, like any other ignored row.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Delete a cashflow ignore rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/ignore-rules/{rule_id}/apply": {
+            "post": {
+                "description": "Ignores the transactions already in the ledger that the rule matches, skipping rows that are ignored already and rows whose ignored state was decided by hand.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "Apply a cashflow ignore rule to existing transactions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ignore rule UUID",
+                        "name": "rule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ApplyIgnoreRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/imports/{import_id}/ignored": {
+            "get": {
+                "description": "Returns the transactions one import ignored automatically, grouped under the rule that caught them, so a rule can be judged on its own harvest.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Ignore rules"
+                ],
+                "summary": "What an import ignored, grouped by rule",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Import UUID",
+                        "name": "import_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.ImportIgnoredResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/cashflow/recurring": {
             "get": {
                 "description": "Returns running recurring expenses, running recurring income and ended items, with monthly-equivalent totals and a per-month trend.",
@@ -1594,7 +2383,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched.",
+                "description": "Starts a recurring item from one or more cashflow transactions. The tag and ignored status of those transactions are left untouched. Every transaction must run in the item's direction and must not be ignored; a transaction already linked to another item is skipped, and an item whose transactions are all linked elsewhere is refused with 409.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1643,6 +2432,15 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2023,7 +2821,7 @@ const docTemplate = `{
         },
         "/cashflow/recurring/{item_id}/transactions": {
             "post": {
-                "description": "Links cashflow transactions to an existing recurring item. An ended item takes no new transactions.",
+                "description": "Links cashflow transactions to an existing recurring item, at any amount. An ended item takes no new transactions; every transaction must run in the item's direction and must not be ignored. A transaction already linked to another item is skipped, so linked_count can be lower than the ids sent; when nothing could be linked the request is refused with 409.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2070,6 +2868,15 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2153,6 +2960,35 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cashflow/tags": {
+            "get": {
+                "description": "Returns every tag the account has put on a cashflow transaction, with the number of transactions carrying it, most used first. Not limited to a period; untagged transactions are not a tag and are left out.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "List cashflow tags",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cashflow.CashflowTagsResponse"
                         }
                     },
                     "500": {
@@ -3595,7 +4431,7 @@ const docTemplate = `{
         },
         "/marketdata/providers/{provider_id}/credentials": {
             "patch": {
-                "description": "Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key.",
+                "description": "Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key. A base URI must be https on a public (not loopback, private or link-local) host.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4559,6 +5395,28 @@ const docTemplate = `{
                 }
             }
         },
+        "assets.ChangeDirection": {
+            "type": "string",
+            "enum": [
+                "INCREASE",
+                "DECREASE"
+            ],
+            "x-enum-varnames": [
+                "ChangeDirectionIncrease",
+                "ChangeDirectionDecrease"
+            ]
+        },
+        "assets.ChangeType": {
+            "type": "string",
+            "enum": [
+                "SET",
+                "ADJUST"
+            ],
+            "x-enum-varnames": [
+                "ChangeTypeSet",
+                "ChangeTypeAdjust"
+            ]
+        },
         "assets.ClassDetailsResponse": {
             "type": "object",
             "properties": {
@@ -4950,6 +5808,696 @@ const docTemplate = `{
                 }
             }
         },
+        "backup.AssetClass": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.AssetItem"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.AssetItem": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "current_worth_cents": {
+                    "type": "integer"
+                },
+                "listing": {
+                    "$ref": "#/definitions/backup.ListingRef"
+                },
+                "mutations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.AssetMutation"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "purchases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.AssetPurchase"
+                    }
+                }
+            }
+        },
+        "backup.AssetMutation": {
+            "type": "object",
+            "properties": {
+                "amount_cents": {
+                    "type": "integer"
+                },
+                "change_type": {
+                    "$ref": "#/definitions/assets.ChangeType"
+                },
+                "class_total_worth_cents": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "direction": {
+                    "$ref": "#/definitions/assets.ChangeDirection"
+                },
+                "effective_date": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "new_worth_cents": {
+                    "type": "integer"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "previous_worth_cents": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.AssetPurchase": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "purchased_on": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "quantity": {
+                    "type": "number"
+                },
+                "unit_price_cents": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.AssetsFile": {
+            "type": "object",
+            "properties": {
+                "classes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.AssetClass"
+                    }
+                },
+                "exported_at": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/backup.Kind"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.AssetsImportResponse": {
+            "type": "object",
+            "properties": {
+                "classes": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "missing": {
+                    "$ref": "#/definitions/backup.MissingResponse"
+                },
+                "mutations": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "purchases": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                }
+            }
+        },
+        "backup.CashflowFile": {
+            "type": "object",
+            "properties": {
+                "exported_at": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "ignore_rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.IgnoreRule"
+                    }
+                },
+                "imports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.Import"
+                    }
+                },
+                "kind": {
+                    "$ref": "#/definitions/backup.Kind"
+                },
+                "recurring_dismissals": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.Dismissal"
+                    }
+                },
+                "recurring_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.RecurringItem"
+                    }
+                },
+                "source_account_id": {
+                    "description": "SourceAccountID is the account the file was exported from. Dedup checksums\ndigest the account, so it is what lets a restore into another account re-derive\nthem.",
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.CashflowTransaction"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.CashflowImportResponse": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "ignore_rules": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "imports": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "missing": {
+                    "$ref": "#/definitions/backup.MissingResponse"
+                },
+                "recurring_dismissals": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "recurring_items": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "recurring_links": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "transactions": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                }
+            }
+        },
+        "backup.CashflowTransaction": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "$ref": "#/definitions/cashflow.AccountType"
+                },
+                "amount_cents": {
+                    "type": "integer"
+                },
+                "checksum": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "direction": {
+                    "$ref": "#/definitions/cashflow.CashFlowDirection"
+                },
+                "ignore_overridden": {
+                    "type": "boolean"
+                },
+                "ignored": {
+                    "type": "boolean"
+                },
+                "ignored_by_rule_ref": {
+                    "type": "string"
+                },
+                "import_ref": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "row_number": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.CountResponse": {
+            "type": "object",
+            "properties": {
+                "existing": {
+                    "type": "integer"
+                },
+                "new": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.Dismissal": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "$ref": "#/definitions/cashflow.CashFlowDirection"
+                },
+                "match_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.EOD": {
+            "type": "object",
+            "properties": {
+                "close_cents": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "high_cents": {
+                    "type": "integer"
+                },
+                "low_cents": {
+                    "type": "integer"
+                },
+                "open_cents": {
+                    "type": "integer"
+                },
+                "split_factor": {
+                    "type": "number"
+                },
+                "volume": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.EODFile": {
+            "type": "object",
+            "properties": {
+                "exported_at": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/backup.Kind"
+                },
+                "listings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.EODListing"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.EODImportResponse": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "eods": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "listings": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "missing": {
+                    "$ref": "#/definitions/backup.MissingResponse"
+                }
+            }
+        },
+        "backup.EODListing": {
+            "type": "object",
+            "properties": {
+                "eods": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.EOD"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "$ref": "#/definitions/marketdata.Source"
+                },
+                "symbol": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.IgnoreRule": {
+            "type": "object",
+            "properties": {
+                "contains": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "direction": {
+                    "$ref": "#/definitions/cashflow.CashFlowDirection"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "ignored_total": {
+                    "type": "integer"
+                },
+                "last_applied_at": {
+                    "type": "string"
+                },
+                "match_field": {
+                    "$ref": "#/definitions/cashflow.MatchField"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.Import": {
+            "type": "object",
+            "properties": {
+                "auto_ignored": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "duplicates": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "imported": {
+                    "type": "integer"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/importer.ImportStatus"
+                },
+                "status_msg": {
+                    "type": "string"
+                },
+                "total_rows": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/importer.ImportType"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.Kind": {
+            "type": "string",
+            "enum": [
+                "cashflow",
+                "portfolio",
+                "assets",
+                "eods"
+            ],
+            "x-enum-varnames": [
+                "KindCashflow",
+                "KindPortfolio",
+                "KindAssets",
+                "KindEOD"
+            ]
+        },
+        "backup.ListingRef": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "$ref": "#/definitions/marketdata.Source"
+                },
+                "symbol": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.ListingRefResponse": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.MissingResponse": {
+            "type": "object",
+            "properties": {
+                "listings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.ListingRefResponse"
+                    }
+                },
+                "vendors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "backup.PortfolioFile": {
+            "type": "object",
+            "properties": {
+                "exported_at": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "imports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.Import"
+                    }
+                },
+                "kind": {
+                    "$ref": "#/definitions/backup.Kind"
+                },
+                "source_account_id": {
+                    "description": "SourceAccountID is the account the file was exported from; see CashflowFile.",
+                    "type": "string"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backup.PortfolioTransaction"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.PortfolioImportResponse": {
+            "type": "object",
+            "properties": {
+                "dry_run": {
+                    "type": "boolean"
+                },
+                "imports": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                },
+                "missing": {
+                    "$ref": "#/definitions/backup.MissingResponse"
+                },
+                "transactions": {
+                    "$ref": "#/definitions/backup.CountResponse"
+                }
+            }
+        },
+        "backup.PortfolioTransaction": {
+            "type": "object",
+            "properties": {
+                "amount_cents": {
+                    "type": "integer"
+                },
+                "checksum": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "import_ref": {
+                    "type": "string"
+                },
+                "isin": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "origin": {
+                    "$ref": "#/definitions/portfolio.TransactionOrigin"
+                },
+                "quantity": {
+                    "type": "number"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "row_number": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/portfolio.TransactionType"
+                },
+                "unit_price_cents": {
+                    "type": "integer"
+                }
+            }
+        },
+        "backup.RecurringItem": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "direction": {
+                    "$ref": "#/definitions/cashflow.CashFlowDirection"
+                },
+                "ended_from": {
+                    "type": "string",
+                    "format": "date"
+                },
+                "match_key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rhythm": {
+                    "$ref": "#/definitions/cashflow.Rhythm"
+                },
+                "transaction_refs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "cashflow.AccountType": {
+            "type": "string",
+            "enum": [
+                "checking",
+                "savings",
+                "credit",
+                "brokerage"
+            ],
+            "x-enum-varnames": [
+                "AccountTypeChecking",
+                "AccountTypeSavings",
+                "AccountTypeCredit",
+                "AccountTypeBrokerage"
+            ]
+        },
+        "cashflow.ApplyIgnoreRuleResponse": {
+            "type": "object",
+            "properties": {
+                "ignored_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.CashFlowDirection": {
+            "type": "string",
+            "enum": [
+                "in",
+                "out"
+            ],
+            "x-enum-varnames": [
+                "CashIn",
+                "CashOut"
+            ]
+        },
         "cashflow.CashflowMonthlyAnalyticsResponse": {
             "type": "object",
             "properties": {
@@ -4957,6 +6505,28 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/cashflow.MonthlyAnalyticsPointResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.CashflowTagResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.CashflowTagsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CashflowTagResponse"
                     }
                 }
             }
@@ -5064,8 +6634,20 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "ignore_overridden": {
+                    "description": "IgnoreOverridden says the ignored state was decided by hand, so no rule will\nchange it again.",
+                    "type": "boolean"
+                },
                 "ignored": {
                     "type": "boolean"
+                },
+                "ignored_by_rule_id": {
+                    "description": "IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's\nrule did. The rule's name is resolved from the account's rules, not repeated here.",
+                    "type": "string"
+                },
+                "import_id": {
+                    "description": "ImportID names the import the row arrived with, null for a manual entry.",
+                    "type": "string"
                 },
                 "note": {
                     "type": "string"
@@ -5108,6 +6690,102 @@ const docTemplate = `{
                 }
             }
         },
+        "cashflow.IgnoreRulePreviewResponse": {
+            "type": "object",
+            "properties": {
+                "matching": {
+                    "type": "integer"
+                },
+                "not_yet_ignored": {
+                    "type": "integer"
+                },
+                "sample": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CreateTransactionResponse"
+                    }
+                },
+                "scanned": {
+                    "type": "integer"
+                }
+            }
+        },
+        "cashflow.IgnoreRuleRequest": {
+            "type": "object",
+            "properties": {
+                "contains": {
+                    "type": "string"
+                },
+                "direction": {
+                    "description": "Direction is empty for a rule that matches both directions.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled defaults to true when omitted: a rule is written to be used.",
+                    "type": "boolean"
+                },
+                "match_field": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is the bank the rule is limited to, empty for every bank.",
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.IgnoreRuleResponse": {
+            "type": "object",
+            "properties": {
+                "contains": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "direction": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ignored_total": {
+                    "description": "IgnoredTotal is how many transactions this rule has ignored since it was made.",
+                    "type": "integer"
+                },
+                "last_applied_at": {
+                    "type": "string"
+                },
+                "match_field": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "cashflow.IgnoreRulesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                    }
+                }
+            }
+        },
         "cashflow.IgnoreTransactionsByFilterRequest": {
             "type": "object",
             "properties": {
@@ -5144,6 +6822,34 @@ const docTemplate = `{
                 }
             }
         },
+        "cashflow.IgnoredRuleGroupResponse": {
+            "type": "object",
+            "properties": {
+                "rule": {
+                    "$ref": "#/definitions/cashflow.IgnoreRuleResponse"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.CreateTransactionResponse"
+                    }
+                }
+            }
+        },
+        "cashflow.ImportIgnoredResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/cashflow.IgnoredRuleGroupResponse"
+                    }
+                }
+            }
+        },
         "cashflow.LinkRecurringTransactionsRequest": {
             "type": "object",
             "properties": {
@@ -5154,6 +6860,17 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "cashflow.MatchField": {
+            "type": "string",
+            "enum": [
+                "description",
+                "note"
+            ],
+            "x-enum-varnames": [
+                "MatchFieldDescription",
+                "MatchFieldNote"
+            ]
         },
         "cashflow.MonthlyAnalyticsPointResponse": {
             "type": "object",
@@ -5382,6 +7099,19 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "cashflow.Rhythm": {
+            "type": "string",
+            "enum": [
+                "monthly",
+                "quarterly",
+                "yearly"
+            ],
+            "x-enum-varnames": [
+                "RhythmMonthly",
+                "RhythmQuarterly",
+                "RhythmYearly"
+            ]
         },
         "cashflow.TagDistributionEntryResponse": {
             "type": "object",
@@ -5926,6 +7656,10 @@ const docTemplate = `{
         "importer.ImportResultResponse": {
             "type": "object",
             "properties": {
+                "auto_ignored": {
+                    "description": "AutoIgnored is how many of the imported rows an ignore rule recognised. They\nare counted in Imported too: they were imported, and then ignored.",
+                    "type": "integer"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -5964,6 +7698,36 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "importer.ImportStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "processing",
+                "in_progress",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "ImportStatusPending",
+                "ImportStatusProcessing",
+                "ImportStatusInProgress",
+                "ImportStatusCompleted",
+                "ImportStatusFailed"
+            ]
+        },
+        "importer.ImportType": {
+            "type": "string",
+            "enum": [
+                "cashflow",
+                "portfolio",
+                "eod"
+            ],
+            "x-enum-varnames": [
+                "ImportTypeCashflow",
+                "ImportTypePortfolio",
+                "ImportTypeEOD"
+            ]
         },
         "importer.UnlinkedProductResponse": {
             "type": "object",
@@ -6024,6 +7788,19 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
+        },
+        "marketdata.Source": {
+            "type": "string",
+            "enum": [
+                "alpha_vantage",
+                "market_stack",
+                "brandnewday"
+            ],
+            "x-enum-varnames": [
+                "SourceAlphaVantage",
+                "SourceMarketStack",
+                "SourceBrandNewDay"
+            ]
         },
         "portfolio.ChangePortfolioTransactionDateRequest": {
             "type": "object",
@@ -6313,6 +8090,38 @@ const docTemplate = `{
                 }
             }
         },
+        "portfolio.TransactionOrigin": {
+            "type": "string",
+            "enum": [
+                "IMPORT",
+                "MANUAL"
+            ],
+            "x-enum-varnames": [
+                "TransactionOriginImport",
+                "TransactionOriginManual"
+            ]
+        },
+        "portfolio.TransactionType": {
+            "type": "string",
+            "enum": [
+                "BUY",
+                "SELL",
+                "DIVIDEND",
+                "TAX",
+                "FEE",
+                "CASH",
+                "SPLIT"
+            ],
+            "x-enum-varnames": [
+                "TxBuy",
+                "TxSell",
+                "TxDividend",
+                "TxTax",
+                "TxFee",
+                "TxCash",
+                "TxSplit"
+            ]
+        },
         "portfolio.UpdatePortfolioTransactionRequest": {
             "type": "object",
             "properties": {
@@ -6350,6 +8159,13 @@ const docTemplate = `{
                 },
                 "hide_ignored": {
                     "type": "boolean"
+                },
+                "ignored_by_rule": {
+                    "type": "string"
+                },
+                "import_id": {
+                    "description": "ImportID narrows to the rows one import brought in, ImportedByRule to the rows\none ignore rule ignored. Together they are what \"restore everything this rule\ncaught in this import\" asks for.",
+                    "type": "string"
                 },
                 "note": {
                     "type": "string"

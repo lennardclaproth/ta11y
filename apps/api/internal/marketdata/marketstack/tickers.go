@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,9 +67,9 @@ func (c *MarketStackClient) SearchTickers(
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers failed to execute request: %w", err)
+		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers failed to execute request: %w", marketdata.RedactRequestError(err))
 	}
-	bodyBytes, err := io.ReadAll(res.Body)
+	bodyBytes, err := marketdata.ReadProviderBody(res.Body)
 	closeErr := res.Body.Close()
 	if err != nil {
 		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers failed to read response body: %w", err)
@@ -79,7 +78,7 @@ func (c *MarketStackClient) SearchTickers(
 		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers failed to close response body: %w", closeErr)
 	}
 	if res.StatusCode >= 300 {
-		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers received status %d: %s", res.StatusCode, string(bodyBytes))
+		return marketdata.TickerPage{}, fmt.Errorf("SearchTickers received status %d: %s", res.StatusCode, marketdata.ErrorBodySnippet(bodyBytes))
 	}
 
 	var parsed marketstackTickersResponse

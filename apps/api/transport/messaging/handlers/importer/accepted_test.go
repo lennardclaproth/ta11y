@@ -3,6 +3,7 @@ package importer
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/account"
@@ -25,6 +26,9 @@ func (s *recordingImportStore) FetchByID(_ context.Context, id uuid.UUID) (*impo
 }
 func (s *recordingImportStore) UpdateState(_ context.Context, _ *importer.Import) error {
 	return nil
+}
+func (s *recordingImportStore) ListUnfinished(_ context.Context, _ time.Time) ([]*importer.Import, error) {
+	return nil, nil
 }
 
 func TestAcceptedHandlerProcessesAcceptedImport(t *testing.T) {

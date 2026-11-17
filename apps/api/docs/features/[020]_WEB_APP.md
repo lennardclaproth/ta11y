@@ -9,6 +9,10 @@
 and Tailwind 4, catalogued in Storybook. It talks to the Go API over REST plus a per-account
 WebSocket, and runs standalone against fixtures when no API URL is configured.
 
+It builds as a client-only SPA (`adapter-static` with an `index.html` fallback, `ssr = false` in
+the root layout). In production the Go server serves that build and the API lives under `/api`
+on the same origin, so `VITE_API_URL` may be relative ([036]).
+
 ## Component architecture
 
 Strict Atomic Design under `web/src/lib/components/<tier>/`, importing only from the same or a
@@ -18,11 +22,13 @@ components live in `src/routes/` instead.
 
 ### Notifications
 
-One molecule reports everything: `molecules/notice-band` (`NoticeBand`), a ruled band in normal
-document flow. `organisms/notice-band-region` renders the `toast` store as bands under the
-masthead; the store keeps at most three auto-dismissing notices and drops the oldest for a newer
-one, so nothing counts down unseen — a notice with `duration: 0` stays outside that cap until it is
-dismissed. Its API, timers and intents are otherwise unchanged. A dialog
+One molecule reports everything: `molecules/notice-band` (`NoticeBand`), a ruled band.
+`organisms/notice-band-region` renders the `toast` store as dismissible cards in the top-right
+corner of the shell's content area, floating over the page (`toast` z-layer, under the modal
+scrim) rather than in its flow. A toast holds its countdown while hovered or focused
+(`toast.pause` / `toast.resume`); the store keeps at most three auto-dismissing notices and drops
+the oldest for a newer one, so nothing counts down unseen — a notice with `duration: 0` stays
+outside that cap until it is dismissed. A dialog
 or drawer covers that region with its own scrim, so an overlay that stays open reports its own
 outcomes in a band inside it (`ProviderCatalogueDrawer`, the two Recurring drawers,
 `AssetClassDrawer`); its body

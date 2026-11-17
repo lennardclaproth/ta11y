@@ -29,13 +29,15 @@
 		<div class="shrink-0">{@render top()}</div>
 	{/if}
 
-	<!-- The single notice place: in the flow between the masthead and the content, so a notice
-	     never covers the navigation or the page's own actions. -->
-	{#if withNotices}
-		<NoticeBandRegion class="shrink-0 pb-4" />
-	{/if}
+	<!-- The content area is the toasts' positioning context: they float in its top-right corner,
+	     over the page but under the masthead, so a toast never covers the navigation. -->
+	<div class="relative flex min-h-0 flex-1 flex-col">
+		{#if withNotices}
+			<NoticeBandRegion />
+		{/if}
 
-	<main id="app-main" tabindex="-1" class="min-h-0 flex-1 overflow-auto lg:overflow-hidden">
-		{@render children()}
-	</main>
+		<main id="app-main" tabindex="-1" class="min-h-0 flex-1 overflow-auto lg:overflow-hidden">
+			{@render children()}
+		</main>
+	</div>
 </div>

@@ -25,6 +25,15 @@ type CookieSettings struct {
 	Domain string
 	// Secure adds the Secure attribute. It must be true anywhere served over HTTPS.
 	Secure bool
+	// PathPrefix is the path the API is mounted under in the browser (e.g. "/api" when the
+	// same server also serves the web app). Path-scoped cookies must carry it, because the
+	// browser matches a cookie's path against the URL it requested.
+	PathPrefix string
+}
+
+// FlowPath is the browser-side path of the sign-in flow cookie.
+func (c CookieSettings) FlowPath() string {
+	return c.PathPrefix + FlowCookiePath
 }
 
 // SessionCookie builds the cookie carrying a freshly issued session token.
@@ -46,7 +55,7 @@ func (c CookieSettings) FlowCookie(value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     FlowCookieName,
 		Value:    value,
-		Path:     FlowCookiePath,
+		Path:     c.FlowPath(),
 		Domain:   c.Domain,
 		MaxAge:   int(auth.FlowTTL.Seconds()),
 		HttpOnly: true,

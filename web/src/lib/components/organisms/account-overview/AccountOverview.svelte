@@ -49,6 +49,8 @@
 		 * Escape, and it has to let the picker have that key first.
 		 */
 		onPickerOpenChange?: (open: boolean) => void;
+		/** Opens export and import of the account's data; the entry is left out without it. */
+		onExportImport?: () => void;
 		onSignOut?: () => void;
 		class?: string;
 	};
@@ -68,9 +70,12 @@
 		periodPresets = [],
 		onPeriodChange,
 		onPickerOpenChange,
+		onExportImport,
 		onSignOut,
 		class: className = ''
 	}: Props = $props();
+
+	const exportImportLabel = 'Export and import data';
 
 	let pickerOpen = $state(false);
 
@@ -202,10 +207,20 @@
 			name={accountName}
 			email={accountEmail}
 			items={[
+				...(onExportImport
+					? [
+							{
+								label: exportImportLabel,
+								icon: 'heroicons:arrow-down-tray',
+								onSelect: onExportImport
+							}
+						]
+					: []),
 				{
 					label: 'Sign out',
 					icon: 'heroicons:arrow-right-start-on-rectangle',
-					intent: 'danger',
+					intent: 'danger' as const,
+					divider: Boolean(onExportImport),
 					onSelect: onSignOut
 				}
 			]}
@@ -245,8 +260,31 @@
 			</div>
 		{/if}
 
+		{#if onExportImport}
+			<div class="border-t border-slate-300 p-4">
+				<Button
+					variant="ghost"
+					intent="secondary"
+					size="lg"
+					shape="default"
+					class="w-full"
+					onclick={onExportImport}
+				>
+					<Icon icon="heroicons:arrow-down-tray" />
+					{exportImportLabel}
+				</Button>
+			</div>
+		{/if}
+
 		<div class="border-t border-slate-300 p-4">
-			<Button variant="ghost" intent="error" size="lg" shape="default" class="w-full" onclick={onSignOut}>
+			<Button
+				variant="ghost"
+				intent="error"
+				size="lg"
+				shape="default"
+				class="w-full"
+				onclick={onSignOut}
+			>
 				<Icon icon="heroicons:arrow-right-start-on-rectangle" />
 				Sign out
 			</Button>

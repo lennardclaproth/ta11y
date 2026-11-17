@@ -19,16 +19,34 @@ import (
 // an explicit per-query top-up -- and search over the cache never silently
 // substitutes for asking the provider.
 type Catalogue struct {
-	cs CatalogueStore
-	ts map[Source]TickerSearcher
+	cs       CatalogueStore
+	ts       map[Source]TickerSearcher
+	maxPages int
+}
+
+// CatalogueOption configures optional Catalogue behaviour.
+type CatalogueOption func(*Catalogue)
+
+// WithMaxSeedPages lowers the per-run page cap below MaxSeedPages. Values outside
+// 1..MaxSeedPages are ignored.
+func WithMaxSeedPages(n int) CatalogueOption {
+	return func(c *Catalogue) {
+		if n > 0 && n <= MaxSeedPages {
+			c.maxPages = n
+		}
+	}
 }
 
 // NewCatalogue creates the catalogue service using ticker searchers keyed by source.
-func NewCatalogue(cs CatalogueStore, searchers map[Source]TickerSearcher) *Catalogue {
+func NewCatalogue(cs CatalogueStore, searchers map[Source]TickerSearcher, options ...CatalogueOption) *Catalogue {
 	if searchers == nil {
 		searchers = map[Source]TickerSearcher{}
 	}
-	return &Catalogue{cs: cs, ts: searchers}
+	c := &Catalogue{cs: cs, ts: searchers, maxPages: MaxSeedPages}
+	for _, option := range options {
+		option(c)
+	}
+	return c
 }
 
 // RefreshResult reports what one metered top-up search returned. Truncated is true
@@ -81,10 +99,10 @@ func (c *Catalogue) Refresh(ctx context.Context, source Source, q string) (*Refr
 // that asks for it, and progress is observable through LatestSync.
 func (c *Catalogue) StartSeed(ctx context.Context, source Source, pages int) (*CatalogueSync, error) {
 	if pages <= 0 {
-		pages = DefaultSeedPages
+		pages = min(DefaultSeedPages, c.maxPages)
 	}
-	if pages > MaxSeedPages {
-		return nil, fmt.Errorf("%w: %d exceeds the %d page cap", ErrCatalogueSeedPagesInvalid, pages, MaxSeedPages)
+	if pages > c.maxPages {
+		return nil, fmt.Errorf("%w: %d exceeds the %d page cap", ErrCatalogueSeedPagesInvalid, pages, c.maxPages)
 	}
 	if _, ok := c.ts[source]; !ok {
 		return nil, fmt.Errorf("%w: %s", ErrCatalogueSourceUnsupported, source)
@@ -110,6 +128,26 @@ func (c *Catalogue) StartSeed(ctx context.Context, source Source, pages int) (*C
 
 	go c.runSeed(run, source, pages)
 	return run, nil
+}
+
+// RecoverInterrupted fails seed runs a previous process left at running. The goroutine
+// that owned them died with that process, and a running row blocks every new seed
+// for its source. It runs once at start-up, before the server accepts requests, and
+// returns how many runs it failed.
+func (c *Catalogue) RecoverInterrupted(ctx context.Context) (int, error) {
+	recovered := 0
+	for source := range c.ts {
+		latest, err := c.cs.LatestCatalogueSync(ctx, source)
+		if err != nil {
+			return recovered, fmt.Errorf("catalogue recovery: failed to read latest sync for %s: %w", source, err)
+		}
+		if latest == nil || latest.Status != CatalogueSyncRunning {
+			continue
+		}
+		c.finishSeed(ctx, latest, CatalogueSyncFailed, ErrCatalogueSeedInterrupted)
+		recovered++
+	}
+	return recovered, nil
 }
 
 // runSeed pages the provider's popularity-ordered catalogue and records progress on

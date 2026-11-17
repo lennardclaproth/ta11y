@@ -187,8 +187,8 @@ sequenceDiagram
         Q->>ST: read existing EOD (+ "stale" message)
     else stale (accumulated_end < latest business date)
         Q->>ST: ShouldAccumulate(true)
-        Q->>SY: SyncEOD(listingID)
-        SY->>P: GetEOD(symbols, from, to) — deduct tokens
+        Q->>SY: SyncEOD(listingID) — request from/to only filter the read
+        SY->>P: GetEOD(symbols, accumulated_end, latest business date) — deduct tokens
         P-->>SY: OHLCV rows
         SY->>ST: insert EOD (ON CONFLICT listing_id,date DO NOTHING)
         Q->>ST: read existing EOD
@@ -256,5 +256,9 @@ the importer's event flow (`import.accepted` → process → `import.completed`/
   listing source". Syncing is also serial, one day at a time (`TODO: worker pool`, and
   `TODO: implement batch insert` on the write side). The nil-result panic previously noted
   here is fixed: `result` is built before the fetch loop runs.
+- **Provider API keys are stored in plaintext** in `providers.api_key`; they never leave the API
+  except through the admin reveal, and transport errors have the key-bearing query string
+  stripped (`RedactRequestError`). `ValidateBaseURI` refuses non-https, IP-literal private and
+  loopback hosts, but does not resolve DNS names, so a public name pointing inside is not caught.
 - `marketdata.Commands` has a startup constructor for provider bootstrap, but `Queries` and
   `Syncer` do not yet have complete startup constructors.

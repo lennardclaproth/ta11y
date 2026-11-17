@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,13 +27,19 @@ type PrincipalResolver interface {
 // fallback, when non-nil, authenticates every request that presents no session. It
 // exists only for running with authentication switched off, where the API behaves as
 // the single bootstrapped account exactly as it did before sign-in existed. Config
-// refuses that combination outside development.
+// refuses that combination outside development, and the fallback only answers requests
+// that both come from and are addressed to this machine: the bootstrapped account is an
+// admin, so neither another host on the network nor a DNS-rebound page may borrow it.
 func WithAuthentication(resolver PrincipalResolver, fallback *auth.Principal, log logging.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := SessionToken(r)
 
 			if token == "" && fallback != nil {
+				if !isLoopbackRequest(r) {
+					writeUnauthorized(w, "authentication is off; only local requests are served")
+					return
+				}
 				next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), fallback)))
 				return
 			}
@@ -139,6 +146,29 @@ func sameHost(origin, host string) bool {
 		return false
 	}
 	return strings.EqualFold(parsed.Host, host)
+}
+
+// isLoopbackRequest reports whether the request arrived from a loopback address and names
+// a loopback host. Checking the Host as well defeats DNS rebinding, where a remote page's
+// requests reach 127.0.0.1 but still carry the attacker's host name.
+func isLoopbackRequest(r *http.Request) bool {
+	remote, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remote = r.RemoteAddr
+	}
+	if ip := net.ParseIP(remote); ip == nil || !ip.IsLoopback() {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func writeUnauthorized(w http.ResponseWriter, message string) {

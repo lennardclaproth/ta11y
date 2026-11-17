@@ -48,6 +48,22 @@ definitions:
       updated_at:
         type: string
     type: object
+  assets.ChangeDirection:
+    enum:
+    - INCREASE
+    - DECREASE
+    type: string
+    x-enum-varnames:
+    - ChangeDirectionIncrease
+    - ChangeDirectionDecrease
+  assets.ChangeType:
+    enum:
+    - SET
+    - ADJUST
+    type: string
+    x-enum-varnames:
+    - ChangeTypeSet
+    - ChangeTypeAdjust
   assets.ClassDetailsResponse:
     properties:
       assets:
@@ -310,11 +326,488 @@ definitions:
           type: string
         type: array
     type: object
+  backup.AssetClass:
+    properties:
+      archived:
+        type: boolean
+      created_at:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/backup.AssetItem'
+        type: array
+      name:
+        type: string
+    type: object
+  backup.AssetItem:
+    properties:
+      archived:
+        type: boolean
+      created_at:
+        type: string
+      current_worth_cents:
+        type: integer
+      listing:
+        $ref: '#/definitions/backup.ListingRef'
+      mutations:
+        items:
+          $ref: '#/definitions/backup.AssetMutation'
+        type: array
+      name:
+        type: string
+      purchases:
+        items:
+          $ref: '#/definitions/backup.AssetPurchase'
+        type: array
+    type: object
+  backup.AssetMutation:
+    properties:
+      amount_cents:
+        type: integer
+      change_type:
+        $ref: '#/definitions/assets.ChangeType'
+      class_total_worth_cents:
+        type: integer
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/assets.ChangeDirection'
+      effective_date:
+        format: date
+        type: string
+      new_worth_cents:
+        type: integer
+      note:
+        type: string
+      previous_worth_cents:
+        type: integer
+    type: object
+  backup.AssetPurchase:
+    properties:
+      created_at:
+        type: string
+      purchased_on:
+        format: date
+        type: string
+      quantity:
+        type: number
+      unit_price_cents:
+        type: integer
+    type: object
+  backup.AssetsFile:
+    properties:
+      classes:
+        items:
+          $ref: '#/definitions/backup.AssetClass'
+        type: array
+      exported_at:
+        type: string
+      format:
+        type: string
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      version:
+        type: integer
+    type: object
+  backup.AssetsImportResponse:
+    properties:
+      classes:
+        $ref: '#/definitions/backup.CountResponse'
+      dry_run:
+        type: boolean
+      items:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      mutations:
+        $ref: '#/definitions/backup.CountResponse'
+      purchases:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.CashflowFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      ignore_rules:
+        items:
+          $ref: '#/definitions/backup.IgnoreRule'
+        type: array
+      imports:
+        items:
+          $ref: '#/definitions/backup.Import'
+        type: array
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      recurring_dismissals:
+        items:
+          $ref: '#/definitions/backup.Dismissal'
+        type: array
+      recurring_items:
+        items:
+          $ref: '#/definitions/backup.RecurringItem'
+        type: array
+      source_account_id:
+        description: |-
+          SourceAccountID is the account the file was exported from. Dedup checksums
+          digest the account, so it is what lets a restore into another account re-derive
+          them.
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/backup.CashflowTransaction'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.CashflowImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      ignore_rules:
+        $ref: '#/definitions/backup.CountResponse'
+      imports:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      recurring_dismissals:
+        $ref: '#/definitions/backup.CountResponse'
+      recurring_items:
+        $ref: '#/definitions/backup.CountResponse'
+      recurring_links:
+        $ref: '#/definitions/backup.CountResponse'
+      transactions:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.CashflowTransaction:
+    properties:
+      account_type:
+        $ref: '#/definitions/cashflow.AccountType'
+      amount_cents:
+        type: integer
+      checksum:
+        type: string
+      created_at:
+        type: string
+      date:
+        format: date
+        type: string
+      description:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      ignore_overridden:
+        type: boolean
+      ignored:
+        type: boolean
+      ignored_by_rule_ref:
+        type: string
+      import_ref:
+        type: string
+      note:
+        type: string
+      ref:
+        type: string
+      row_number:
+        type: integer
+      source:
+        type: string
+      tag:
+        type: string
+    type: object
+  backup.CountResponse:
+    properties:
+      existing:
+        type: integer
+      new:
+        type: integer
+    type: object
+  backup.Dismissal:
+    properties:
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      match_key:
+        type: string
+    type: object
+  backup.EOD:
+    properties:
+      close_cents:
+        type: integer
+      date:
+        format: date
+        type: string
+      high_cents:
+        type: integer
+      low_cents:
+        type: integer
+      open_cents:
+        type: integer
+      split_factor:
+        type: number
+      volume:
+        type: integer
+    type: object
+  backup.EODFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      listings:
+        items:
+          $ref: '#/definitions/backup.EODListing'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.EODImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      eods:
+        $ref: '#/definitions/backup.CountResponse'
+      listings:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+    type: object
+  backup.EODListing:
+    properties:
+      eods:
+        items:
+          $ref: '#/definitions/backup.EOD'
+        type: array
+      name:
+        type: string
+      source:
+        $ref: '#/definitions/marketdata.Source'
+      symbol:
+        type: string
+    type: object
+  backup.IgnoreRule:
+    properties:
+      contains:
+        type: string
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      enabled:
+        type: boolean
+      ignored_total:
+        type: integer
+      last_applied_at:
+        type: string
+      match_field:
+        $ref: '#/definitions/cashflow.MatchField'
+      name:
+        type: string
+      ref:
+        type: string
+      source:
+        type: string
+    type: object
+  backup.Import:
+    properties:
+      auto_ignored:
+        type: integer
+      created_at:
+        type: string
+      duplicates:
+        type: integer
+      failed:
+        type: integer
+      imported:
+        type: integer
+      ref:
+        type: string
+      source:
+        type: string
+      status:
+        $ref: '#/definitions/importer.ImportStatus'
+      status_msg:
+        type: string
+      total_rows:
+        type: integer
+      type:
+        $ref: '#/definitions/importer.ImportType'
+      vendor:
+        type: string
+    type: object
+  backup.Kind:
+    enum:
+    - cashflow
+    - portfolio
+    - assets
+    - eods
+    type: string
+    x-enum-varnames:
+    - KindCashflow
+    - KindPortfolio
+    - KindAssets
+    - KindEOD
+  backup.ListingRef:
+    properties:
+      source:
+        $ref: '#/definitions/marketdata.Source'
+      symbol:
+        type: string
+    type: object
+  backup.ListingRefResponse:
+    properties:
+      source:
+        type: string
+      symbol:
+        type: string
+    type: object
+  backup.MissingResponse:
+    properties:
+      listings:
+        items:
+          $ref: '#/definitions/backup.ListingRefResponse'
+        type: array
+      vendors:
+        items:
+          type: string
+        type: array
+    type: object
+  backup.PortfolioFile:
+    properties:
+      exported_at:
+        type: string
+      format:
+        type: string
+      imports:
+        items:
+          $ref: '#/definitions/backup.Import'
+        type: array
+      kind:
+        $ref: '#/definitions/backup.Kind'
+      source_account_id:
+        description: SourceAccountID is the account the file was exported from; see
+          CashflowFile.
+        type: string
+      transactions:
+        items:
+          $ref: '#/definitions/backup.PortfolioTransaction'
+        type: array
+      version:
+        type: integer
+    type: object
+  backup.PortfolioImportResponse:
+    properties:
+      dry_run:
+        type: boolean
+      imports:
+        $ref: '#/definitions/backup.CountResponse'
+      missing:
+        $ref: '#/definitions/backup.MissingResponse'
+      transactions:
+        $ref: '#/definitions/backup.CountResponse'
+    type: object
+  backup.PortfolioTransaction:
+    properties:
+      amount_cents:
+        type: integer
+      checksum:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      import_ref:
+        type: string
+      isin:
+        type: string
+      occurred_at:
+        format: date
+        type: string
+      origin:
+        $ref: '#/definitions/portfolio.TransactionOrigin'
+      quantity:
+        type: number
+      ref:
+        type: string
+      row_number:
+        type: integer
+      source:
+        type: string
+      symbol:
+        type: string
+      type:
+        $ref: '#/definitions/portfolio.TransactionType'
+      unit_price_cents:
+        type: integer
+    type: object
+  backup.RecurringItem:
+    properties:
+      created_at:
+        type: string
+      direction:
+        $ref: '#/definitions/cashflow.CashFlowDirection'
+      ended_from:
+        format: date
+        type: string
+      match_key:
+        type: string
+      name:
+        type: string
+      rhythm:
+        $ref: '#/definitions/cashflow.Rhythm'
+      transaction_refs:
+        items:
+          type: string
+        type: array
+    type: object
+  cashflow.AccountType:
+    enum:
+    - checking
+    - savings
+    - credit
+    - brokerage
+    type: string
+    x-enum-varnames:
+    - AccountTypeChecking
+    - AccountTypeSavings
+    - AccountTypeCredit
+    - AccountTypeBrokerage
+  cashflow.ApplyIgnoreRuleResponse:
+    properties:
+      ignored_count:
+        type: integer
+      status:
+        type: string
+    type: object
+  cashflow.CashFlowDirection:
+    enum:
+    - in
+    - out
+    type: string
+    x-enum-varnames:
+    - CashIn
+    - CashOut
   cashflow.CashflowMonthlyAnalyticsResponse:
     properties:
       data:
         items:
           $ref: '#/definitions/cashflow.MonthlyAnalyticsPointResponse'
+        type: array
+    type: object
+  cashflow.CashflowTagResponse:
+    properties:
+      count:
+        type: integer
+      tag:
+        type: string
+    type: object
+  cashflow.CashflowTagsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.CashflowTagResponse'
         type: array
     type: object
   cashflow.ChangeTransactionDateRequest:
@@ -384,8 +877,22 @@ definitions:
         type: string
       id:
         type: string
+      ignore_overridden:
+        description: |-
+          IgnoreOverridden says the ignored state was decided by hand, so no rule will
+          change it again.
+        type: boolean
       ignored:
         type: boolean
+      ignored_by_rule_id:
+        description: |-
+          IgnoredByRuleID names the ignore rule that ignored this row, null when nobody's
+          rule did. The rule's name is resolved from the account's rules, not repeated here.
+        type: string
+      import_id:
+        description: ImportID names the import the row arrived with, null for a manual
+          entry.
+        type: string
       note:
         type: string
       source:
@@ -412,6 +919,72 @@ definitions:
       from:
         type: string
     type: object
+  cashflow.IgnoreRulePreviewResponse:
+    properties:
+      matching:
+        type: integer
+      not_yet_ignored:
+        type: integer
+      sample:
+        items:
+          $ref: '#/definitions/cashflow.CreateTransactionResponse'
+        type: array
+      scanned:
+        type: integer
+    type: object
+  cashflow.IgnoreRuleRequest:
+    properties:
+      contains:
+        type: string
+      direction:
+        description: Direction is empty for a rule that matches both directions.
+        type: string
+      enabled:
+        description: 'Enabled defaults to true when omitted: a rule is written to
+          be used.'
+        type: boolean
+      match_field:
+        type: string
+      name:
+        type: string
+      source:
+        description: Source is the bank the rule is limited to, empty for every bank.
+        type: string
+    type: object
+  cashflow.IgnoreRuleResponse:
+    properties:
+      contains:
+        type: string
+      created_at:
+        type: string
+      direction:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      ignored_total:
+        description: IgnoredTotal is how many transactions this rule has ignored since
+          it was made.
+        type: integer
+      last_applied_at:
+        type: string
+      match_field:
+        type: string
+      name:
+        type: string
+      source:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  cashflow.IgnoreRulesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+        type: array
+    type: object
   cashflow.IgnoreTransactionsByFilterRequest:
     properties:
       filters:
@@ -435,6 +1008,24 @@ definitions:
       updated_count:
         type: integer
     type: object
+  cashflow.IgnoredRuleGroupResponse:
+    properties:
+      rule:
+        $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+      total:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/cashflow.CreateTransactionResponse'
+        type: array
+    type: object
+  cashflow.ImportIgnoredResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cashflow.IgnoredRuleGroupResponse'
+        type: array
+    type: object
   cashflow.LinkRecurringTransactionsRequest:
     properties:
       ids:
@@ -442,6 +1033,14 @@ definitions:
           type: string
         type: array
     type: object
+  cashflow.MatchField:
+    enum:
+    - description
+    - note
+    type: string
+    x-enum-varnames:
+    - MatchFieldDescription
+    - MatchFieldNote
   cashflow.MonthlyAnalyticsPointResponse:
     properties:
       incoming_cents:
@@ -593,6 +1192,16 @@ definitions:
       source:
         type: string
     type: object
+  cashflow.Rhythm:
+    enum:
+    - monthly
+    - quarterly
+    - yearly
+    type: string
+    x-enum-varnames:
+    - RhythmMonthly
+    - RhythmQuarterly
+    - RhythmYearly
   cashflow.TagDistributionEntryResponse:
     properties:
       tag:
@@ -970,6 +1579,11 @@ definitions:
     type: object
   importer.ImportResultResponse:
     properties:
+      auto_ignored:
+        description: |-
+          AutoIgnored is how many of the imported rows an ignore rule recognised. They
+          are counted in Imported too: they were imported, and then ignored.
+        type: integer
       created_at:
         type: string
       duplicates:
@@ -996,6 +1610,30 @@ definitions:
       updated_at:
         type: string
     type: object
+  importer.ImportStatus:
+    enum:
+    - pending
+    - processing
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ImportStatusPending
+    - ImportStatusProcessing
+    - ImportStatusInProgress
+    - ImportStatusCompleted
+    - ImportStatusFailed
+  importer.ImportType:
+    enum:
+    - cashflow
+    - portfolio
+    - eod
+    type: string
+    x-enum-varnames:
+    - ImportTypeCashflow
+    - ImportTypePortfolio
+    - ImportTypeEOD
   importer.UnlinkedProductResponse:
     properties:
       isin:
@@ -1039,6 +1677,16 @@ definitions:
       volume:
         type: integer
     type: object
+  marketdata.Source:
+    enum:
+    - alpha_vantage
+    - market_stack
+    - brandnewday
+    type: string
+    x-enum-varnames:
+    - SourceAlphaVantage
+    - SourceMarketStack
+    - SourceBrandNewDay
   portfolio.ChangePortfolioTransactionDateRequest:
     properties:
       id:
@@ -1234,6 +1882,32 @@ definitions:
       value_index:
         type: number
     type: object
+  portfolio.TransactionOrigin:
+    enum:
+    - IMPORT
+    - MANUAL
+    type: string
+    x-enum-varnames:
+    - TransactionOriginImport
+    - TransactionOriginManual
+  portfolio.TransactionType:
+    enum:
+    - BUY
+    - SELL
+    - DIVIDEND
+    - TAX
+    - FEE
+    - CASH
+    - SPLIT
+    type: string
+    x-enum-varnames:
+    - TxBuy
+    - TxSell
+    - TxDividend
+    - TxTax
+    - TxFee
+    - TxCash
+    - TxSplit
   portfolio.UpdatePortfolioTransactionRequest:
     properties:
       amount:
@@ -1259,6 +1933,14 @@ definitions:
         type: string
       hide_ignored:
         type: boolean
+      ignored_by_rule:
+        type: string
+      import_id:
+        description: |-
+          ImportID narrows to the rows one import brought in, ImportedByRule to the rows
+          one ignore rule ignored. Together they are what "restore everything this rule
+          caught in this import" asks for.
+        type: string
       note:
         type: string
       q:
@@ -2242,6 +2924,318 @@ paths:
       summary: List identity providers
       tags:
       - auth
+  /backup/assets/export:
+    get:
+      description: Returns the asset classes the signed-in account keeps by hand,
+        with their items, worth changes and purchases, as one JSON file. The portfolio-sourced
+        class is left out and rebuilt from the portfolio.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.AssetsFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export asset classes
+      tags:
+      - backup
+  /backup/assets/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges an assets backup file into the signed-in account: classes
+        are matched by name and items by class and name; an item the account already
+        holds keeps its own history, new ones come in with theirs. The whole file
+        lands or nothing does; asset snapshots are rebuilt afterwards. With dry_run
+        the counts are reported and nothing is written. A file naming listings this
+        instance lacks is refused with 409 and the missing ones listed.'
+      parameters:
+      - description: Assets backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.AssetsImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Listings missing
+          schema:
+            $ref: '#/definitions/backup.AssetsImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable assets backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import asset classes
+      tags:
+      - backup
+  /backup/cashflow/export:
+    get:
+      description: Returns every cashflow transaction of the signed-in account with
+        its tag and ignored state, the imports that brought them in, the ignore rules,
+        and the recurring items with their links and dismissals, as one JSON file.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.CashflowFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export cashflow
+      tags:
+      - backup
+  /backup/cashflow/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges a cashflow backup file into the signed-in account: transactions,
+        rules and recurring items the account has are skipped, new ones are added,
+        and the whole file lands or nothing does. With dry_run the counts are reported
+        and nothing is written. A file naming vendors this instance lacks is refused
+        with 409 and the missing ones listed.'
+      parameters:
+      - description: Cashflow backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.CashflowImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Vendors missing
+          schema:
+            $ref: '#/definitions/backup.CashflowImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable cashflow backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import cashflow
+      tags:
+      - backup
+  /backup/eods/export:
+    get:
+      description: Returns the end-of-day prices of every listing that has any, with
+        their split factors, as one JSON file. Listings are named by symbol and source.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.EODFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export the end-of-day prices
+      tags:
+      - backup
+  /backup/eods/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges an EOD backup file: days a listing has are skipped, new
+        ones are added with their split factor, and the whole file lands or nothing
+        does. With dry_run the counts are reported and nothing is written. A file
+        naming listings this instance lacks is refused with 409 and the missing ones
+        listed.'
+      parameters:
+      - description: EOD backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.EODImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Listings missing
+          schema:
+            $ref: '#/definitions/backup.EODImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable EOD backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import end-of-day prices
+      tags:
+      - backup
+  /backup/portfolio/export:
+    get:
+      description: Returns every portfolio transaction of the signed-in account with
+        the imports that brought them in, as one JSON file. Positions and snapshots
+        are left out and rebuilt on import.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.PortfolioFile'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Export portfolio
+      tags:
+      - backup
+  /backup/portfolio/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Merges a portfolio backup file into the signed-in account: transactions
+        the account has are skipped, new ones are added, and the whole file lands
+        or nothing does; the portfolio is rebuilt afterwards. With dry_run the counts
+        are reported and nothing is written. A file naming vendors this instance lacks
+        is refused with 409 and the missing ones listed.'
+      parameters:
+      - description: Portfolio backup JSON
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Report what would change without writing
+        in: formData
+        name: dry_run
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backup.PortfolioImportResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Vendors missing
+          schema:
+            $ref: '#/definitions/backup.PortfolioImportResponse'
+        "413":
+          description: File too large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Not a readable portfolio backup
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Import portfolio
+      tags:
+      - backup
   /cashflow/analytics/monthly:
     get:
       consumes:
@@ -2324,6 +3318,248 @@ paths:
       summary: Get cashflow tag distribution
       tags:
       - Transactions
+  /cashflow/ignore-rules:
+    get:
+      description: Returns every ignore rule of the signed-in account, newest first.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRulesResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List cashflow ignore rules
+      tags:
+      - Ignore rules
+    post:
+      consumes:
+      - application/json
+      description: Stores a rule that ignores matching transactions on arrival. It
+        takes effect on what is imported from then on; applying it to transactions
+        already in the ledger is a separate action.
+      parameters:
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/{rule_id}:
+    delete:
+      description: 'Removes a rule. Nothing it ignored is restored: those transactions
+        stay as they are and are put back one by one, like any other ignored row.'
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a cashflow ignore rule
+      tags:
+      - Ignore rules
+    put:
+      consumes:
+      - application/json
+      description: Rewrites what a rule matches on, or switches it off. Transactions
+        it already ignored keep their state — the edit says what the rule catches
+        from now on.
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/{rule_id}/apply:
+    post:
+      description: Ignores the transactions already in the ledger that the rule matches,
+        skipping rows that are ignored already and rows whose ignored state was decided
+        by hand.
+      parameters:
+      - description: Ignore rule UUID
+        in: path
+        name: rule_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.ApplyIgnoreRuleResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Apply a cashflow ignore rule to existing transactions
+      tags:
+      - Ignore rules
+  /cashflow/ignore-rules/preview:
+    post:
+      consumes:
+      - application/json
+      description: Reports how many transactions a rule matches, how many applying
+        it would ignore, and a sample of the most recent matches.
+      parameters:
+      - description: Ignore rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/cashflow.IgnoreRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.IgnoreRulePreviewResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Preview a cashflow ignore rule
+      tags:
+      - Ignore rules
+  /cashflow/imports/{import_id}/ignored:
+    get:
+      description: Returns the transactions one import ignored automatically, grouped
+        under the rule that caught them, so a rule can be judged on its own harvest.
+      parameters:
+      - description: Import UUID
+        in: path
+        name: import_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.ImportIgnoredResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: What an import ignored, grouped by rule
+      tags:
+      - Ignore rules
   /cashflow/recurring:
     get:
       consumes:
@@ -2361,7 +3597,10 @@ paths:
       consumes:
       - application/json
       description: Starts a recurring item from one or more cashflow transactions.
-        The tag and ignored status of those transactions are left untouched.
+        The tag and ignored status of those transactions are left untouched. Every
+        transaction must run in the item's direction and must not be ignored; a transaction
+        already linked to another item is skipped, and an item whose transactions
+        are all linked elsewhere is refused with 409.
       parameters:
       - description: Create recurring item request
         in: body
@@ -2390,6 +3629,12 @@ paths:
             type: object
         "409":
           description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
@@ -2544,8 +3789,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Links cashflow transactions to an existing recurring item. An ended
-        item takes no new transactions.
+      description: Links cashflow transactions to an existing recurring item, at any
+        amount. An ended item takes no new transactions; every transaction must run
+        in the item's direction and must not be ignored. A transaction already linked
+        to another item is skipped, so linked_count can be lower than the ids sent;
+        when nothing could be linked the request is refused with 409.
       parameters:
       - description: Recurring item id
         in: path
@@ -2573,6 +3821,12 @@ paths:
             type: object
         "404":
           description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
           schema:
             additionalProperties:
               type: string
@@ -2747,6 +4001,27 @@ paths:
       summary: Dismiss a recurring suggestion
       tags:
       - Recurring
+  /cashflow/tags:
+    get:
+      description: Returns every tag the account has put on a cashflow transaction,
+        with the number of transactions carrying it, most used first. Not limited
+        to a period; untagged transactions are not a tag and are left out.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cashflow.CashflowTagsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List cashflow tags
+      tags:
+      - Transactions
   /cashflow/transactions:
     get:
       consumes:
@@ -3711,7 +4986,8 @@ paths:
       consumes:
       - application/json
       description: Set a provider's API key and/or base URI. Omitted fields are left
-        unchanged, and the response withholds the stored key.
+        unchanged, and the response withholds the stored key. A base URI must be https
+        on a public (not loopback, private or link-local) host.
       parameters:
       - description: Provider ID
         in: path

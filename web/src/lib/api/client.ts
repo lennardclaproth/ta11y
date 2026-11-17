@@ -86,6 +86,33 @@ export async function apiPostEmpty(path: string): Promise<void> {
 }
 
 /**
+ * GET a file the API serves as an attachment, returning its bytes and the name the
+ * `Content-Disposition` header gives it (or `fallbackName` when there is none).
+ */
+export async function apiDownload(
+	path: string,
+	fallbackName: string
+): Promise<{ blob: Blob; filename: string }> {
+	const res = await fetch(`${apiBaseUrl}${path}`, { credentials: 'include' });
+	if (!res.ok) {
+		await parse(res);
+	}
+	const disposition = res.headers.get('Content-Disposition') ?? '';
+	const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+	return { blob: await res.blob(), filename };
+}
+
+/** Hand a file to the browser to save, as clicking a download link would. */
+export function saveFile(blob: Blob, filename: string): void {
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = filename;
+	link.click();
+	URL.revokeObjectURL(url);
+}
+
+/**
  * POST a `multipart/form-data` body (file uploads), returning the decoded JSON body. The
  * `Content-Type` is intentionally left unset so the browser adds the multipart boundary.
  */

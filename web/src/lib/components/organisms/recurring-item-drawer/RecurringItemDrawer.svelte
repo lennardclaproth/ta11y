@@ -168,12 +168,13 @@
 		<AnalyticsCard title="Linked transactions" class="mt-5">
 			<Text size="sm" tone="muted" class="mb-2">
 				{item.transactions.length} transactions, newest first. Unlink one that does not belong — the transaction
-				itself stays in Cashflow.
+				itself stays in Cashflow. To add one, open it in Cashflow and choose Mark as recurring.
 			</Text>
 
 			{#if item.transactions.length === 0}
 				<p class="py-6 text-center text-sm text-slate-500">
-					No transactions linked yet. Mark one in Cashflow to add it here.
+					No transactions linked yet. Open one in Cashflow and choose Mark as recurring to add it
+					here.
 				</p>
 			{:else}
 				<table class="w-full border-collapse text-sm">

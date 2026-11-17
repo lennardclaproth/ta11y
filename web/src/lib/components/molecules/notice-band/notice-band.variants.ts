@@ -5,10 +5,10 @@ import type {
 } from './notice-band.types';
 
 /**
- * "Masthead band": one shape for every notification — a full-width band with a hairline rule above
- * and below, always in normal document flow. Under the masthead after an action, above the records
- * when a problem stays, under the dialog header when a save fails. Nothing floats over the page, so
- * a notice can never cover the navigation, the ledger actions or a table row.
+ * "Masthead band": one shape for every notification — a band with a hairline rule above and below.
+ * In the flow above the records when a problem stays and under the dialog header when a save fails;
+ * after an action the toast stack prints it as a floating card in the content area's top-right
+ * corner (`NoticeBandRegion` adds the side rules, rounding and shadow).
  *
  * No `w-full`: callers bleed the band to their container's edges with negative `-mx-*`, and only an
  * auto width grows with those margins — a fixed 100% would stop short of the right edge.

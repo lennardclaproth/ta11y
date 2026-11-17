@@ -125,3 +125,75 @@ func TestValidate_ServerHost(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyEnvOverrides_EnvWinsOverFile(t *testing.T) {
+	t.Setenv("PORT", "8080")
+	t.Setenv("DATABASE_URL", "postgres://env/ta11y")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com, https://app.example.com,")
+	t.Setenv("AUTH_ALLOWED_EMAILS", "a@example.com,b@example.com")
+	t.Setenv("GOOGLE_REDIRECT_URL", "https://api.example.com/auth/google/callback")
+	t.Setenv("MARKETDATA_MAX_SEED_PAGES", "10")
+	t.Setenv("LOG_LEVEL", "")
+
+	cfg := validConfigForValidation()
+	cfg.Auth.Providers = map[string]AuthProvider{"google": {RedirectURL: "http://localhost:6060/auth/google/callback"}}
+	if err := cfg.applyEnvOverrides(); err != nil {
+		t.Fatalf("applyEnvOverrides: %v", err)
+	}
+
+	if cfg.Server.Port != 8080 {
+		t.Errorf("port = %d, want 8080", cfg.Server.Port)
+	}
+	if cfg.Database.ConnStr != "postgres://env/ta11y" {
+		t.Errorf("conn str = %q", cfg.Database.ConnStr)
+	}
+	if len(cfg.Server.CORSAllowedOrigins) != 1 || cfg.Server.CORSAllowedOrigins[0] != "https://app.example.com" {
+		t.Errorf("cors origins = %v", cfg.Server.CORSAllowedOrigins)
+	}
+	if len(cfg.Auth.AllowedEmails) != 2 {
+		t.Errorf("allowed emails = %v", cfg.Auth.AllowedEmails)
+	}
+	if got := cfg.Auth.Providers["google"].RedirectURL; got != "https://api.example.com/auth/google/callback" {
+		t.Errorf("redirect url = %q", got)
+	}
+	if cfg.MarketData.MaxSeedPages != 10 {
+		t.Errorf("max seed pages = %d, want 10", cfg.MarketData.MaxSeedPages)
+	}
+	if cfg.Logging.Level != "info" {
+		t.Errorf("blank LOG_LEVEL must keep the file value, got %q", cfg.Logging.Level)
+	}
+}
+
+func TestApplyEnvOverrides_RejectsNonNumericPort(t *testing.T) {
+	t.Setenv("PORT", "eighty")
+
+	cfg := validConfigForValidation()
+	if err := cfg.applyEnvOverrides(); err == nil {
+		t.Fatal("expected an error for a non-numeric PORT")
+	}
+}
+
+func TestValidateAuthPosture(t *testing.T) {
+	strict := func(env string, origins ...string) *Config {
+		return &Config{
+			Server: Server{Environment: env, CORSAllowedOrigins: origins},
+			Auth:   Auth{Enabled: true, AllowedEmails: []string{"owner@example.com"}},
+		}
+	}
+
+	if err := strict("production", "https://app.example.com").validateAuthPosture(); err != nil {
+		t.Fatalf("production with an explicit origin: expected valid, got %v", err)
+	}
+	if err := strict("production", "*").validateAuthPosture(); err == nil {
+		t.Fatal(`production with "*" origins: expected an error`)
+	}
+	if err := strict("development", "*").validateAuthPosture(); err != nil {
+		t.Fatalf(`development with "*" origins: expected valid, got %v`, err)
+	}
+
+	unset := strict("")
+	unset.Auth.Enabled = false
+	if err := unset.validateAuthPosture(); err == nil {
+		t.Fatal("unset environment with auth off: expected an error")
+	}
+}

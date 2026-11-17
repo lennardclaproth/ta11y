@@ -190,6 +190,7 @@ No dark theme is currently defined. A future dark theme requires explicit role m
 - Convert API fixed-point integers using the helpers in [money.ts](web/src/lib/api/money.ts) before display: these values use a scale of 1,000,000, including fields misleadingly named `amountCents`. Decimal-string endpoints follow their own contract.
 - Align comparable amounts to the right and keep precision consistent within a column. Name the currency and time period where context could be ambiguous.
 - Keep zero, unavailable data, and loading visibly distinct. Never substitute a displayed zero for an unknown amount in a new flow.
+- A count is not money. Use CountStat for figures like rows imported or transactions a rule matched: tabular and labelled, but never given a currency and never coloured by sign. Money and StatCard are for amounts.
 - Use direct sentence-case labels: “Add transaction”, “Save changes”, “Try again”. Error copy should explain what failed and what the person can do next. Avoid blame or judgment about spending.
 
 ## Layout
@@ -263,23 +264,28 @@ Keep reusable components under `web/src/lib/components/` and co-locate their Sve
 | Navigation/filtering | NavMenu, Tabs, filter molecules | Show current state and preserve the query/selection context |
 | Period selection | DateRangePicker | One period for the app, chosen in the overview. Supply `presets` to name the ranges and a `trigger` to render your own control; the presets then read inside the picker rather than beside it |
 | Financial summary | StatCard, KpiRow, AnalyticsCard | Explain metric, period, and comparison; trend direction needs domain meaning. AnalyticsCard's `actions` snippet puts chart-level actions on the section rule |
+| Counts | CountStat | Tabular and labelled; no currency, no colour by sign; a placeholder, not a zero, while unknown |
 | Records | DataTable, CashflowTransactionsTable | Align comparable values; preserve sort/filter/pagination and selection visibility |
 | Detail/edit | Drawer, Dialog, TransactionFormModal | Keep context visible where useful; isolate blocking decisions in dialogs |
-| Feedback | NoticeBand, NoticeBandRegion, Skeleton, Spinner | Every notification is a NoticeBand; persistent issues belong near the affected content, transient feedback goes through the single shell notice region |
+| Feedback | NoticeBand, NoticeBandRegion, Skeleton, Spinner | Every notification is a NoticeBand; persistent issues belong near the affected content, transient feedback goes through the single shell toast stack |
 
 #### Notifications
 
-One shape reports everything: a full-width band with a hairline rule above and below, always in
-normal document flow. Nothing floats, so a notice never covers the navigation, a page action or a
-table row.
+One shape reports everything: a band with a hairline rule above and below. A notice that stays is
+in normal document flow; only the short-lived feedback after an action floats, as a toast that never
+covers the navigation.
 
-- **After an action** — `NoticeBandRegion` renders the toast store directly under the masthead.
-  Stacked bands share one hairline (`-mt-px`) so several notices read as one ruled block, and at
-  most three auto-dismissing ones exist at once: a band is in the flow, so each one pushes the page
-  down. The store holds the cap, so a fourth notice does not queue out of sight while its timer runs
-  — the oldest is dismissed as the new one arrives. A notice that is meant to stay until it is
-  dismissed (`duration: 0`) is outside the cap and is never pushed out by a newer one.
-- **Under an overlay** — a dialog or drawer covers the notice region with its own scrim, so what it
+- **After an action** — `NoticeBandRegion` renders the toast store as a stack in the top-right
+  corner of the content area, under the masthead, over the page rather than in its flow, so a toast
+  never moves the page. Each toast is the band printed as a card (hairline border all round,
+  `rounded-xl`, `shadow-md`, `w-96`; full width minus the 16px gutter on phones), newest on top. It
+  auto-dismisses after 4.5s, holds that countdown while it is hovered or focused, and always has a
+  close button. At most three auto-dismissing toasts exist at once, so the stack does not cover more
+  of the page than it is worth. The store holds the cap, so a fourth does not queue out of sight
+  while its timer runs — the oldest is dismissed as the new one arrives. A toast that is meant to
+  stay until it is dismissed (`duration: 0`) is outside the cap and is never pushed out by a newer
+  one. The stack sits on the `toast` z-layer: over the page and its FAB, under a modal's scrim.
+- **Under an overlay** — a dialog or drawer covers the toast stack with its own scrim, so what it
   reports it reports itself, in a band inside it. Never send a toast from an overlay that stays open.
   The band has no timer, so it is dismissible and waits for the reader. The overlay body scrolls
   and the band is pinned at the top of it, so when the action sits further down the band is

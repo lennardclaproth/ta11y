@@ -96,6 +96,14 @@ type Transaction struct {
 	Ignored     bool              `db:"ignored"`
 	ImportID    *uuid.UUID        `db:"import_id"`
 	AccountType *AccountType      `db:"account_type"` // Allow nullable account type.
+	// IgnoredByRuleID names the ignore rule that ignored this transaction, nil when
+	// nobody's rule did. It is what makes a rule that is too wide visible per row
+	// rather than only as a total.
+	IgnoredByRuleID *uuid.UUID `db:"ignored_by_rule_id"`
+	// IgnoreOverridden records that the ignored state was decided by hand. Ignore
+	// rules leave those rows alone, so a transaction put back by hand stays back
+	// through later imports and later applications of the same rule.
+	IgnoreOverridden bool `db:"ignore_overridden"`
 }
 
 var (
@@ -165,6 +173,35 @@ func (t *Transaction) MovedTo(date time.Time) *Transaction {
 	moved.UpdatedAt = time.Now().UTC()
 	moved.Checksum = moved.generateChecksum(moved.RowNumber)
 	return &moved
+}
+
+// maxRecoverableDedupSeq bounds the search RekeyedChecksum makes for the sequence a
+// stored checksum was built with. Identical rows inside one file are rare, so a few
+// dozen sequences cover every import seen in practice.
+const maxRecoverableDedupSeq = 64
+
+// RekeyedChecksum returns the checksum the transaction would carry had it been created
+// in accID with the same dedup sequence, so a row restored into another account still
+// dedupes against a later import of the same statement there. The sequence is not
+// stored: it is recovered by reproducing the stored checksum under the transaction's own
+// AccountID. It reports false when no sequence reproduces it.
+func (t *Transaction) RekeyedChecksum(accID uuid.UUID) (string, bool) {
+	for seq := 0; seq <= maxRecoverableDedupSeq; seq++ {
+		if sum, ok := t.rekeyedWith(seq, accID); ok {
+			return sum, true
+		}
+	}
+	// MovedTo digests the row number rather than the import's sequence.
+	return t.rekeyedWith(t.RowNumber, accID)
+}
+
+func (t *Transaction) rekeyedWith(seq int, accID uuid.UUID) (string, bool) {
+	if t.generateChecksum(seq) != t.Checksum {
+		return "", false
+	}
+	rekeyed := *t
+	rekeyed.AccountID = accID
+	return rekeyed.generateChecksum(seq), true
 }
 
 // generateChecksum creates a checksum for the transaction based on the fields

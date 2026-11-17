@@ -49,6 +49,12 @@ COMPOSE_FILE := ./deploy/docker/compose.dev.yaml
 #   make db-up COMPOSE="docker compose"
 COMPOSE ?= podman compose
 
+# Local secrets (the database password, provider keys) live in the git-ignored apps/api/.env,
+# seeded by `make env`. Its values become make variables here; only what a recipe needs is
+# exported, so the test targets do not inherit them.
+-include $(API_DIR)/.env
+COMPOSE_ENV := --env-file $(API_DIR)/.env
+
 # --- Helpers (cross-platform commands) ---
 ifeq ($(IS_WINDOWS),1)
   # PowerShell helpers
@@ -107,11 +113,13 @@ build:
 	@echo "Build complete: $(BINARY_PATH)"
 
 ## run: Build and run the application
+run: export DATABASE_URL := $(DATABASE_URL)
 run: build
 	@echo "Running $(BINARY_NAME)..."
 	@cd $(API_DIR) && $(RUN_COMMAND)
 
 ## dev: Run with hot reload using air
+dev: export DATABASE_URL := $(DATABASE_URL)
 dev: env
 	@echo "Starting development server with hot reload..."
 	@cd $(API_DIR) && air --build.cmd "go build -o $(RUN_BINARY) ./$(CMD_PKG)" --build.bin "$(RUN_BINARY)"
@@ -176,24 +184,24 @@ env:
 	@cd $(API_DIR) && $(ENV_COPY)
 
 ## db-up: Start local Postgres (Podman by default) for the API
-db-up:
+db-up: env
 	@echo "Starting Postgres ($(COMPOSE))..."
-	@$(COMPOSE) -f $(COMPOSE_FILE) up -d postgres
+	@$(COMPOSE) -f $(COMPOSE_FILE) $(COMPOSE_ENV) up -d postgres
 	@echo "Postgres is up on localhost:5432. The API auto-creates the database and runs migrations on start."
 
 ## db-up-all: Start Postgres plus the observability stack (Elasticsearch/Kibana/APM)
-db-up-all:
+db-up-all: env
 	@echo "Starting full local stack (Postgres + Elasticsearch + Kibana + APM)..."
-	@$(COMPOSE) -f $(COMPOSE_FILE) up -d
+	@$(COMPOSE) -f $(COMPOSE_FILE) $(COMPOSE_ENV) up -d
 
 ## db-down: Stop the local container stack
 db-down:
 	@echo "Stopping local container stack..."
-	@$(COMPOSE) -f $(COMPOSE_FILE) down
+	@$(COMPOSE) -f $(COMPOSE_FILE) $(COMPOSE_ENV) down
 
 ## db-logs: Tail Postgres container logs
 db-logs:
-	@$(COMPOSE) -f $(COMPOSE_FILE) logs -f postgres
+	@$(COMPOSE) -f $(COMPOSE_FILE) $(COMPOSE_ENV) logs -f postgres
 
 ## web-install: Install frontend dependencies
 web-install:

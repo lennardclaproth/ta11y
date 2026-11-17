@@ -11,7 +11,9 @@ server:
 database:
   # postgres (deployed / local via deploy/docker/compose.dev.yaml) or sqlite3 (zero-infra local).
   type: postgres
-  connection_string: "postgres://admin:Postgres2026%21@127.0.0.1:5432/ta11y?sslmode=disable"
+  # Holds the database password, so it is not kept here: set DATABASE_URL in apps/api/.env
+  # (`make env` seeds it). `make run` / `make dev` and the VS Code launch config load that file.
+  connection_string: ""
 
 auth:
   # OpenID Connect sign-in. Off by default so a fresh checkout boots without provider

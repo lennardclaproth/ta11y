@@ -9,6 +9,7 @@
 import type { ImportResult, ImportType, UnlinkedProduct } from '$lib/api/types';
 import { listings } from '$lib/data/fixtures/marketdata';
 import { vendors } from '$lib/data/fixtures/vendors';
+import { countMockAutoIgnored } from './ignoreRules';
 
 /** How one vendor's export is recognised and when one of its rows counts as failed. */
 interface ExportFormat {
@@ -17,6 +18,8 @@ interface ExportFormat {
 	required: string[];
 	/** True for a row the parser would refuse; such a row is counted, not imported. */
 	rowFails?: (row: Record<string, string>) => boolean;
+	/** The description and note the row lands in the ledger with — what a rule matches on. */
+	ledgerText: (row: Record<string, string>) => { description: string; note: string };
 }
 
 const isAmount = (raw: string | undefined) => /^-?\d+([.,]\d+)?$/.test((raw ?? '').trim());
@@ -29,7 +32,11 @@ const isAmount = (raw: string | undefined) => /^-?\d+([.,]\d+)?$/.test((raw ?? '
 const exportFormats: Record<string, ExportFormat> = {
 	DEGIRO: {
 		delimiter: ',',
-		required: ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change']
+		required: ['Date', 'Value date', 'Product', 'ISIN', 'Description', 'Change'],
+		ledgerText: (row) => ({
+			description: row['Description'] ?? '',
+			note: row['Product'] ?? ''
+		})
 	},
 	ING: {
 		delimiter: ';',
@@ -37,12 +44,20 @@ const exportFormats: Record<string, ExportFormat> = {
 		rowFails: (row) =>
 			!/^\d{8}$/.test(row['Date'] ?? '') ||
 			!['debit', 'credit'].includes((row['Debit/credit'] ?? '').toLowerCase()) ||
-			!isAmount(row['Amount (EUR)'])
+			!isAmount(row['Amount (EUR)']),
+		ledgerText: (row) => ({
+			description: row['Name / Description'] ?? '',
+			note: row['Notifications'] ?? ''
+		})
 	},
 	N26: {
 		delimiter: ',',
 		required: ['Booking Date', 'Amount (EUR)'],
-		rowFails: (row) => !row['Booking Date'] || !isAmount(row['Amount (EUR)'])
+		rowFails: (row) => !row['Booking Date'] || !isAmount(row['Amount (EUR)']),
+		ledgerText: (row) => ({
+			description: row['Partner Name'] ?? '',
+			note: row['Payment Reference'] ?? ''
+		})
 	}
 };
 
@@ -95,6 +110,7 @@ function emptyResult(importId: string, type: ImportType): ImportResult {
 		imported: 0,
 		duplicates: 0,
 		failed: 0,
+		auto_ignored: 0,
 		created_at: now,
 		updated_at: now,
 		unlinked_products: []
@@ -160,6 +176,8 @@ export async function registerMockImport(
 
 	const seen = importedRows[type];
 	const rows: Record<string, string>[] = [];
+	/** The subset this upload actually inserted, which is all an ignore rule may see. */
+	const newRows: Record<string, string>[] = [];
 	// Two identical rows inside one file are two transactions, so the occurrence count
 	// is part of the key — exactly what DedupSequencer does on the server.
 	const occurrences = new Map<string, number>();
@@ -189,12 +207,18 @@ export async function registerMockImport(
 			continue;
 		}
 		seen.add(key);
+		newRows.push(row);
 		result.imported += 1;
 	}
 
 	result.status = 'completed';
 	if (type === 'portfolio') {
 		result.unlinked_products = collectUnlinkedProducts(rows);
+	}
+	if (type === 'cashflow') {
+		// Only rows this upload actually brought in are offered to the rules, the same as
+		// on the server: a duplicate keeps the import it first arrived with.
+		result.auto_ignored = countMockAutoIgnored(newRows.map(format.ledgerText));
 	}
 }
 

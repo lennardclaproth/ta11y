@@ -80,7 +80,7 @@ func GetProviderCredentials(
 // UpdateProviderCredentials sets a provider's API key and/or base URI.
 //
 // @Summary Update provider credentials
-// @Description Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key.
+// @Description Set a provider's API key and/or base URI. Omitted fields are left unchanged, and the response withholds the stored key. A base URI must be https on a public (not loopback, private or link-local) host.
 // @Tags providers
 // @Accept json
 // @Produce json
@@ -182,7 +182,8 @@ func writeCredentialError(w http.ResponseWriter, log logging.Logger, r *http.Req
 	case errors.Is(err, marketdata.ErrCredentialsNotConfigurable):
 		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"provider": err.Error()})
 	case errors.Is(err, marketdata.ErrNoCredentialFieldsToUpdate),
-		errors.Is(err, marketdata.ErrProviderAPIKeyEmpty):
+		errors.Is(err, marketdata.ErrProviderAPIKeyEmpty),
+		errors.Is(err, marketdata.ErrProviderBaseURIInvalid):
 		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"credentials": err.Error()})
 	default:
 		log.Error(r.Context(), operation+": failed", err)

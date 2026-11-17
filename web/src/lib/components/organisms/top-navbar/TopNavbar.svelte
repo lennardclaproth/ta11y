@@ -6,6 +6,8 @@
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import NavMenu from '$lib/components/molecules/nav-menu/NavMenu.svelte';
 	import AccountOverview from '$lib/components/organisms/account-overview/AccountOverview.svelte';
+	import ExportImportDialog from '$lib/components/organisms/export-import-dialog/ExportImportDialog.svelte';
+	import { exportBackup, importBackup } from '$lib/services/backup';
 	import type { NavItem } from '$lib/components/molecules/nav-menu/nav-menu.types';
 	import { zClasses } from '$lib/styles/z-index';
 	import { accountStore } from '$lib/stores/account.svelte';
@@ -95,6 +97,15 @@
 	function signOut() {
 		void accountStore.signOut();
 	}
+
+	// Export and import belong to the account, so they open from its menu on every page.
+	let exportImportOpen = $state(false);
+
+	function openExportImport() {
+		overviewOpen = false;
+		periodPickerOpen = false;
+		exportImportOpen = true;
+	}
 </script>
 
 {#snippet overview(layout: 'inline' | 'panel')}
@@ -113,9 +124,17 @@
 		periodPresets={periodStore.options}
 		onPeriodChange={changePeriod}
 		onPickerOpenChange={layout === 'panel' ? (open) => (periodPickerOpen = open) : undefined}
+		onExportImport={openExportImport}
 		onSignOut={signOut}
 	/>
 {/snippet}
+
+<ExportImportDialog
+	bind:open={exportImportOpen}
+	admin={accountStore.isAdmin}
+	onExport={exportBackup}
+	onImport={importBackup}
+/>
 
 <header class={['px-4 pt-3 lg:px-8', className].filter(Boolean).join(' ')}>
 	<div class="relative flex items-center justify-between gap-6 border-b border-slate-800 pb-2">

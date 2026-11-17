@@ -111,6 +111,11 @@ func (c *Credentials) Update(ctx context.Context, id uuid.UUID, apiKey, baseURI 
 	if apiKey != nil && strings.TrimSpace(*apiKey) == "" {
 		return nil, ErrProviderAPIKeyEmpty
 	}
+	if baseURI != nil {
+		if err := ValidateBaseURI(*baseURI); err != nil {
+			return nil, err
+		}
+	}
 
 	provider, err := c.cs.GetProviderByID(ctx, id)
 	if err != nil {

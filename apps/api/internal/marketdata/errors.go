@@ -31,6 +31,7 @@ var (
 	ErrCatalogueSyncInProgress    = errors.New("a catalogue sync is already running for this source")
 	ErrCatalogueScopeInvalid      = errors.New("invalid catalogue scope")
 	ErrCatalogueSeedPagesInvalid  = errors.New("catalogue seed pages out of range")
+	ErrCatalogueSeedInterrupted   = errors.New("the catalogue seed was interrupted by a server restart")
 )
 
 // Quote errors
