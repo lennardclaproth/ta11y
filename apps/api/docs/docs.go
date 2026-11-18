@@ -370,6 +370,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/assets/classes/growth": {
+            "get": {
+                "description": "Returns the per-day worth history of every non-archived asset class, sorted by class name.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "List asset class growth",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/assets.ClassGrowthResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/assets/classes/{class_id}": {
             "get": {
                 "description": "Returns class details for drawer rendering.",
@@ -5692,6 +5750,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_worth": {
+                    "type": "string"
+                }
+            }
+        },
+        "assets.ClassGrowthResponse": {
+            "type": "object",
+            "properties": {
+                "class_id": {
+                    "type": "string"
+                },
+                "growth": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/assets.ClassGrowthPointResponse"
+                    }
+                },
+                "name": {
                     "type": "string"
                 }
             }

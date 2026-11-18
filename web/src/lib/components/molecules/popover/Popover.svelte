@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { zClasses, type ZLayer } from '$lib/styles/z-index';
+	import { zClasses, zLayers, type ZLayer } from '$lib/styles/z-index';
 	import type { PopoverApi, PopoverPlacement } from './popover.types';
 
 	type Props = {
@@ -168,10 +168,14 @@
 		};
 	}
 
+	// A panel portaled out of a drawer would land under the drawer's scrim on the default layer,
+	// so a trigger inside one raises its panel above it without every caller having to know.
+	const insideDrawer = $derived(open && !!anchorEl?.closest('[data-drawer-panel]'));
+
 	const panelClasses = $derived(
 		[
 			'overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md',
-			zClasses[layer],
+			zClasses[insideDrawer && zLayers[layer] < zLayers.filterPopover ? 'filterPopover' : layer],
 			ready ? '' : 'invisible',
 			className
 		]

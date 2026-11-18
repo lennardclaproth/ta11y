@@ -96,6 +96,17 @@ definitions:
       total_worth:
         type: string
     type: object
+  assets.ClassGrowthResponse:
+    properties:
+      class_id:
+        type: string
+      growth:
+        items:
+          $ref: '#/definitions/assets.ClassGrowthPointResponse'
+        type: array
+      name:
+        type: string
+    type: object
   assets.ClassResponse:
     properties:
       archived:
@@ -2776,6 +2787,45 @@ paths:
               type: string
             type: object
       summary: Get asset class details
+      tags:
+      - assets
+  /assets/classes/growth:
+    get:
+      consumes:
+      - application/json
+      description: Returns the per-day worth history of every non-archived asset class,
+        sorted by class name.
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/assets.ClassGrowthResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List asset class growth
       tags:
       - assets
   /assets/holdings:

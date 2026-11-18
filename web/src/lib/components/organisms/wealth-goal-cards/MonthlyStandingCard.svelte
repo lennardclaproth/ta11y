@@ -13,10 +13,10 @@
 	type Props = {
 		/** Finished months, newest first. */
 		months: MonthStanding[];
-		onOpenUnassigned?: (month: MonthStanding) => void;
+		onOpenMissing?: (month: MonthStanding, purpose: 'income' | 'wealth') => void;
 	};
 
-	let { months, onOpenUnassigned }: Props = $props();
+	let { months, onOpenMissing }: Props = $props();
 
 	const compactLimit = 4;
 	let showAllOnPhone = $state(false);
@@ -38,7 +38,7 @@
 {:else}
 	{#each months as month, index (month.month)}
 		<div class={index >= compactLimit && !showAllOnPhone ? 'hidden sm:block' : ''}>
-			<MonthStandingRow {month} {track} divider={index > 0} {onOpenUnassigned} />
+			<MonthStandingRow {month} {track} divider={index > 0} {onOpenMissing} />
 		</div>
 	{/each}
 	{#if hidden > 0 && !showAllOnPhone}

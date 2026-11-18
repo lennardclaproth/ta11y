@@ -35,9 +35,15 @@
 
 	// The group whose first card still occupies the left edge of the viewport is the one you
 	// are reading, so a half-scrolled rail does not flip the indicator early.
+	// At the end of the rail the last group may be too narrow to reach the left edge, so the
+	// end itself counts as reading it.
 	function syncActive() {
 		const node = track;
 		if (!node) return;
+		if (node.scrollLeft > 0 && node.scrollLeft >= node.scrollWidth - node.clientWidth - 8) {
+			scrolledTo = groups[groups.length - 1]?.id ?? '';
+			return;
+		}
 		const edge = node.scrollLeft + 24;
 		const current = cards().find((card) => card.offsetLeft + card.offsetWidth > edge);
 		scrolledTo = current?.dataset.group ?? '';
@@ -122,7 +128,7 @@
 		onscroll={syncActive}
 		role="group"
 		aria-label={ariaLabel}
-		class="relative flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2"
+		class="relative flex snap-x snap-mandatory gap-8 overflow-x-auto pb-2"
 	>
 		{@render children()}
 	</div>

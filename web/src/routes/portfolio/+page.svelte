@@ -1,11 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
+	import { chartHeights } from '$lib/components/organisms/charts/charts.variants';
+	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
+	import IconButton from '$lib/components/molecules/icon-button/IconButton.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import KpiRow from '$lib/components/organisms/kpi-row/KpiRow.svelte';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
+	import RankedBarChart from '$lib/components/organisms/charts/RankedBarChart.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
@@ -42,6 +46,7 @@
 	import { connectRealtime } from '$lib/services/realtime';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore } from '$lib/stores/period.svelte';
+	import { createDraggedRange } from '$lib/stores/dragged-range.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { scaledToNumber } from '$lib/api/money';
 	import { isManualPortfolioTransaction, portfolioOriginLabel } from '$lib/api/transactions';
@@ -146,8 +151,13 @@
 		new Date(iso).toLocaleDateString('en', { month: 'short', timeZone: 'UTC' });
 
 	const latest = $derived(snapshots.at(-1) ?? null);
+	const first = $derived(snapshots[0] ?? null);
+	// The cost basis is on the chart already; what moved in the period you picked is not.
+	const periodChange = $derived(
+		latest && first ? scaledToNumber(latest.market_value) - scaledToNumber(first.market_value) : 0
+	);
 	const kpis = $derived<KpiItem[]>(
-		latest
+		latest && first
 			? [
 					{
 						label: 'Market value',
@@ -156,15 +166,73 @@
 						change: latest.total_pnl_pct
 					},
 					{
+						label: 'Change in period',
+						amount: periodChange,
+						currency: 'EUR',
+						change:
+							first.market_value > 0
+								? (periodChange / scaledToNumber(first.market_value)) * 100
+								: undefined
+					},
+					{
 						label: 'Total P&L',
 						amount: scaledToNumber(latest.total_pnl),
 						currency: 'EUR',
 						change: latest.return_vs_cost_basis_pct
-					},
-					{ label: 'Cost basis', amount: scaledToNumber(latest.total_cost_basis), currency: 'EUR' }
+					}
 				]
 			: []
 	);
+
+	/** The chart shows money (value over cost, the gain shaded) or the time-weighted return. */
+	let chartMode = $state<'value' | 'return'>('value');
+	const chartModes = [
+		{ value: 'value', label: '€ value' },
+		{ value: 'return', label: '% return' }
+	];
+	// Dragging across the chart zooms the period to that stretch; a click alone keeps it.
+	const draggedRange = createDraggedRange();
+	function onRangeSelect(rangeFrom: string, rangeTo: string) {
+		if (rangeFrom !== rangeTo) draggedRange.select(rangeFrom, rangeTo);
+	}
+
+	// `time_weighted_return_pct` is each snapshot's market return against the one before it, with
+	// money put in or taken out removed. Chained, it is the growth since the first day shown.
+	const dailyReturns = $derived(snapshots.map((s) => s.time_weighted_return_pct));
+	const cumulativeReturns = $derived.by(() => {
+		let growth = 1;
+		return dailyReturns.map((r, i) => {
+			if (i > 0) growth *= 1 + r / 100;
+			return (growth - 1) * 100;
+		});
+	});
+
+	// Weight is measured against the open positions only: a closed one holds no money.
+	const openValue = $derived(
+		positions.reduce((sum, p) => sum + (p.is_closed ? 0 : scaledToNumber(p.market_value ?? 0)), 0)
+	);
+	const allocation = $derived(
+		positions
+			.filter((p) => !p.is_closed && (p.market_value ?? 0) > 0)
+			.map((p) => ({
+				key: p.id,
+				label: p.symbol ?? p.name ?? '—',
+				value: scaledToNumber(p.market_value ?? 0)
+			}))
+	);
+	const euro = (n: number) =>
+		n.toLocaleString('en', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+	/** The table is open in the full-table slide-over. */
+	let ledgerExpanded = $state(false);
+
+	// Closing the slide-over puts focus back on the button that opened it. The page renders the
+	// table, and with it that button, again only once the drawer has closed, so wait a tick.
+	async function focusFullTableButton() {
+		await tick();
+		document.querySelector<HTMLElement>('[aria-label="Open the full table"]')?.focus();
+	}
+	const ledgerTitle = $derived(tab === 'positions' ? 'Positions' : 'Transactions');
 
 	/**
 	 * One search box serves both views, so what it means follows the tab. Transactions are
@@ -544,6 +612,47 @@
 	{/if}
 {/snippet}
 
+{#snippet costBasisCell(row: PortfolioPosition)}
+	{#if row.is_closed}
+		<span class="text-slate-500">—</span>
+	{:else}
+		<Money amount={scaledToNumber(row.cost_basis)} currency="EUR" size="sm" />
+	{/if}
+{/snippet}
+
+<!-- Unrealised P&L in money; a closed position shows what it realised instead. -->
+{#snippet pnlAmountCell(row: PortfolioPosition)}
+	{#if row.is_closed}
+		<Money
+			amount={scaledToNumber(row.realized_pnl)}
+			currency="EUR"
+			size="sm"
+			colored
+			signDisplay="exceptZero"
+		/>
+	{:else if row.market_value !== null && row.market_value !== undefined}
+		<Money
+			amount={scaledToNumber(row.market_value) - scaledToNumber(row.cost_basis)}
+			currency="EUR"
+			size="sm"
+			colored
+			signDisplay="exceptZero"
+		/>
+	{:else}
+		<span class="text-slate-500">—</span>
+	{/if}
+{/snippet}
+
+{#snippet weightCell(row: PortfolioPosition)}
+	{#if !row.is_closed && row.market_value && openValue > 0}
+		<span class="text-sm text-slate-700 tabular-nums">
+			{((scaledToNumber(row.market_value) / openValue) * 100).toFixed(1)}%
+		</span>
+	{:else}
+		<span class="text-slate-500">—</span>
+	{/if}
+{/snippet}
+
 {#snippet txTypeCell(row: PortfolioTransaction)}
 	<Badge intent="neutral" variant="soft" size="sm">{row.type}</Badge>
 {/snippet}
@@ -569,40 +678,92 @@
 		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate title="Portfolio">
+	<PageContentTemplate title="Portfolio" fill={false}>
 		{#snippet analytics()}
 			<div class="flex flex-col gap-3">
 				<KpiRow items={kpis} columns={3} />
 				<!-- Rebuilding recomputes the series this chart draws, so it hangs on the chart's
 				     own rule rather than in a menu above the page. -->
-				<AnalyticsCard title="Value vs cost basis">
-					{#snippet actions()}
-						<Button variant="ruled" loading={rebuilding} onclick={handleRebuild}>
-							<Icon icon="heroicons:arrow-path" />
-							Rebuild portfolio
-						</Button>
-					{/snippet}
-					<TimeSeriesChart
-						height="h-52"
-						{loading}
-						labels={snapshots.map((s) => s.occurred_at.slice(0, 10))}
-						xTickFormat={monthShort}
-						datasets={[
-							{
-								label: 'Market value',
-								data: snapshots.map((s) => scaledToNumber(s.market_value)),
-								color: chartColors.positive,
-								fill: true
-							},
-							{
-								label: 'Cost basis',
-								data: snapshots.map((s) => scaledToNumber(s.total_cost_basis)),
-								color: chartColors.net,
-								dashed: true
-							}
-						]}
-					/>
-				</AnalyticsCard>
+				<div class="grid gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+					<AnalyticsCard title={chartMode === 'value' ? 'Value vs cost basis' : 'Return'}>
+						{#snippet actions()}
+							{#if draggedRange.active}
+								<Badge intent="info" variant="soft" size="sm">{periodStore.rangeLabel}</Badge>
+								<Button size="sm" variant="ghost" onclick={draggedRange.reset}>Reset</Button>
+							{/if}
+							<Tabs tabs={chartModes} bind:value={chartMode} size="sm" ariaLabel="Chart shows" />
+							<Button variant="ruled" loading={rebuilding} onclick={handleRebuild}>
+								<Icon icon="heroicons:arrow-path" />
+								Rebuild portfolio
+							</Button>
+						{/snippet}
+						{#if chartMode === 'return'}
+							<ul class="mb-2 flex gap-4 text-xs text-slate-600" aria-label="Legend">
+								<li class="inline-flex items-center gap-1.5">
+									<span class="w-3 border-t-2 border-sky-600"></span>Growth over the period
+								</li>
+								<li class="inline-flex items-center gap-1.5">
+									<span class="size-2.5 rounded-sm bg-emerald-600"></span><span
+										class="-ml-1 size-2.5 rounded-sm bg-red-600"
+									></span>Change that day
+								</li>
+							</ul>
+						{/if}
+						<!-- The gap between value and cost is the gain, so it is shaded: green above
+						     the cost line, red below it. -->
+						<TimeSeriesChart
+							height={chartHeights.tallUnderKpis}
+							{loading}
+							labels={snapshots.map((s) => s.occurred_at.slice(0, 10))}
+							xTickFormat={monthShort}
+							enableRangeSelect
+							{onRangeSelect}
+							ariaLabel={chartMode === 'value'
+								? 'Market value against cost basis, the gain shaded between them'
+								: 'Growth over the period as a line, each day’s change as bars'}
+							datasets={chartMode === 'value'
+								? [
+										{
+											label: 'Cost basis',
+											data: snapshots.map((s) => scaledToNumber(s.total_cost_basis)),
+											color: chartColors.net,
+											dashed: true
+										},
+										{
+											label: 'Market value',
+											data: snapshots.map((s) => scaledToNumber(s.market_value)),
+											color: chartColors.positive,
+											gapFill: true
+										}
+									]
+								: [
+										{
+											label: 'Growth %',
+											data: cumulativeReturns,
+											color: chartColors.info,
+											signed: true
+										},
+										{
+											label: 'Change that day %',
+											data: dailyReturns,
+											color: chartColors.net,
+											barColors: dailyReturns.map((r) =>
+												r < 0 ? chartColors.negative : chartColors.positive
+											),
+											type: 'bar'
+										}
+									]}
+						/>
+					</AnalyticsCard>
+					<AnalyticsCard title="Allocation">
+						<RankedBarChart
+							data={allocation}
+							{loading}
+							formatValue={euro}
+							ariaLabel="Open positions by market value, with their weight"
+						/>
+					</AnalyticsCard>
+				</div>
 			</div>
 		{/snippet}
 
@@ -613,104 +774,134 @@
 			</NoticeBand>
 		{/if}
 
-		<div class="flex min-h-0 flex-1 flex-col">
-			<!-- The status filter belongs to the positions, so it is absent on the other tab. -->
-			<LedgerToolbar
-				title={tab === 'positions' ? 'Positions' : 'Transactions'}
-				meta={tableMeta}
-				showSearch
-				searchValue={searchQuery}
-				onSearch={(q) => (searchQuery = q)}
-				searchPlaceholder={tab === 'positions'
-					? 'Search symbol or name…'
-					: 'Search transactions…'}
-				searchAriaLabel={tab === 'positions' ? 'Search positions' : 'Search transactions'}
-				before={viewTabs}
-				filters={tab === 'positions' ? statusFilter : undefined}
-			>
-				{#snippet actions()}
-					<Button variant="ruled" onclick={() => void openImport()}>
-						<Icon icon="heroicons:cloud-arrow-up" />
-						Import CSV
-					</Button>
-					<Button shape="default" onclick={openTx}>
-						<Icon icon="heroicons:plus" />
-						Add transaction
-					</Button>
-				{/snippet}
-			</LedgerToolbar>
-
-			{#if tab === 'positions'}
-				<DataTable
-					rows={visiblePositions}
-					{loading}
-					{error}
-					emptyText={positionsEmptyText}
-					onRetry={() => void loadAll()}
-					columns={[
-						{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
-						{ key: 'name', header: 'Name', value: (r: PortfolioPosition) => r.name ?? '—' },
-						{
-							key: 'quantity',
-							header: 'Qty',
-							align: 'right',
-							value: (r: PortfolioPosition) => r.quantity
-						},
-						{ key: 'market_value', header: 'Market value', align: 'right', cell: marketValueCell },
-						{ key: 'pnl', header: 'Unrealized', align: 'right', cell: pnlCell }
-					]}
-				/>
-			{:else}
-				<DataTable
-					rows={transactions}
-					{loading}
-					{error}
-					emptyText={transactionQuery
-						? `No transactions match “${transactionQuery}”. Clear the search to see them all.`
-						: 'No transactions in this period.'}
-					onRowClick={openDetail}
-					onRetry={() => void loadAll()}
-					columns={[
-						{
-							key: 'date',
-							header: 'Date',
-							value: (r: PortfolioTransaction) => formatDisplayDate(r.occurred_at.slice(0, 10))
-						},
-						{ key: 'type', header: 'Type', cell: txTypeCell },
-						{ key: 'origin', header: 'Entered', width: 'w-28', cell: txOriginCell },
-						{
-							key: 'symbol',
-							header: 'Symbol',
-							value: (r: PortfolioTransaction) => r.symbol ?? '—'
-						},
-						{
-							key: 'quantity',
-							header: 'Qty',
-							align: 'right',
-							value: (r: PortfolioTransaction) => r.quantity
-						},
-						{
-							key: 'amount',
-							header: 'Amount',
-							align: 'right',
-							value: (r: PortfolioTransaction) => r.amount
-						}
-					]}
-				>
-					{#snippet footer()}
-						<FooterBar
-							total={txTotal}
-							bind:limit={txLimit}
-							bind:offset={txOffset}
-							onPageChange={() => void changeTransactionsPage()}
-							onLimitChange={() => void changeTransactionsPage()}
-						/>
-					{/snippet}
-				</DataTable>
-			{/if}
-		</div>
+		{#if ledgerExpanded}
+			<p class="px-4 py-6 text-sm text-slate-500">
+				The {ledgerTitle.toLowerCase()} are open in the full table.
+			</p>
+		{:else}
+			{@render ledger(false)}
+		{/if}
 	</PageContentTemplate>
 </AppShellTemplate>
+
+<Drawer
+	bind:open={ledgerExpanded}
+	title={ledgerTitle}
+	width="max-w-[96vw]"
+	padded={false}
+	onClose={focusFullTableButton}
+>
+	{@render ledger(true)}
+</Drawer>
+
+<!-- The table renders in one place at a time: on the page, or in the full-table slide-over,
+     which is the same toolbar and table with the whole screen to work in. -->
+{#snippet ledger(full: boolean)}
+	<div class="flex min-h-0 flex-1 flex-col">
+		<!-- The status filter belongs to the positions, so it is absent on the other tab. -->
+		<LedgerToolbar
+			title={full ? undefined : ledgerTitle}
+			meta={tableMeta}
+			showSearch
+			searchValue={searchQuery}
+			onSearch={(q) => (searchQuery = q)}
+			searchPlaceholder={tab === 'positions' ? 'Search symbol or name…' : 'Search transactions…'}
+			searchAriaLabel={tab === 'positions' ? 'Search positions' : 'Search transactions'}
+			before={viewTabs}
+			filters={tab === 'positions' ? statusFilter : undefined}
+		>
+			{#snippet actions()}
+				<Button variant="ruled" onclick={() => void openImport()}>
+					<Icon icon="heroicons:cloud-arrow-up" />
+					Import CSV
+				</Button>
+				<Button shape="default" onclick={openTx}>
+					<Icon icon="heroicons:plus" />
+					Add transaction
+				</Button>
+				{#if !full}
+					<IconButton
+						icon="heroicons:arrows-pointing-out"
+						ariaLabel="Open the full table"
+						onclick={() => (ledgerExpanded = true)}
+					/>
+				{/if}
+			{/snippet}
+		</LedgerToolbar>
+
+		{#if tab === 'positions'}
+			<DataTable
+				rows={visiblePositions}
+				{loading}
+				{error}
+				emptyText={positionsEmptyText}
+				onRetry={() => void loadAll()}
+				columns={[
+					{ key: 'symbol', header: 'Symbol', value: (r: PortfolioPosition) => r.symbol ?? '—' },
+					{ key: 'name', header: 'Name', value: (r: PortfolioPosition) => r.name ?? '—' },
+					{
+						key: 'quantity',
+						header: 'Qty',
+						align: 'right',
+						value: (r: PortfolioPosition) => r.quantity
+					},
+					{ key: 'market_value', header: 'Market value', align: 'right', cell: marketValueCell },
+					{ key: 'cost_basis', header: 'Cost basis', align: 'right', cell: costBasisCell },
+					{ key: 'pnl_amount', header: 'P&L', align: 'right', cell: pnlAmountCell },
+					{ key: 'pnl', header: 'Unrealized', align: 'right', cell: pnlCell },
+					{ key: 'weight', header: 'Weight', align: 'right', cell: weightCell }
+				]}
+			/>
+		{:else}
+			<DataTable
+				rows={transactions}
+				{loading}
+				{error}
+				emptyText={transactionQuery
+					? `No transactions match “${transactionQuery}”. Clear the search to see them all.`
+					: 'No transactions in this period.'}
+				onRowClick={openDetail}
+				onRetry={() => void loadAll()}
+				columns={[
+					{
+						key: 'date',
+						header: 'Date',
+						value: (r: PortfolioTransaction) => formatDisplayDate(r.occurred_at.slice(0, 10))
+					},
+					{ key: 'type', header: 'Type', cell: txTypeCell },
+					{ key: 'origin', header: 'Entered', width: 'w-28', cell: txOriginCell },
+					{
+						key: 'symbol',
+						header: 'Symbol',
+						value: (r: PortfolioTransaction) => r.symbol ?? '—'
+					},
+					{
+						key: 'quantity',
+						header: 'Qty',
+						align: 'right',
+						value: (r: PortfolioTransaction) => r.quantity
+					},
+					{
+						key: 'amount',
+						header: 'Amount',
+						align: 'right',
+						value: (r: PortfolioTransaction) => r.amount
+					}
+				]}
+			>
+				{#snippet footer()}
+					<FooterBar
+						total={txTotal}
+						bind:limit={txLimit}
+						bind:offset={txOffset}
+						onPageChange={() => void changeTransactionsPage()}
+						onLimitChange={() => void changeTransactionsPage()}
+					/>
+				{/snippet}
+			</DataTable>
+		{/if}
+	</div>
+{/snippet}
 
 <ImportDialog bind:open={importOpen} {vendors} onFinished={() => void loadAll()} />
 

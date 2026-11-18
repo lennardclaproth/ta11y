@@ -15,7 +15,8 @@ up into a daily total-worth series.
 
 - **[024] Manual management** — create/update/delete manual classes; add items with an initial
   worth; change an item's worth by absolute **SET** or directional **ADJUST**; read class lists,
-  class detail (items + growth + mutations), and total snapshots (`GET /assets/snapshots`).
+  class detail (items + growth + mutations), total snapshots (`GET /assets/snapshots`), and every
+  live class's growth in one request (`GET /assets/classes/growth`) for the stacked chart on Assets.
 - **[025] Portfolio sync** — on `portfolio.rebuilt`, a **read-only** `PORTFOLIO` class (name
   `"Portfolio"`, item `"Portfolio Worth"`) is rebuilt from the portfolio snapshots, then total
   snapshots are rebuilt and `assets.snapshots.rebuilt` is published for realtime fan-out.
@@ -211,6 +212,7 @@ publishes `assets.snapshots.rebuild_requested`, which a handler turns into a `Re
 | List classes | `GET /assets/classes` | query: `account_id`, `include_archived` | 200 `[{..., current_worth, growth_pct}]` |
 | Class detail | `GET /assets/classes/{class_id}` | query: `account_id` | 200 `{class, assets, growth, mutations}` |
 | Total snapshots | `GET /assets/snapshots` | query: `account_id`, `from?`, `to?` | 200 `[{date, total_worth}]` |
+| Growth per class | `GET /assets/classes/growth` | query: `from?`, `to?` | 200 `[{class_id, name, growth: [{date, total_worth}]}]`, live classes by name; a class's last worth before `from` opens its series on `from` |
 | Rename item | `PATCH /assets/{asset_id}` | body: `name` | 204 |
 | Delete item | `DELETE /assets/{asset_id}` | — (history and purchases go with it) | 204 |
 | Edit worth change | `PUT /assets/{asset_id}/mutations/{mutation_id}` | body: `amount`, `direction?`, `effective_date`, `note?` | 204 |

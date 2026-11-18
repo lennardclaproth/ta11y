@@ -79,3 +79,16 @@
 		<DonutChart data={[]} error="Failed to load" />
 	</div>
 </Story>
+
+<!-- Large: the ring above its legend, for a card that has the screen's height to fill. -->
+<Story name="Large" asChild>
+	<div class="w-80 rounded-2xl border border-slate-200 bg-white p-4">
+		<DonutChart
+			data={outgoing}
+			ramp={donutRamps.outgoing}
+			centerLabel="Out"
+			formatValue={euro}
+			size="lg"
+		/>
+	</div>
+</Story>

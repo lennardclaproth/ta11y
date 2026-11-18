@@ -8,6 +8,7 @@
 	import type { DonutDatum } from '$lib/charts/types';
 	import Popover from '$lib/components/molecules/popover/Popover.svelte';
 	import Skeleton from '$lib/components/atoms/skeleton/Skeleton.svelte';
+	import type { DonutChartSize } from './charts.types';
 
 	type Props = {
 		data: DonutDatum[];
@@ -22,6 +23,7 @@
 		centerLabel?: string;
 		onSliceClick?: (label: string) => void;
 		ariaLabel?: string;
+		size?: DonutChartSize;
 		class?: string;
 	};
 
@@ -37,6 +39,7 @@
 		centerLabel,
 		onSliceClick,
 		ariaLabel = 'Distribution chart',
+		size = 'md',
 		class: className = ''
 	}: Props = $props();
 
@@ -108,8 +111,16 @@
 	onDestroy(destroy);
 </script>
 
-<div class={['flex items-center gap-4', className].filter(Boolean).join(' ')}>
-	<div class="relative h-40 w-40 shrink-0" role="img" aria-label={ariaLabel}>
+<div
+	class={[size === 'lg' ? 'flex flex-col gap-4' : 'flex items-center gap-4', className]
+		.filter(Boolean)
+		.join(' ')}
+>
+	<div
+		class={size === 'lg' ? 'relative mx-auto size-56 shrink-0' : 'relative h-40 w-40 shrink-0'}
+		role="img"
+		aria-label={ariaLabel}
+	>
 		{#if loading}
 			<Skeleton variant="circle" class="h-full w-full" />
 		{:else if error}
@@ -130,7 +141,11 @@
 				<div
 					class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center"
 				>
-					<span class="text-sm font-semibold text-slate-900">{formatValue(total)}</span>
+					<span
+						class={size === 'lg'
+							? 'text-lg font-semibold text-slate-900'
+							: 'text-sm font-semibold text-slate-900'}>{formatValue(total)}</span
+					>
 					<span class="text-[11px] text-slate-500">{centerLabel}</span>
 				</div>
 			{/if}

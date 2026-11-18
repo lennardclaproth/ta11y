@@ -1,18 +1,23 @@
 <script lang="ts">
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
+	import { chartHeights } from '$lib/components/organisms/charts/charts.variants';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
+	import RankedBarChart from '$lib/components/organisms/charts/RankedBarChart.svelte';
 	import DonutChart from '$lib/components/organisms/charts/DonutChart.svelte';
+	import Tabs from '$lib/components/molecules/tabs/Tabs.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import CardRail from '$lib/components/molecules/card-rail/CardRail.svelte';
+	import IconButton from '$lib/components/molecules/icon-button/IconButton.svelte';
+	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
 	import { cardRailWidths } from '$lib/components/molecules/card-rail/card-rail.variants';
 	import ActionMenu from '$lib/components/molecules/action-menu/ActionMenu.svelte';
 	import CashflowTransactionsTable from '$lib/components/organisms/cashflow-transactions-table/CashflowTransactionsTable.svelte';
@@ -23,7 +28,7 @@
 	import { listVendors } from '$lib/services/vendors';
 	import TransactionDetailDrawer from '$lib/components/organisms/transaction-detail-drawer/TransactionDetailDrawer.svelte';
 	import RunningMonthCard from '$lib/components/organisms/wealth-goal-cards/RunningMonthCard.svelte';
-	import StreakCard from '$lib/components/organisms/wealth-goal-cards/StreakCard.svelte';
+	import SavedPerMonthCard from '$lib/components/organisms/wealth-goal-cards/SavedPerMonthCard.svelte';
 	import MonthlyStandingCard from '$lib/components/organisms/wealth-goal-cards/MonthlyStandingCard.svelte';
 	import NoGoalCard from '$lib/components/organisms/wealth-goal-cards/NoGoalCard.svelte';
 	import GoalErrorCard from '$lib/components/organisms/wealth-goal-cards/GoalErrorCard.svelte';
@@ -60,6 +65,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore, type PeriodPreset } from '$lib/stores/period.svelte';
+	import { createDraggedRange } from '$lib/stores/dragged-range.svelte';
 	import type { CashflowTransactionFormValue } from '$lib/components/organisms/transaction-form-modal/transaction-form-modal.types';
 	import {
 		parseQuery,
@@ -401,10 +407,10 @@
 	const periodMoves = (next: { from: string; to: string }) =>
 		next.from !== periodStore.from || next.to !== periodStore.to;
 
-	// The standing sends you to exactly the transactions that keep a month incomplete: the
-	// month as the period, and the Purpose filter on "not assigned". The period it replaces is
-	// remembered so "Show all transactions" puts it back.
-	function openUnassigned(month: MonthStanding) {
+	// A missing Income or Wealth mark sends you to the money that could carry it: the month as
+	// the period, the Purpose filter on "no purpose" and the direction that purpose needs. The
+	// period it replaces is remembered so "Show all transactions" puts it back.
+	function openMissing(month: MonthStanding, purpose: 'income' | 'wealth') {
 		const range = monthRange(month.month);
 		// Only a jump from an unscoped view may record the period: a second jump would otherwise
 		// remember the month scope of the first, and "Show all transactions" would restore that.
@@ -418,6 +424,9 @@
 		const moves = periodMoves(range);
 		periodStore.set({ from: range.from, to: range.to });
 		purposeFilter = ['none'];
+		// Only incoming money can be income and only outgoing money a contribution, so the jump
+		// shows just the side that could carry the missing mark.
+		directionFilter = purpose === 'income' ? 'in' : 'out';
 		scopedMonth = month.month;
 		selectedIds = [];
 		if (!moves) {
@@ -429,6 +438,7 @@
 	function clearScope() {
 		scopedMonth = null;
 		purposeFilter = [];
+		directionFilter = null;
 		const moves = periodBeforeScope !== null && periodMoves(periodBeforeScope);
 		if (periodBeforeScope) {
 			periodStore.set(periodBeforeScope);
@@ -563,12 +573,37 @@
 		selectedIds = [];
 		syncUrl();
 	}
+	const draggedRange = createDraggedRange();
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
-		// Dragging the chart picks a period like any other, so it goes through the same store.
 		scopedMonth = null;
-		periodStore.set({ from: rangeFrom, to: rangeTo });
-		toast.info(`Filtered to ${rangeFrom} – ${rangeTo}`);
+		draggedRange.select(rangeFrom, rangeTo);
 	}
+
+	// A tag bar filters the ledger to that tag; the untagged bar to the untagged rows.
+	const tagBars = (entries: TagDistributionEntry[]) =>
+		entries.map((e) => ({
+			key: e.tag === '' ? UNTAGGED_FILTER : e.tag,
+			label: e.tag === '' ? 'Untagged' : e.tag,
+			value: scaledToNumber(e.totalCents)
+		}));
+	const selectedTag = $derived(tagFilter.length === 1 ? tagFilter[0] : null);
+	function onTagSelect(key: string | null) {
+		tagFilter = key ? [key] : [];
+		onFilterChange();
+	}
+	// A ring slice is named by its label; "Other" stands for several tags and filters nothing.
+	function onSliceSelect(entries: TagDistributionEntry[], label: string) {
+		const bar = tagBars(entries).find((row) => row.label === label);
+		if (bar) onTagSelect(bar.key);
+	}
+
+	// Incoming and Outgoing read as a ring (the spread) or as ranked bars (the comparison).
+	// One choice for both cards, so the two sides always read the same way.
+	let tagView = $state<'donut' | 'bars'>('donut');
+	const tagViews = [
+		{ value: 'donut', label: 'Ring' },
+		{ value: 'bars', label: 'Bars' }
+	];
 
 	async function handleCreate(value: CashflowTransactionFormValue) {
 		creating = true;
@@ -872,6 +907,16 @@
 		void loadIgnoreRules();
 	}
 
+	/** The ledger is open in the full-table slide-over. */
+	let ledgerExpanded = $state(false);
+
+	// Closing the slide-over puts focus back on the button that opened it. The page renders the
+	// table, and with it that button, again only once the drawer has closed, so wait a tick.
+	async function focusFullTableButton() {
+		await tick();
+		document.querySelector<HTMLElement>('[aria-label="Open the full table"]')?.focus();
+	}
+
 	const cardGroups = [
 		{ id: 'cashflow', label: 'Cashflow overview' },
 		{ id: 'goal', label: 'Wealth goal' }
@@ -914,7 +959,7 @@
 		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate title="Cashflow">
+	<PageContentTemplate title="Cashflow" fill={false}>
 		{#snippet analytics()}
 			<!-- The band is one scrolling rail in two groups: the cashflow charts, and the wealth
 			     goal. The ledger underneath never changes, so you mark transactions and read the
@@ -926,8 +971,14 @@
 			>
 				<div data-card="trend" data-group="cashflow" class={cardRailWidths.wide}>
 					<AnalyticsCard title="Net trend">
+						{#snippet actions()}
+							{#if draggedRange.active}
+								<Badge intent="info" variant="soft" size="sm">{periodStore.rangeLabel}</Badge>
+								<Button size="sm" variant="ghost" onclick={draggedRange.reset}>Reset</Button>
+							{/if}
+						{/snippet}
 						<TimeSeriesChart
-							height="h-44"
+							height={chartHeights.tall}
 							labels={monthly.map((m) => m.month)}
 							xTickFormat={monthShort}
 							loading={analyticsLoading}
@@ -946,24 +997,58 @@
 				</div>
 				<div data-card="incoming" data-group="cashflow" class={cardRailWidths.default}>
 					<AnalyticsCard title="Incoming">
-						<DonutChart
-							data={incoming.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
-							ramp={donutRamps.incoming}
-							loading={analyticsLoading}
-							formatValue={euro}
-							centerLabel="In"
-						/>
+						{#snippet actions()}
+							<Tabs tabs={tagViews} bind:value={tagView} size="sm" ariaLabel="Show incoming as" />
+						{/snippet}
+						{#if tagView === 'donut'}
+							<DonutChart
+								data={tagBars(incoming)}
+								ramp={donutRamps.incoming}
+								loading={analyticsLoading}
+								formatValue={euro}
+								centerLabel="In"
+								size="lg"
+								onSliceClick={(label) => onSliceSelect(incoming, label)}
+							/>
+						{:else}
+							<RankedBarChart
+								data={tagBars(incoming)}
+								ramp={donutRamps.incoming}
+								loading={analyticsLoading}
+								formatValue={euro}
+								selected={selectedTag}
+								onSelect={onTagSelect}
+								ariaLabel="Incoming by tag — select one to filter the transactions"
+							/>
+						{/if}
 					</AnalyticsCard>
 				</div>
 				<div data-card="outgoing" data-group="cashflow" class={cardRailWidths.default}>
 					<AnalyticsCard title="Outgoing">
-						<DonutChart
-							data={outgoing.map((e) => ({ label: e.tag, value: scaledToNumber(e.totalCents) }))}
-							ramp={donutRamps.outgoing}
-							loading={analyticsLoading}
-							formatValue={euro}
-							centerLabel="Out"
-						/>
+						{#snippet actions()}
+							<Tabs tabs={tagViews} bind:value={tagView} size="sm" ariaLabel="Show outgoing as" />
+						{/snippet}
+						{#if tagView === 'donut'}
+							<DonutChart
+								data={tagBars(outgoing)}
+								ramp={donutRamps.outgoing}
+								loading={analyticsLoading}
+								formatValue={euro}
+								centerLabel="Out"
+								size="lg"
+								onSliceClick={(label) => onSliceSelect(outgoing, label)}
+							/>
+						{:else}
+							<RankedBarChart
+								data={tagBars(outgoing)}
+								ramp={donutRamps.outgoing}
+								loading={analyticsLoading}
+								formatValue={euro}
+								selected={selectedTag}
+								onSelect={onTagSelect}
+								ariaLabel="Outgoing by tag — select one to filter the transactions"
+							/>
+						{/if}
 					</AnalyticsCard>
 				</div>
 
@@ -973,8 +1058,8 @@
 							<GoalLoadingCard shape="month" />
 						</AnalyticsCard>
 					</div>
-					<div data-card="streak" data-group="goal" class={cardRailWidths.default}>
-						<AnalyticsCard title="Streak">
+					<div data-card="saved" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="Saved per month">
 							<GoalLoadingCard shape="streak" />
 						</AnalyticsCard>
 					</div>
@@ -1001,14 +1086,14 @@
 							<RunningMonthCard
 								month={runningMonth}
 								stacked
-								onOpenUnassigned={openUnassigned}
+								onOpenMissing={openMissing}
 								onAdjust={() => (goalOpen = true)}
 							/>
 						</AnalyticsCard>
 					</div>
-					<div data-card="streak" data-group="goal" class={cardRailWidths.default}>
-						<AnalyticsCard title="Streak">
-							<StreakCard
+					<div data-card="saved" data-group="goal" class={cardRailWidths.wide}>
+						<AnalyticsCard title="Saved per month">
+							<SavedPerMonthCard
 								months={standing.months}
 								currentStreak={standing.current_streak}
 								bestStreak={standing.best_streak}
@@ -1017,152 +1102,180 @@
 					</div>
 					<div data-card="standing" data-group="goal" class={cardRailWidths.wide}>
 						<AnalyticsCard title="Monthly standing">
-							<MonthlyStandingCard months={finishedMonths} onOpenUnassigned={openUnassigned} />
+							<MonthlyStandingCard months={finishedMonths} onOpenMissing={openMissing} />
 						</AnalyticsCard>
 					</div>
 				{/if}
 			</CardRail>
 		{/snippet}
 
-		<!-- Everything that acts on these rows lives here: searching, tagging or marking a
-		     selection, importing a statement and adding one. -->
-		<LedgerToolbar
-			title="Transactions"
-			meta={tableMeta}
-			showSearch
-			searchValue={descriptionFilter}
-			searchPlaceholder="Search description…"
-			searchAriaLabel="Search transactions by description"
-			onSearch={(q) => {
-				descriptionFilter = q;
-				onFilterChange();
-			}}
-		>
-			{#snippet before()}
-				{#if scopedMonth}
-					<Badge intent="info" variant="soft" size="sm">{monthLabel(scopedMonth)}</Badge>
-					<Button size="sm" variant="ghost" intent="secondary" onclick={clearScope}>
-						Show all transactions
-					</Button>
-				{/if}
-			{/snippet}
-			<!-- What is in the list is a filter over these rows, so the ignored switch and the
-			     page that owns the rules sit with the filters rather than with the actions. -->
-			{#snippet filters()}
-				<div class="flex items-center gap-2 text-sm text-slate-700">
-					<Switch
-						checked={showIgnored}
-						aria-label="Show ignored rows"
-						onchange={(event) => {
-							showIgnored = (event.currentTarget as HTMLInputElement).checked;
-							offset = 0;
-							selectedIds = [];
-						}}
-					/>
-					<span>Show ignored rows</span>
-				</div>
-				<a
-					href="/cashflow/ignore-rules"
-					class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
-				>
-					<Icon icon="heroicons:eye-slash" size="sm" />Ignore rules
-				</a>
-			{/snippet}
-			{#snippet actions()}
-				{#if selectedIds.length > 0}
-					<Button variant="ruled" onclick={() => void openTag()}>
-						<Icon icon="heroicons:tag" />
-						Tag {selectedIds.length} selected
-					</Button>
-					<ActionMenu label="Mark {selectedIds.length} selected…" items={selectionMarkItems} />
-					{#if showIgnored}
-						<Button
-							variant="ruled"
-							onclick={() =>
-								void restore(selectedRows.filter((row) => row.ignored).map((row) => row.id))}
-						>
-							<Icon icon="heroicons:arrow-uturn-left" />
-							Restore
-						</Button>
-					{/if}
-					<Button variant="ruled" onclick={makeRuleFromSelection}>
-						<Icon icon="heroicons:eye-slash" />
-						Make an ignore rule
-					</Button>
-					<Button variant="ruled" onclick={() => void openMark(selectedRows)}>
-						<Icon icon="heroicons:arrow-path-rounded-square" />
-						Mark as recurring
-					</Button>
-				{/if}
-				<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
-				{#if !loading && !error && filtering && total > 0}
-					<ActionMenu label="Mark all {total} matches…" items={filterMarkItems} />
-				{/if}
-				<Button variant="ruled" onclick={() => void openImport()}>
-					<Icon icon="heroicons:cloud-arrow-up" />
-					Import CSV
-				</Button>
-				<Button shape="default" onclick={() => (createOpen = true)}>
-					<Icon icon="heroicons:plus" />
-					Add transaction
-				</Button>
-			{/snippet}
-		</LedgerToolbar>
-		{#if total > rows.length && (allSelected || pageSelected)}
-			<div
-				class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-amber-50 px-4 py-2 text-sm text-slate-700"
-				role="status"
-			>
-				{#if allSelected}
-					<span>All {total} transactions are selected.</span>
-					<button
-						type="button"
-						class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
-						onclick={() => (selectedIds = [])}
-					>
-						Clear selection
-					</button>
-				{:else}
-					<span>All {rows.length} on this page are selected.</span>
-					<button
-						type="button"
-						class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:text-slate-400"
-						disabled={selectingAll}
-						onclick={() => void selectAllMatching()}
-					>
-						{selectingAll ? 'Selecting…' : `Select all ${total} transactions`}
-					</button>
-				{/if}
-			</div>
+		{#if ledgerExpanded}
+			<p class="px-4 py-6 text-sm text-slate-500">The transactions are open in the full table.</p>
+		{:else}
+			{@render ledger(false)}
 		{/if}
-		<CashflowTransactionsTable
-			{rows}
-			{loading}
-			{error}
-			{total}
-			{showIgnored}
-			{ignoreRules}
-			onRestore={(row) => void restore([row.id])}
-			bind:limit
-			bind:offset
-			bind:selectedIds
-			{sortKey}
-			{sortDirection}
-			bind:descriptionFilter
-			bind:tagFilter
-			bind:directionFilter
-			bind:purposeFilter
-			{tagOptions}
-			{emptyText}
-			{onSort}
-			{onPageChange}
-			{onLimitChange}
-			{onFilterChange}
-			onRowClick={openDetail}
-			onRetry={() => void load(currentQuery())}
-		/>
 	</PageContentTemplate>
 </AppShellTemplate>
+
+<Drawer
+	bind:open={ledgerExpanded}
+	title="Transactions"
+	width="max-w-[96vw]"
+	padded={false}
+	onClose={focusFullTableButton}
+>
+	{@render ledger(true)}
+</Drawer>
+
+<!-- The ledger renders in one place at a time: on the page, or in the full-table slide-over,
+     which is the same toolbar and table with the whole screen to work in. Filters, paging and
+     the selection are the page's, so closing it leaves you where you were. -->
+{#snippet ledger(full: boolean)}
+	<!-- Everything that acts on these rows lives here: searching, tagging or marking a
+	     selection, importing a statement and adding one. -->
+	<LedgerToolbar
+		title={full ? undefined : 'Transactions'}
+		meta={tableMeta}
+		showSearch
+		searchValue={descriptionFilter}
+		searchPlaceholder="Search description…"
+		searchAriaLabel="Search transactions by description"
+		onSearch={(q) => {
+			descriptionFilter = q;
+			onFilterChange();
+		}}
+	>
+		{#snippet before()}
+			{#if scopedMonth}
+				<Badge intent="info" variant="soft" size="sm">{monthLabel(scopedMonth)}</Badge>
+				<Button size="sm" variant="ghost" intent="secondary" onclick={clearScope}>
+					Show all transactions
+				</Button>
+			{/if}
+		{/snippet}
+		<!-- What is in the list is a filter over these rows, so the ignored switch and the
+		     page that owns the rules sit with the filters rather than with the actions. -->
+		{#snippet filters()}
+			<div class="flex items-center gap-2 text-sm text-slate-700">
+				<Switch
+					checked={showIgnored}
+					aria-label="Show ignored rows"
+					onchange={(event) => {
+						showIgnored = (event.currentTarget as HTMLInputElement).checked;
+						offset = 0;
+						selectedIds = [];
+					}}
+				/>
+				<span>Show ignored rows</span>
+			</div>
+			<a
+				href="/cashflow/ignore-rules"
+				class="inline-flex items-center gap-1 rounded-md text-sm text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+			>
+				<Icon icon="heroicons:eye-slash" size="sm" />Ignore rules
+			</a>
+		{/snippet}
+		{#snippet actions()}
+			{#if selectedIds.length > 0}
+				<Button variant="ruled" onclick={() => void openTag()}>
+					<Icon icon="heroicons:tag" />
+					Tag {selectedIds.length} selected
+				</Button>
+				<ActionMenu label="Mark {selectedIds.length} selected…" items={selectionMarkItems} />
+				{#if showIgnored}
+					<Button
+						variant="ruled"
+						onclick={() =>
+							void restore(selectedRows.filter((row) => row.ignored).map((row) => row.id))}
+					>
+						<Icon icon="heroicons:arrow-uturn-left" />
+						Restore
+					</Button>
+				{/if}
+				<Button variant="ruled" onclick={makeRuleFromSelection}>
+					<Icon icon="heroicons:eye-slash" />
+					Make an ignore rule
+				</Button>
+				<Button variant="ruled" onclick={() => void openMark(selectedRows)}>
+					<Icon icon="heroicons:arrow-path-rounded-square" />
+					Mark as recurring
+				</Button>
+			{/if}
+			<!-- "Mark all matches" acts on the filter, so it names the number the filter returns. -->
+			{#if !loading && !error && filtering && total > 0}
+				<ActionMenu label="Mark all {total} matches…" items={filterMarkItems} />
+			{/if}
+			<Button variant="ruled" onclick={() => void openImport()}>
+				<Icon icon="heroicons:cloud-arrow-up" />
+				Import CSV
+			</Button>
+			<Button shape="default" onclick={() => (createOpen = true)}>
+				<Icon icon="heroicons:plus" />
+				Add transaction
+			</Button>
+			{#if !full}
+				<IconButton
+					icon="heroicons:arrows-pointing-out"
+					ariaLabel="Open the full table"
+					onclick={() => (ledgerExpanded = true)}
+				/>
+			{/if}
+		{/snippet}
+	</LedgerToolbar>
+	{#if total > rows.length && (allSelected || pageSelected)}
+		<div
+			class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-amber-50 px-4 py-2 text-sm text-slate-700"
+			role="status"
+		>
+			{#if allSelected}
+				<span>All {total} transactions are selected.</span>
+				<button
+					type="button"
+					class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
+					onclick={() => (selectedIds = [])}
+				>
+					Clear selection
+				</button>
+			{:else}
+				<span>All {rows.length} on this page are selected.</span>
+				<button
+					type="button"
+					class="rounded-md text-sky-700 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none disabled:text-slate-400"
+					disabled={selectingAll}
+					onclick={() => void selectAllMatching()}
+				>
+					{selectingAll ? 'Selecting…' : `Select all ${total} transactions`}
+				</button>
+			{/if}
+		</div>
+	{/if}
+	<CashflowTransactionsTable
+		{rows}
+		{loading}
+		{error}
+		{total}
+		{showIgnored}
+		{ignoreRules}
+		onRestore={(row) => void restore([row.id])}
+		bind:limit
+		bind:offset
+		bind:selectedIds
+		{sortKey}
+		{sortDirection}
+		bind:descriptionFilter
+		bind:tagFilter
+		bind:directionFilter
+		bind:purposeFilter
+		{tagOptions}
+		{emptyText}
+		{onSort}
+		{onPageChange}
+		{onLimitChange}
+		{onFilterChange}
+		onRowClick={openDetail}
+		onRetry={() => void load(currentQuery())}
+	/>
+{/snippet}
 
 <TransactionFormModal
 	bind:open={createOpen}

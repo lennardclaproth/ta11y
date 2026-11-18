@@ -29,6 +29,18 @@ checkbox selects the page you see; when the rows run over several pages, a line 
 offers to select every row matching the filters, and a selection holds across pages until the
 filters or the period change.
 
+On Cashflow, Portfolio and Assets the overview charts take the screen's height and the page
+scrolls to the table, which keeps a screen-high panel of its own below them. The ghost button at
+the far right of the ledger header opens the same toolbar and table in a near-full-width
+slide-over. Cashflow's incoming and outgoing tags read as rings or as ranked bars, and selecting a
+tag in either filters the table to it. Dragging across Cashflow's net trend, Portfolio's chart,
+Assets' stacked chart or an asset class's chart zooms the period to that stretch, named on the
+chart's rule with a way back. Positions on Portfolio and classes on Assets are ranked bars. Portfolio and the asset
+class page shade the gain between worth and what was put in, and Portfolio's return view draws the
+growth over the period as a line with each day's change as bars. Assets stacks worth by class
+across the whole period instead of repeating net worth, and its distribution gives each class's
+worth at the period's end and its growth within it.
+
 Every notification uses one shape: a ruled band. Feedback after an action appears as a dismissible
 toast floating in the top-right corner under the masthead; a problem that stays sits at the content it
 concerns with its recovery action; a refused save stays in the modal or form that caused it, with
@@ -144,7 +156,9 @@ standing that scores each calendar month against the goal that applied in it, sh
 of its transactions are still unmarked, and keeps the run of met months as the one
 encouragement. Only incoming money can be income and only outgoing money a contribution, so
 the two sides of a transfer between your own accounts are never both counted. A new goal
-applies from the month it is set in; the running month is never scored.
+applies from the month it is set in; the running month is never scored. On Cashflow the
+standing reads as the running month, one chart of every month's share against its goal (with
+the run of met months under it), and the month rows.
 
 → Details: [Monthly wealth goal](%5B038%5D_WEALTH_GOAL.md)
 
@@ -206,7 +220,8 @@ Users manage account-scoped asset classes and the items within them, set or adju
 item's worth, inspect class details and mutations, and read total net-worth snapshots
 across all classes. Classes and items can be renamed and deleted, and an item's past worth
 changes edited or removed; every change replays the class's history in date order, so
-back-dated and corrected entries carry through to net worth.
+back-dated and corrected entries carry through to net worth. Every live class's worth over
+time comes in one request, for the stacked chart and the per-class trend on Assets.
 
 → Details: [Assets](%5B024%5D_ASSETS.md)
 

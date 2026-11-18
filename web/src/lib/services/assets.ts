@@ -5,6 +5,7 @@ import type {
 	AssetClassDetails,
 	AssetClassesQuery,
 	AssetClassesResponse,
+	AssetClassGrowthResponse,
 	AssetHolding,
 	AssetSnapshotsQuery,
 	AssetSnapshotsResponse,
@@ -51,6 +52,35 @@ export async function getAssetClassDetails(classId: string): Promise<AssetClassD
 		return clone({ class: summary, assets: [], holdings: [], growth: [], mutations: [] });
 	}
 	return apiGet<AssetClassDetails>(`/assets/classes/${classId}`);
+}
+
+/** `GET /assets/classes/growth` — every live class's worth over time, for the stacked chart. */
+export async function getAssetClassGrowth(
+	query: AssetSnapshotsQuery
+): Promise<AssetClassGrowthResponse> {
+	if (useMocks) {
+		await delay();
+		return clone(
+			assetClasses
+				.filter((c) => !c.archived)
+				.map((c) => {
+					// As the API does: the last worth before `from` opens the window on `from`.
+					const all = assetClassDetails[c.id]?.growth ?? [];
+					const before = query.from ? all.filter((p) => p.date < query.from!).at(-1) : undefined;
+					const inside = all.filter(
+						(p) => (!query.from || p.date >= query.from) && (!query.to || p.date <= query.to)
+					);
+					const opens = before && query.from && inside[0]?.date !== query.from;
+					return {
+						class_id: c.id,
+						name: c.name,
+						growth: opens ? [{ ...before, date: query.from! }, ...inside] : inside
+					};
+				})
+				.sort((a, b) => a.name.localeCompare(b.name))
+		);
+	}
+	return apiGet<AssetClassGrowthResponse>('/assets/classes/growth', { ...query });
 }
 
 /** `GET /assets/snapshots` */

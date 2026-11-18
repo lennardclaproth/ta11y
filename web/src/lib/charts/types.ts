@@ -15,6 +15,10 @@ export interface SeriesDataset {
 	dashed?: boolean;
 	/** Flip the line segment to the negative color when it dips below zero. */
 	signed?: boolean;
+	/** Shade the gap to the previous dataset: gain colour above it, loss colour below. */
+	gapFill?: boolean;
+	/** One colour per bar, aligned with `data`; overrides `color` for the bars. */
+	barColors?: string[];
 }
 
 /** One slice of a donut chart. */

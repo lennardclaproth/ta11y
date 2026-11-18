@@ -1,10 +1,15 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
+	import { chartHeights } from '$lib/components/organisms/charts/charts.variants';
+	import Drawer from '$lib/components/organisms/drawer/Drawer.svelte';
+	import IconButton from '$lib/components/molecules/icon-button/IconButton.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
-	import DonutChart from '$lib/components/organisms/charts/DonutChart.svelte';
+	import RankedBarChart from '$lib/components/organisms/charts/RankedBarChart.svelte';
+	import Sparkline from '$lib/components/atoms/sparkline/Sparkline.svelte';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import AssetClassDrawer from '$lib/components/organisms/asset-class-drawer/AssetClassDrawer.svelte';
@@ -19,21 +24,23 @@
 	import Badge from '$lib/components/atoms/badge/Badge.svelte';
 	import {
 		listAssetClasses,
-		getAssetSnapshots,
+		getAssetClassGrowth,
 		getAssetClassDetails,
 		createAssetClass
 	} from '$lib/services/assets';
 	import { goto } from '$app/navigation';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore } from '$lib/stores/period.svelte';
+	import { createDraggedRange } from '$lib/stores/dragged-range.svelte';
+	import { todayISO } from '$lib/components/molecules/calendar/calendar.utils';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
-	import { donutRamps } from '$lib/charts/theme';
+	import { categoryRamp } from '$lib/charts/theme';
 	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
-	import type { AssetClass, AssetClassDetails, AssetSnapshotPoint } from '$lib/api/types';
+	import type { AssetClass, AssetClassDetails, AssetClassGrowthSeries } from '$lib/api/types';
 
 	let classes = $state<AssetClass[]>([]);
-	let snapshots = $state<AssetSnapshotPoint[]>([]);
+	let growth = $state<AssetClassGrowthSeries[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
@@ -49,6 +56,11 @@
 	// One period for the whole app, chosen in the account overview.
 	const from = $derived(periodStore.from);
 	const to = $derived(periodStore.to);
+	// Dragging across the chart zooms the period to that stretch; a click alone keeps it.
+	const draggedRange = createDraggedRange();
+	function onRangeSelect(rangeFrom: string, rangeTo: string) {
+		if (rangeFrom !== rangeTo) draggedRange.select(rangeFrom, rangeTo);
+	}
 
 	let createOpen = $state(false);
 	let className = $state('');
@@ -61,11 +73,87 @@
 	const monthShort = (iso: string) =>
 		new Date(`${iso}T00:00:00Z`).toLocaleDateString('en', { month: 'short', timeZone: 'UTC' });
 
-	const distribution = $derived(
+	// Live classes ranked by worth. A class keeps its colour by rank, in the list and in the
+	// stacked chart alike, so the two read as one key.
+	const ranked = $derived(
 		classes
 			.filter((c) => !c.archived)
-			.map((c) => ({ label: c.name, value: decimalStringToNumber(c.current_worth) }))
+			.map((c) => ({ id: c.id, name: c.name, worth: decimalStringToNumber(c.current_worth) }))
+			.sort((a, b) => b.worth - a.worth)
 	);
+	const classColor = $derived(
+		new Map(ranked.map((c, i) => [c.id, categoryRamp[i % categoryRamp.length]]))
+	);
+	const total = $derived(ranked.reduce((sum, c) => sum + c.worth, 0));
+
+	// Each class changes worth on its own days. The chart needs one set of dates, so every class
+	// carries its last known worth forward to the dates the other classes moved on, and is nothing
+	// before its first. The period's own ends are dates too — its end held at today while the
+	// period runs on — so the chart spans the whole period even where nothing changed in it.
+	const periodEnd = $derived(to && to < todayISO() ? to : todayISO());
+	const stackDates = $derived(
+		[...new Set([from, ...growth.flatMap((g) => g.growth.map((p) => p.date)), periodEnd])]
+			.filter((date) => !!date && date >= from && date <= periodEnd)
+			.sort()
+	);
+	const classSeries = $derived(
+		ranked
+			.map((c) => growth.find((g) => g.class_id === c.id))
+			.filter((g): g is AssetClassGrowthSeries => !!g && g.growth.length > 0)
+			.map((g) => {
+				let last = 0;
+				let i = 0;
+				const data = stackDates.map((date) => {
+					while (i < g.growth.length && g.growth[i].date <= date) {
+						last = decimalStringToNumber(g.growth[i].total_worth);
+						i += 1;
+					}
+					return last;
+				});
+				return { id: g.class_id, name: g.name, data };
+			})
+	);
+	const stacked = $derived(
+		classSeries.map((s) => ({
+			label: s.name,
+			data: s.data,
+			color: classColor.get(s.id) ?? categoryRamp[0],
+			fill: true
+		}))
+	);
+
+	// The distribution reads the period too: worth at its end, growth from the first worth in it.
+	const trendOf = $derived(new Map(classSeries.map((s) => [s.id, s.data])));
+	const growthOf = $derived(
+		new Map(
+			classSeries.map((s) => {
+				const first = s.data.find((v) => v !== 0) ?? 0;
+				const last = s.data.at(-1) ?? 0;
+				return [s.id, first > 0 ? (last / first - 1) * 100 : null];
+			})
+		)
+	);
+	const distribution = $derived(
+		classSeries
+			.map((s) => ({
+				key: s.id,
+				label: s.name,
+				value: s.data.at(-1) ?? 0,
+				color: classColor.get(s.id)
+			}))
+			.filter((row) => row.value > 0)
+			.sort((a, b) => b.value - a.value)
+	);
+
+	/** The table is open in the full-table slide-over. */
+	let ledgerExpanded = $state(false);
+
+	// Closing the slide-over puts focus back on the button that opened it. The page renders the
+	// table, and with it that button, again only once the drawer has closed, so wait a tick.
+	async function focusFullTableButton() {
+		await tick();
+		document.querySelector<HTMLElement>('[aria-label="Open the full table"]')?.focus();
+	}
 
 	async function loadAll() {
 		loading = true;
@@ -75,18 +163,18 @@
 			// No account yet is an empty state, not a failure.
 			if (!accountStore.hasAccount) {
 				classes = [];
-				snapshots = [];
+				growth = [];
 				return;
 			}
-			const [cls, snaps] = await Promise.all([
+			const [cls, series] = await Promise.all([
 				listAssetClasses({}),
-				getAssetSnapshots({
+				getAssetClassGrowth({
 					from: from || undefined,
 					to: to || undefined
 				})
 			]);
 			classes = cls;
-			snapshots = snaps;
+			growth = series;
 		} catch {
 			error = 'Failed to load assets';
 		} finally {
@@ -155,6 +243,38 @@
 	<Money amount={decimalStringToNumber(row.current_worth)} currency="EUR" size="sm" />
 {/snippet}
 
+{#snippet shareCell(row: AssetClass)}
+	{#if !row.archived && total > 0}
+		<span class="text-sm text-slate-700 tabular-nums">
+			{((decimalStringToNumber(row.current_worth) / total) * 100).toFixed(1)}%
+		</span>
+	{:else}
+		<span class="text-slate-500">—</span>
+	{/if}
+{/snippet}
+
+<!-- The distribution list's extra cells: the class's growth and how its worth moved. -->
+{#snippet distributionExtra(row: { key: string })}
+	{@const pct = growthOf.get(row.key)}
+	<span
+		class={[
+			'w-14 shrink-0 text-right text-xs tabular-nums',
+			pct === null || pct === undefined
+				? 'text-slate-400'
+				: pct >= 0
+					? 'text-emerald-700'
+					: 'text-red-700'
+		].join(' ')}
+	>
+		{pct === null || pct === undefined ? '—' : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+	</span>
+	<span class="hidden w-20 shrink-0 justify-end sm:flex">
+		{#if (trendOf.get(row.key)?.length ?? 0) > 1}
+			<Sparkline data={trendOf.get(row.key) ?? []} width={80} height={22} />
+		{/if}
+	</span>
+{/snippet}
+
 {#snippet growthCell(row: AssetClass)}
 	{#if row.growth_pct !== null && row.growth_pct !== undefined}
 		<Badge intent={row.growth_pct >= 0 ? 'success' : 'error'} variant="soft" size="sm">
@@ -170,73 +290,121 @@
 		<TopNavbar />
 	{/snippet}
 
-	<PageContentTemplate title="Assets">
+	<PageContentTemplate title="Assets" fill={false}>
 		{#snippet analytics()}
-			<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-				<AnalyticsCard title="Total worth" class="lg:col-span-2">
+			<div class="grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+				<!-- The total is net worth in the masthead already; stacked by class, the chart
+				     shows what moved it. -->
+				<AnalyticsCard title="Worth by class">
+					{#snippet actions()}
+						{#if draggedRange.active}
+							<Badge intent="info" variant="soft" size="sm">{periodStore.rangeLabel}</Badge>
+							<Button size="sm" variant="ghost" onclick={draggedRange.reset}>Reset</Button>
+						{/if}
+					{/snippet}
+					<ul
+						class="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600"
+						aria-label="Legend"
+					>
+						{#each stacked as series (series.label)}
+							<li class="inline-flex items-center gap-1.5">
+								<span class="size-2.5 rounded-sm" style:background-color={series.color}></span>
+								{series.label}
+							</li>
+						{/each}
+					</ul>
 					<TimeSeriesChart
-						height="h-52"
+						height={chartHeights.tallUnderLegend}
 						{loading}
-						labels={snapshots.map((s) => s.date)}
+						stacked
+						labels={stackDates}
 						xTickFormat={monthShort}
-						datasets={[
-							{
-								label: 'Total worth',
-								data: snapshots.map((s) => decimalStringToNumber(s.total_worth)),
-								color: '#059669',
-								fill: true
-							}
-						]}
+						enableRangeSelect
+						{onRangeSelect}
+						ariaLabel="Worth per asset class over time, stacked"
+						datasets={stacked}
 					/>
 				</AnalyticsCard>
 				<AnalyticsCard title="Distribution">
-					<DonutChart
+					<RankedBarChart
 						data={distribution}
-						ramp={donutRamps.incoming}
 						{loading}
 						formatValue={euro}
-						centerLabel="Total"
+						extra={distributionExtra}
+						onSelect={(key) => {
+							const row = classes.find((c) => c.id === key);
+							if (row) void openClass(row);
+						}}
+						ariaLabel="Asset classes by worth — select one to open it"
 					/>
 				</AnalyticsCard>
 			</div>
 		{/snippet}
 
-		<!-- The asset-class table has never had a search, and this change does not give it one. -->
-		<LedgerToolbar
-			title="Asset classes"
-			meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
-		>
-			{#snippet actions()}
-				<!-- Reset on opening, not on closing: Cancel sets `createOpen` itself, which never reaches
-				     the dialog's `onClose`, and a stale band would greet the next empty form. -->
-				<Button
-					shape="default"
-					onclick={() => {
-						createError = null;
-						createOpen = true;
-					}}
-				>
-					<Icon icon="heroicons:plus" />
-					Add asset class
-				</Button>
-			{/snippet}
-		</LedgerToolbar>
-		<DataTable
-			rows={classes}
-			{loading}
-			{error}
-			emptyText="No asset classes yet. Add one to start tracking what you own."
-			onRowClick={openClass}
-			onRetry={() => void loadAll()}
-			columns={[
-				{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
-				{ key: 'source', header: 'Source', value: (r: AssetClass) => r.source },
-				{ key: 'worth', header: 'Current worth', align: 'right', cell: worthCell },
-				{ key: 'growth', header: 'Growth', align: 'right', cell: growthCell }
-			]}
-		/>
+		{#if ledgerExpanded}
+			<p class="px-4 py-6 text-sm text-slate-500">The asset classes are open in the full table.</p>
+		{:else}
+			{@render ledger(false)}
+		{/if}
 	</PageContentTemplate>
 </AppShellTemplate>
+
+<Drawer
+	bind:open={ledgerExpanded}
+	title="Asset classes"
+	width="max-w-[96vw]"
+	padded={false}
+	onClose={focusFullTableButton}
+>
+	{@render ledger(true)}
+</Drawer>
+
+<!-- The table renders in one place at a time: on the page, or in the full-table slide-over,
+     which is the same toolbar and table with the whole screen to work in. -->
+{#snippet ledger(full: boolean)}
+	<!-- The asset-class table has never had a search, and this change does not give it one. -->
+	<LedgerToolbar
+		title={full ? undefined : 'Asset classes'}
+		meta={loading ? 'Loading…' : error ? 'Could not load' : `${classes.length} classes`}
+	>
+		{#snippet actions()}
+			<!-- Reset on opening, not on closing: Cancel sets `createOpen` itself, which never reaches
+				     the dialog's `onClose`, and a stale band would greet the next empty form. -->
+			<Button
+				shape="default"
+				onclick={() => {
+					createError = null;
+					createOpen = true;
+				}}
+			>
+				<Icon icon="heroicons:plus" />
+				Add asset class
+			</Button>
+			{#if !full}
+				<IconButton
+					icon="heroicons:arrows-pointing-out"
+					ariaLabel="Open the full table"
+					onclick={() => (ledgerExpanded = true)}
+				/>
+			{/if}
+		{/snippet}
+	</LedgerToolbar>
+	<DataTable
+		rows={classes}
+		{loading}
+		{error}
+		emptyText="No asset classes yet. Add one to start tracking what you own."
+		onRowClick={openClass}
+		onRetry={() => void loadAll()}
+		columns={[
+			{ key: 'name', header: 'Class', value: (r: AssetClass) => r.name },
+			{ key: 'source', header: 'Source', value: (r: AssetClass) => r.source },
+			{ key: 'worth', header: 'Current worth', align: 'right', cell: worthCell },
+			{ key: 'share', header: 'Share', align: 'right', cell: shareCell },
+			{ key: 'growth', header: 'Growth', align: 'right', cell: growthCell }
+		]}
+	/>
+{/snippet}
 
 <AssetClassDrawer
 	bind:open={drawerOpen}

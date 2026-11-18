@@ -93,6 +93,11 @@ function monthlySnapshots(): PortfolioSnapshotPoint[] {
 		occurred.setUTCMonth(start.getUTCMonth() + i);
 		const cb = costBasis[i];
 		const pnl = value - cb;
+		// As the backend derives them: money added is the rise in cost basis, the time-weighted
+		// return leaves it out, and the daily figure is the change in P&L against the previous P&L.
+		const prev = Math.max(0, i - 1);
+		const prevPnl = values[prev] - costBasis[prev];
+		const twr = i === 0 ? 0 : ((value - (cb - costBasis[prev])) / values[prev] - 1) * 100;
 		return {
 			occurred_at: occurred.toISOString().replace('.000', ''),
 			market_value: s(value),
@@ -100,11 +105,10 @@ function monthlySnapshots(): PortfolioSnapshotPoint[] {
 			total_pnl_pct: Number(((pnl / cb) * 100).toFixed(2)),
 			total_cost_basis: s(cb),
 			return_vs_cost_basis_pct: Number(((pnl / cb) * 100).toFixed(2)),
-			daily_return_pct: Number(
-				(((value - values[Math.max(0, i - 1)]) / values[Math.max(0, i - 1)]) * 100).toFixed(2)
-			),
-			time_weighted_return_pct: Number(((value / values[0] - 1) * 100).toFixed(2)),
-			value_index: Number(((value / values[0]) * 100).toFixed(2))
+			daily_return_pct:
+				i === 0 ? 0 : Number((((pnl - prevPnl) / Math.abs(prevPnl)) * 100).toFixed(2)),
+			time_weighted_return_pct: Number(twr.toFixed(2)),
+			value_index: Number((100 + twr).toFixed(2))
 		};
 	});
 }
