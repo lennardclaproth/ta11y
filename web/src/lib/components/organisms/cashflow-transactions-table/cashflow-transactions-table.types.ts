@@ -7,5 +7,5 @@ import { purposeLabel } from '$lib/api/wealthgoal';
 export const purposeFilterOptions = [
 	{ value: 'income', label: purposeLabel.income },
 	{ value: 'wealth', label: purposeLabel.wealth },
-	{ value: 'none', label: purposeLabel[''] }
+	{ value: 'none', label: 'No purpose' }
 ];

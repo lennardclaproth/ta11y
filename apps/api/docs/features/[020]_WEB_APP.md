@@ -69,7 +69,20 @@ Every page follows one arrangement, so a control's place says what it affects:
 | Your overview | `organisms/account-overview` | Account, net worth with its change, the one period, sign out. Inline from `lg`, behind one entry below it. |
 | Page heading | `templates/page-content` (`title`) | The page's own `h1`, on the page rather than in the bar. |
 | Chart section | `molecules/analytics-card` (`actions`) | Actions that recompute the chart, such as rebuilding the portfolio. |
-| Ledger header | `organisms/ledger-toolbar` | Everything that acts on the rows: searching, row filters, adding, importing, selection actions. |
+| Ledger header | `organisms/ledger-toolbar` | Everything that acts on the rows: searching, row filters, adding, importing, selection actions. The full-table button (ghost, far right) opens it with the table in a slide-over. |
+
+On Cashflow, Portfolio and Assets the page scrolls (`templates/page-content` with `fill={false}`):
+the charts take the screen's height (`organisms/charts/charts.variants.ts`) and the table keeps a
+screen-high panel below them. While the full-table slide-over is open the page renders only a
+placeholder, so the ledger exists once and keeps the page's filters, paging and selection; closing
+it returns focus to the button that opened it. A drawer answers Escape only when it is
+the topmost layer, so one press closes one layer.
+
+Charts live in `organisms/charts`. `TimeSeriesChart` draws lines and bars together, shades the gap
+to the previous dataset (`gapFill`: gain above, loss below), stacks (`stacked`) and colours bars one
+by one (`barColors`). `RankedBarChart` draws amounts per category as bars: every row stays
+visible, and with `onSelect` the rows are toggle buttons that drive a filter. On Cashflow the
+incoming and outgoing cards switch between `DonutChart` and `RankedBarChart` together.
 
 The period is one app-wide value in `stores/period.svelte.ts`, with eight presets (`1M … Max`)
 plus a hand-picked range, chosen in the account overview and read by whichever page is open. It

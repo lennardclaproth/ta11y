@@ -322,7 +322,12 @@ Existing controls include focus rings, disabled treatment, and ARIA hooks. The f
 
 ### Charts
 
-Use the existing TimeSeriesChart and DonutChart organisms. Source colors from `chartColors` and categorical sequences from `donutRamps`, rather than creating a page-specific palette.
+Use the existing TimeSeriesChart, DonutChart and RankedBarChart organisms. Source colors from `chartColors` and categorical sequences from `donutRamps` / `categoryRamp`, rather than creating a page-specific palette.
+
+- **RankedBarChart** shows amounts as bars ranked longest first, every row visible, with an optional share of the total. Prefer it over a donut when the comparison matters. With `onSelect` a row becomes a toggle that drives a filter, the selected row drawn pressed.
+- **TimeSeriesChart options.** `stacked` stacks the datasets so a filled line shades the band it adds (worth per asset class). A dataset's `gapFill` shades the gap to the previous dataset in the gain colour above and the loss colour below. `barColors` gives each bar its own colour, e.g. one per month result.
+- **Drag to zoom.** On a period-driven chart, dragging across it sets the app-wide period to that stretch; a click alone does nothing. The card header then shows the range as an info badge with a **Reset** button that restores the period the drag replaced. Use `createDraggedRange` (`$lib/stores/dragged-range.svelte`) for this rather than page-local state.
+- **Saved per month** (wealth goal) is one bar chart: a bar per month coloured by its result (met, missed, in progress), the goal as a dashed line and the current and best run of months met as the caption under it.
 
 Income/positive series use emerald, outgoing/negative series red, net slate, and information/range selection sky. Incoming donut categories use emerald/sky; outgoing categories use red/amber. Use labels and legends to disambiguate categories when colors repeat.
 

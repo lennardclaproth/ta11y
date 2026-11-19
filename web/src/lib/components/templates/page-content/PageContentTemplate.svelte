@@ -24,6 +24,12 @@
 		onFabClick?: () => void;
 		/** Render the content inside a panel surface (set false to lay out raw content). */
 		panel?: boolean;
+		/**
+		 * Fit the page to the screen, the content panel taking what the analytics leave (default).
+		 * Set false when the analytics are tall: the page then scrolls, and the panel keeps a
+		 * screen-high table of its own below them.
+		 */
+		fill?: boolean;
 		class?: string;
 	};
 
@@ -37,13 +43,21 @@
 		fabLabel = 'Create',
 		onFabClick,
 		panel = true,
+		fill = true,
 		class: className = ''
 	}: Props = $props();
+
+	const contentClasses = $derived(
+		fill
+			? 'flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1'
+			: 'flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-[calc(100dvh-7rem)]'
+	);
 </script>
 
 <div
 	class={[
 		'relative flex min-h-full flex-col gap-5 px-4 pb-6 lg:h-full lg:min-h-0 lg:px-8',
+		fill ? '' : 'lg:overflow-y-auto',
 		className
 	]
 		.filter(Boolean)
@@ -63,17 +77,11 @@
 	{/if}
 
 	{#if panel}
-		<Panel
-			variant="muted"
-			shape="square"
-			shadow="none"
-			padding="none"
-			class="flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1"
-		>
+		<Panel variant="muted" shape="square" shadow="none" padding="none" class={contentClasses}>
 			{@render children()}
 		</Panel>
 	{:else}
-		<div class="flex h-[32rem] shrink-0 flex-col overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1">
+		<div class={contentClasses}>
 			{@render children()}
 		</div>
 	{/if}

@@ -112,9 +112,12 @@ values) with an index on `(account_id, date, purpose)`.
   month a fraction of a percent short is short. A month with no income marked is `missed`:
   the goal is a share of income.
 - **The running month is never scored** (`in_progress`) and never counts towards the streak —
-  an import that has not happened yet would break it. A finished month with unassigned
-  transactions does count, with the result it has; the open count says the figure can still
-  move.
+  an import that has not happened yet would break it. A finished month counts with the
+  result it has. Each month in the UI shows whether anything is marked **Income** and anything
+  marked **To wealth** — the two marks the score rests on. A missing mark links to that
+  month's unmarked money in the one direction that could carry it. The API's
+  `unassigned_count` is no longer shown: most transactions are rightly neither, so a count of
+  them read as work still to do.
 - **Months without any transaction are absent** rather than scored as missed, and therefore
   do not break a streak. The running month is always present once a goal exists. A month
   that has not started yet is left out entirely: an import can carry a date in the future,
@@ -158,7 +161,7 @@ projection to keep in step.
 | `transport/http/handlers/wealthgoal/` | Goal read/write and standing handlers + DTOs |
 | `transport/http/handlers/cashflow/transactions_purpose.go` | Purpose mutation handlers |
 | `web/src/lib/services/wealthgoal.ts` | Frontend service + the mock branch that scores fixtures |
-| `web/src/lib/components/organisms/wealth-goal-cards/` | The goal cards on Cashflow |
+| `web/src/lib/components/organisms/wealth-goal-cards/` | The goal cards on Cashflow: running month, saved per month (the chart, which also states the streak), monthly standing |
 
 ## Gaps / not implemented
 

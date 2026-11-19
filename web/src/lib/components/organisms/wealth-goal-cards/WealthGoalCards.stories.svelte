@@ -2,7 +2,7 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import AnalyticsCard from '$lib/components/molecules/analytics-card/AnalyticsCard.svelte';
 	import RunningMonthCard from './RunningMonthCard.svelte';
-	import StreakCard from './StreakCard.svelte';
+	import SavedPerMonthCard from './SavedPerMonthCard.svelte';
 	import MonthlyStandingCard from './MonthlyStandingCard.svelte';
 	import NoGoalCard from './NoGoalCard.svelte';
 	import GoalErrorCard from './GoalErrorCard.svelte';
@@ -50,10 +50,23 @@
 	</AnalyticsCard>
 </Story>
 
-<Story name="Streak">
-	<AnalyticsCard title="Streak">
-		<StreakCard months={[running, ...finished]} currentStreak={4} bestStreak={4} />
-	</AnalyticsCard>
+<!-- Bars coloured by result; the dashed goal steps where the goal was adjusted. -->
+<Story name="Saved per month">
+	<div class="w-[32rem] max-w-full">
+		<AnalyticsCard title="Saved per month">
+			<SavedPerMonthCard
+				months={[
+					running,
+					...finished.slice(0, 3),
+					month('2026-02-01', 'missed', 4800, 960, 0, 25),
+					month('2026-01-01', 'met', 4800, 1200, 0, 25)
+				]}
+				currentStreak={3}
+				bestStreak={4}
+				height="h-64"
+			/>
+		</AnalyticsCard>
+	</div>
 </Story>
 
 <Story name="Monthly standing">

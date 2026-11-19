@@ -3,6 +3,8 @@ package assets
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +35,9 @@ type QueryStore interface {
 	PurchasesForClass(ctx context.Context, classID uuid.UUID) ([]*Purchase, error)
 	PurchasesForAsset(ctx context.Context, assetID uuid.UUID) ([]*Purchase, error)
 	MutationsForAsset(ctx context.Context, assetID uuid.UUID) ([]*Mutation, error)
+	// MutationsForClasses returns the mutations of the given classes keyed by class ID,
+	// newest first within each class.
+	MutationsForClasses(ctx context.Context, classIDs []uuid.UUID) (map[uuid.UUID][]Mutation, error)
 }
 
 type ClassBounds struct {
@@ -330,6 +335,61 @@ func (q *Queries) holdingSummary(
 		}
 	}
 	return summary, nil
+}
+
+// ClassGrowthSeries is the worth history of one asset class.
+type ClassGrowthSeries struct {
+	ClassID uuid.UUID
+	Name    string
+	Growth  []GrowthPoint
+}
+
+// ClassGrowth returns the per-day worth history of every non-archived class of
+// the account, sorted by class name. Points are the ones ClassDetails reports,
+// limited to [from, to] when either bound is given. A class's worth on `from` is
+// its last change before it, reported as a point dated `from`, so a class that
+// did not change inside the window still has a worth there. A class without
+// worth changes up to `to` is included with an empty history.
+func (q *Queries) ClassGrowth(ctx context.Context, accID uuid.UUID, from, to *time.Time) ([]ClassGrowthSeries, error) {
+	classes, err := q.qs.ClassesForAccount(ctx, accID, false)
+	if err != nil {
+		return nil, fmt.Errorf("class growth: failed to get classes for account %s: %w", accID, err)
+	}
+	ids := make([]uuid.UUID, 0, len(classes))
+	for id := range classes {
+		ids = append(ids, id)
+	}
+	mutations, err := q.qs.MutationsForClasses(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("class growth: failed to get class mutations: %w", err)
+	}
+	out := make([]ClassGrowthSeries, 0, len(classes))
+	for id, class := range classes {
+		series := ClassGrowthSeries{ClassID: class.ID, Name: class.Name, Growth: []GrowthPoint{}}
+		var before *GrowthPoint
+		for _, point := range growthPointsFromMutations(mutations[id]) {
+			if from != nil && point.Date.Before(*from) {
+				before = &point
+				continue
+			}
+			if to != nil && point.Date.After(*to) {
+				continue
+			}
+			series.Growth = append(series.Growth, point)
+		}
+		if before != nil && (len(series.Growth) == 0 || !series.Growth[0].Date.Equal(*from)) {
+			opening := GrowthPoint{Date: *from, TotalWorth: before.TotalWorth}
+			series.Growth = append([]GrowthPoint{opening}, series.Growth...)
+		}
+		out = append(out, series)
+	}
+	slices.SortFunc(out, func(a, b ClassGrowthSeries) int {
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ClassID.String(), b.ClassID.String())
+	})
+	return out, nil
 }
 
 // ListSnapshots returns account-level daily total snapshots.

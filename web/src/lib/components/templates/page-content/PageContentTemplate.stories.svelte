@@ -39,3 +39,17 @@
 		</PageContentTemplate>
 	</div>
 </Story>
+
+<!-- Scrolling: tall analytics, and the page scrolls to a screen-high content panel under them. -->
+<Story name="Scrolling (tall analytics)" asChild>
+	<div class="h-[32rem] bg-taupe-100">
+		<PageContentTemplate title="Cashflow" fill={false}>
+			{#snippet analytics()}
+				<div class="h-[28rem] rounded bg-taupe-200/60"></div>
+			{/snippet}
+			<div class="flex h-full items-center justify-center text-sm text-slate-500">
+				Screen-high content panel
+			</div>
+		</PageContentTemplate>
+	</div>
+</Story>

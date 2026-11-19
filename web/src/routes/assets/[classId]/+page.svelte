@@ -13,6 +13,7 @@
 	import DataTable from '$lib/components/organisms/data-table/DataTable.svelte';
 	import LedgerToolbar from '$lib/components/organisms/ledger-toolbar/LedgerToolbar.svelte';
 	import TimeSeriesChart from '$lib/components/organisms/charts/TimeSeriesChart.svelte';
+	import { chartHeights } from '$lib/components/organisms/charts/charts.variants';
 	import AddAssetItemDialog from '$lib/components/organisms/add-asset-item-dialog/AddAssetItemDialog.svelte';
 	import AssetWorthDialog from '$lib/components/organisms/asset-worth-dialog/AssetWorthDialog.svelte';
 	import NameDialog from '$lib/components/organisms/name-dialog/NameDialog.svelte';
@@ -48,6 +49,7 @@
 	import { getPortfolioSnapshots } from '$lib/services/portfolio';
 	import { accountStore } from '$lib/stores/account.svelte';
 	import { periodStore } from '$lib/stores/period.svelte';
+	import { createDraggedRange } from '$lib/stores/dragged-range.svelte';
 	import { decimalStringToNumber, formatQuantity } from '$lib/api/money';
 	import { formatDisplayDate } from '$lib/components/molecules/calendar/calendar.utils';
 	import { chartColors } from '$lib/charts/theme';
@@ -78,6 +80,11 @@
 	const classId = $derived(page.params.classId ?? '');
 	const from = $derived(periodStore.from);
 	const to = $derived(periodStore.to);
+	// Dragging across the chart zooms the period to that stretch; a click alone keeps it.
+	const draggedRange = createDraggedRange();
+	function onRangeSelect(rangeFrom: string, rangeTo: string) {
+		if (rangeFrom !== rangeTo) draggedRange.select(rangeFrom, rangeTo);
+	}
 
 	let details = $state<AssetClassDetails | null>(null);
 	let loading = $state(true);
@@ -553,6 +560,12 @@
 
 {#snippet valueChart(title: string, ariaLabel: string)}
 	<AnalyticsCard {title}>
+		{#snippet actions()}
+			{#if draggedRange.active}
+				<Badge intent="info" variant="soft" size="sm">{periodStore.rangeLabel}</Badge>
+				<Button size="sm" variant="ghost" onclick={draggedRange.reset}>Reset</Button>
+			{/if}
+		{/snippet}
 		<!-- Two series need naming: the chart's own tooltip is hover-only, so the key and the
 		     sentence under it carry the same reading without a pointer. -->
 		<div
@@ -566,6 +579,9 @@
 					<span class="inline-block w-6 border-t-2 border-dashed border-slate-700"></span>
 					{paidLabel}
 				</span>
+				<span class="flex items-center gap-2">
+					<span class="inline-block h-2.5 w-4 rounded-sm bg-emerald-600/15"></span>Gain
+				</span>
 			</span>
 			{#if selectionFigures}
 				<span class="text-slate-500">
@@ -578,22 +594,26 @@
 				</span>
 			{/if}
 		</div>
+		<!-- The gap between worth and what was paid in is the gain, so it is shaded: green
+		     above the paid-in line, red below it. -->
 		<TimeSeriesChart
-			height="h-44"
+			height={chartHeights.tallUnderKpis}
 			labels={chartPoints.map((p) => p.date)}
 			xTickFormat={dayTick}
+			enableRangeSelect
+			{onRangeSelect}
 			datasets={[
-				{
-					label: 'Worth',
-					data: chartPoints.map((p) => p.value),
-					color: chartColors.positive,
-					fill: true
-				},
 				{
 					label: paidLabel,
 					data: chartPoints.map((p) => p.paid),
 					color: chartColors.net,
 					dashed: true
+				},
+				{
+					label: 'Worth',
+					data: chartPoints.map((p) => p.value),
+					color: chartColors.positive,
+					gapFill: true
 				}
 			]}
 			{ariaLabel}
@@ -849,7 +869,7 @@
 								<Skeleton variant="rect" class="h-16 w-full" />
 								<Skeleton variant="rect" class="h-16 w-full" />
 							</div>
-							<Skeleton variant="rect" class="h-44 w-full rounded-xl" />
+							<Skeleton variant="rect" class="h-56 w-full rounded-xl" />
 						</div>
 					{:else if selected}
 						<header

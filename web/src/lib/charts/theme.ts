@@ -26,7 +26,14 @@ export const chartColors = {
 	/** dark tooltip — slate-900 surface, slate-50 text */
 	tooltipBg: '#0f172a',
 	tooltipText: '#f8fafc',
-	sliceBorder: '#ffffff'
+	sliceBorder: '#ffffff',
+	/** needs attention, not an error — amber-600 */
+	warning: '#d97706',
+	/** not scored / no data — slate-300 */
+	muted: '#cbd5e1',
+	/** gap shading between two lines — emerald-600 / red-600 at 15% */
+	gainFill: '#05966926',
+	lossFill: '#dc262626'
 } as const;
 
 /**
@@ -37,6 +44,17 @@ export const donutRamps = {
 	incoming: ['#059669', '#0ea5e9', '#10b981', '#38bdf8', '#34d399', '#7dd3fc', '#6ee7b7'],
 	outgoing: ['#b91c1c', '#f59e0b', '#dc2626', '#fbbf24', '#ef4444', '#fcd34d', '#f87171']
 } as const;
+
+/** Categories that carry no direction (asset classes): slate, emerald, sky, amber, then lighter. */
+export const categoryRamp = [
+	'#334155',
+	'#059669',
+	'#0284c7',
+	'#f59e0b',
+	'#94a3b8',
+	'#34d399',
+	'#7dd3fc'
+] as const;
 
 /** Structural constants reproduced from the reference (recolor only — geometry unchanged). */
 export const chartStructure = {

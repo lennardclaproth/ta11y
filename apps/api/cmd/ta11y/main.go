@@ -575,6 +575,7 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	protected("PUT /assets/{asset_id}/purchases/{purchase_id}", assethttp.UpdatePurchase(app.log, *app.assetsCommands))
 	protected("DELETE /assets/{asset_id}/purchases/{purchase_id}", assethttp.DeletePurchase(app.log, *app.assetsCommands))
 	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
+	protected("GET /assets/classes/growth", assethttp.GetClassesGrowth(app.log, *app.assetsQueries))
 
 	// A backup of cashflow, portfolio or assets holds only the signed-in account's
 	// records. End-of-day prices are shared reference data, so only administrators move them.

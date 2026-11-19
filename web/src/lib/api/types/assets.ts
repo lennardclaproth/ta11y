@@ -123,6 +123,17 @@ export interface AssetSnapshotPoint {
 /** `GET /assets/snapshots` returns a bare array of snapshot points. */
 export type AssetSnapshotsResponse = AssetSnapshotPoint[];
 
+/** One live class's worth over time. Mirrors `assets.ClassGrowthSeriesResponse`. */
+export interface AssetClassGrowthSeries {
+	class_id: string;
+	name: string;
+	/** Oldest first; empty for a class with no recorded worth yet. */
+	growth: ClassGrowthPoint[];
+}
+
+/** `GET /assets/classes/growth` response: every live class, sorted by name. */
+export type AssetClassGrowthResponse = AssetClassGrowthSeries[];
+
 /** `POST /assets/classes` request — mirrors `assets.CreateAssetClassRequest`. */
 export interface CreateAssetClassRequest {
 	name: string;

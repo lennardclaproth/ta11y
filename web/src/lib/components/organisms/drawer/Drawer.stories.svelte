@@ -12,6 +12,7 @@
 
 <script lang="ts">
 	let open = $state(false);
+	let wideOpen = $state(false);
 </script>
 
 <Story name="Right slide-in" asChild>
@@ -26,6 +27,18 @@
 				<Button variant="ghost" intent="secondary" onclick={() => (open = false)}>Close</Button>
 				<Button onclick={() => (open = false)}>Save</Button>
 			{/snippet}
+		</Drawer>
+	</div>
+</Story>
+
+<!-- Edge to edge: no body padding, for a table that fills the panel. -->
+<Story name="Edge to edge" asChild>
+	<div>
+		<Button onclick={() => (wideOpen = true)}>Open full table</Button>
+		<Drawer bind:open={wideOpen} title="Transactions" width="max-w-[96vw]" padded={false}>
+			<div class="flex flex-1 items-center justify-center bg-taupe-50 text-sm text-slate-500">
+				A table fills this panel from edge to edge.
+			</div>
 		</Drawer>
 	</div>
 </Story>

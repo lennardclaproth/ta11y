@@ -28,6 +28,8 @@
 		/** Format an ISO label for x-axis display (the raw ISO label is still used for range emission). */
 		xTickFormat?: (label: string) => string;
 		ariaLabel?: string;
+		/** Stack the datasets; filled lines then shade the band each one adds. */
+		stacked?: boolean;
 		class?: string;
 	};
 
@@ -41,6 +43,7 @@
 		onRangeSelect,
 		xTickFormat,
 		ariaLabel = 'Chart',
+		stacked = false,
 		class: className = ''
 	}: Props = $props();
 
@@ -53,15 +56,24 @@
 	const showCanvas = $derived(!loading && !error && !isEmpty);
 
 	function buildConfig(): ChartConfiguration {
-		const mapped = datasets.map((d) => ({
+		const mapped = datasets.map((d, i) => ({
 			type: d.type ?? 'line',
 			label: d.label,
 			data: d.data,
 			borderColor: d.color,
-			backgroundColor: d.fill
-				? (ctx: ScriptableContext<'line'>) => areaGradient(ctx.chart, d.color)
-				: d.color,
-			fill: d.fill ? 'origin' : false,
+			backgroundColor:
+				d.fill && !stacked
+					? (ctx: ScriptableContext<'line'>) => areaGradient(ctx.chart, d.color)
+					: d.fill
+						? `${d.color}40`
+						: (d.barColors ?? d.color),
+			fill: d.gapFill
+				? { target: '-1', above: chartColors.gainFill, below: chartColors.lossFill }
+				: d.fill
+					? stacked && i > 0
+						? '-1'
+						: 'origin'
+					: false,
 			tension: 0.35,
 			borderWidth: d.type === 'bar' ? 0 : 2,
 			borderDash: d.dashed ? [6, 4] : undefined,
@@ -80,6 +92,9 @@
 		}));
 
 		const options = timeSeriesOptions();
+		if (stacked) {
+			(options.scales as Record<string, Record<string, unknown>>).y.stacked = true;
+		}
 		(options.plugins as Record<string, unknown>).rangeSelect = {
 			enabled: enableRangeSelect,
 			labels,

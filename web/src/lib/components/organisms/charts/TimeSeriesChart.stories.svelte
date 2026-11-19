@@ -110,6 +110,60 @@
 	</div>
 </Story>
 
+<!-- The gap to the previous dataset shaded: gain above it, loss below. -->
+<Story name="Gap fill (value vs cost)" asChild>
+	<div class="w-[640px] max-w-full rounded-2xl border border-slate-200 bg-white p-4">
+		<TimeSeriesChart
+			labels={monthLabels}
+			xTickFormat={monthShort}
+			datasets={[
+				{
+					label: 'Cost',
+					data: [4000, 4200, 4400, 4600, 4800, 5000],
+					color: chartColors.zeroLine,
+					dashed: true
+				},
+				{
+					label: 'Value',
+					data: [3900, 4300, 4600, 4500, 5200, 5600],
+					color: chartColors.positive,
+					gapFill: true
+				}
+			]}
+		/>
+	</div>
+</Story>
+
+<Story name="Stacked areas" asChild>
+	<div class="w-[640px] max-w-full rounded-2xl border border-slate-200 bg-white p-4">
+		<TimeSeriesChart
+			labels={monthLabels}
+			xTickFormat={monthShort}
+			stacked
+			datasets={[
+				{
+					label: 'Cash',
+					data: [16800, 17100, 17500, 17900, 18200, 18450],
+					color: chartColors.net,
+					fill: true
+				},
+				{
+					label: 'Brokerage',
+					data: [9000, 9400, 9800, 10500, 11200, 12230],
+					color: chartColors.positive,
+					fill: true
+				},
+				{
+					label: 'Crypto',
+					data: [2000, 2600, 2300, 2900, 3100, 3400],
+					color: chartColors.info,
+					fill: true
+				}
+			]}
+		/>
+	</div>
+</Story>
+
 <Story name="Loading" asChild>
 	<div class="w-[640px] max-w-full rounded-2xl border border-slate-200 bg-white p-4">
 		<TimeSeriesChart labels={[]} datasets={[]} loading />

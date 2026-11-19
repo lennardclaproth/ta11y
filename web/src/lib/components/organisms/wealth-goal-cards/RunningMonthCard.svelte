@@ -6,6 +6,7 @@
 	import Money from '$lib/components/atoms/money/Money.svelte';
 	import Text from '$lib/components/atoms/typography/Text.svelte';
 	import GoalProgress from '$lib/components/molecules/goal-progress/GoalProgress.svelte';
+	import PurposeMarkers from '$lib/components/molecules/purpose-markers/PurposeMarkers.svelte';
 	import { goalResultBadgeIntents } from '$lib/components/molecules/goal-progress/goal-progress.variants';
 	import { scaledToNumber } from '$lib/api/money';
 	import {
@@ -22,11 +23,12 @@
 		month: MonthStanding;
 		/** Stack the amounts under the bar instead of beside it (narrow cards). */
 		stacked?: boolean;
-		onOpenUnassigned?: (month: MonthStanding) => void;
+		/** Jump to this month's unmarked money that could carry the missing purpose. */
+		onOpenMissing?: (month: MonthStanding, purpose: 'income' | 'wealth') => void;
 		onAdjust?: () => void;
 	};
 
-	let { month, stacked = false, onOpenUnassigned, onAdjust }: Props = $props();
+	let { month, stacked = false, onOpenMissing, onAdjust }: Props = $props();
 
 	const label = $derived(monthLabel(month.month));
 	const share = $derived(sharePercent(month));
@@ -70,26 +72,16 @@
 		</dl>
 	</div>
 
-	{#if month.unassigned_count > 0}
-		<button
-			type="button"
-			class="w-fit text-sm text-sky-700 underline underline-offset-2 hover:text-sky-800 focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none"
-			onclick={() => onOpenUnassigned?.(month)}
-		>
-			{month.unassigned_count} transactions in {label} are not assigned yet
-		</button>
-	{:else}
-		<Text size="sm" tone="muted">Every transaction in {label} is assigned.</Text>
-	{/if}
+	<!-- Whether income and a contribution are marked at all; the score means nothing until both are. -->
+	<PurposeMarkers {month} {onOpenMissing} class="text-sm" />
 
-	<!-- The goal lives on the same card as the month it judges: a ruled footer, not a fourth card. -->
-	<div
-		class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 pt-3"
-	>
-		<Text size="sm" tone="muted">
-			Goal {month.goal_percent}% of income — <Money amount={target} currency="EUR" size="sm" /> on
-			{label}'s income so far. Earlier months keep the goal they had.
+	<!-- The goal lives on the same card as the month it judges: a ruled footer, not a fourth card.
+	     One line, so this card does not set the height of the whole rail; the goal dialog says
+	     that earlier months keep the goal they had. -->
+	<div class="flex items-center justify-between gap-4 border-t border-slate-200 pt-3">
+		<Text size="sm" tone="muted" class="min-w-0">
+			Goal {month.goal_percent}% of income — <Money amount={target} currency="EUR" size="sm" /> so far
 		</Text>
-		<Button size="sm" variant="outline" onclick={onAdjust}>Adjust goal</Button>
+		<Button size="sm" variant="outline" class="shrink-0" onclick={onAdjust}>Adjust goal</Button>
 	</div>
 </div>
