@@ -11,7 +11,7 @@ import (
 const maxEODBackupBytes = 256 << 20 // 256MB
 
 // EODImportResponse is what an EOD import did, or on a dry run would do. A listing
-// counts as new when it gained at least one day.
+// counts as new when the import created it.
 type EODImportResponse struct {
 	DryRun   bool            `json:"dry_run"`
 	Listings CountResponse   `json:"listings"`
@@ -31,7 +31,7 @@ func toEODImportResponse(r *backup.EODResult) EODImportResponse {
 // ExportEODs returns the instance's end-of-day prices as a backup file.
 //
 // @Summary     Export the end-of-day prices
-// @Description Returns the end-of-day prices of every listing that has any, with their split factors, as one JSON file. Listings are named by symbol and source.
+// @Description Returns every listing — named by symbol and source, with its instrument data — and its end-of-day prices with their split factors, as one JSON file. A listing without prices is included. Provider settings and API keys are never in the file.
 // @Tags        backup
 // @Produce     application/json
 // @Success     200 {object} backup.EODFile
@@ -48,7 +48,7 @@ func ExportEODs(log logging.Logger, queries *backup.Queries) http.Handler {
 // ImportEODs merges an EOD backup into the instance's end-of-day prices.
 //
 // @Summary     Import end-of-day prices
-// @Description Merges an EOD backup file: days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A file naming listings this instance lacks is refused with 409 and the missing ones listed.
+// @Description Merges an EOD backup file: listings this instance lacks are created from their instrument data and linked to this instance's provider for their source; an existing listing is left as it is. Days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A listing carried without instrument data (an older file) must exist here; otherwise the file is refused with 409 and the missing ones listed.
 // @Tags        backup
 // @Accept      multipart/form-data
 // @Produce     application/json

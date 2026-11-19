@@ -1701,7 +1701,7 @@ const docTemplate = `{
         },
         "/backup/eods/export": {
             "get": {
-                "description": "Returns the end-of-day prices of every listing that has any, with their split factors, as one JSON file. Listings are named by symbol and source.",
+                "description": "Returns every listing — named by symbol and source, with its instrument data — and its end-of-day prices with their split factors, as one JSON file. A listing without prices is included. Provider settings and API keys are never in the file.",
                 "produces": [
                     "application/json"
                 ],
@@ -1730,7 +1730,7 @@ const docTemplate = `{
         },
         "/backup/eods/import": {
             "post": {
-                "description": "Merges an EOD backup file: days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A file naming listings this instance lacks is refused with 409 and the missing ones listed.",
+                "description": "Merges an EOD backup file: listings this instance lacks are created from their instrument data and linked to this instance's provider for their source; an existing listing is left as it is. Days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A listing carried without instrument data (an older file) must exist here; otherwise the file is refused with 409 and the missing ones listed.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -6499,6 +6499,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/backup.EOD"
                     }
                 },
+                "instrument": {
+                    "$ref": "#/definitions/backup.Instrument"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -6582,6 +6585,35 @@ const docTemplate = `{
                     "$ref": "#/definitions/importer.ImportType"
                 },
                 "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.Instrument": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "exchange": {
+                    "type": "string"
+                },
+                "isin": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "ticker": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }

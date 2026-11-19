@@ -55,7 +55,10 @@ export interface AssetsBackupResult {
 	missing: BackupMissing;
 }
 
-/** `POST /backup/eods/import` — mirrors `backup.EODImportResponse`. */
+/**
+ * `POST /backup/eods/import` — mirrors `backup.EODImportResponse`. `listings.new` counts the
+ * listings the import creates.
+ */
 export interface EODBackupResult {
 	dry_run: boolean;
 	listings: BackupCount;

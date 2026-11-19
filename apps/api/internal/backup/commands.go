@@ -61,7 +61,7 @@ type AssetsResult struct {
 }
 
 // EODResult is what an EOD import did, or on a dry run what it would do. A listing
-// counts as new when it gained at least one day.
+// counts as new when the import created it.
 type EODResult struct {
 	DryRun   bool
 	Listings Count
@@ -115,6 +115,11 @@ type AccountWriter interface {
 type EODWriter interface {
 	UnitOfWork
 	ReferenceResolver
+	// ProviderIDs returns, per provider name, the provider a listing of that source
+	// is linked to on this instance. A name without a provider is absent.
+	ProviderIDs(ctx context.Context) (map[marketdata.ProviderName]uuid.UUID, error)
+	// InsertListings writes new listings with every column, their provider included.
+	InsertListings(ctx context.Context, listings []*marketdata.Listing) error
 	// InsertEODs skips a day the listing has and returns how many days it added.
 	InsertEODs(ctx context.Context, eods []*marketdata.EOD) (int, error)
 }
@@ -244,8 +249,10 @@ func (c *Commands) ImportAssets(ctx context.Context, accID uuid.UUID, file *Asse
 	return result, nil
 }
 
-// ImportEODs merges an EOD file in: days a listing has are skipped, new ones added.
-// Every listing the file names must exist here; when one does not, nothing is written
+// ImportEODs merges an EOD file in: listings this instance lacks are created first,
+// then days a listing has are skipped and new ones added. A listing that exists keeps
+// its own data. A listing the file carries without instrument data — a file exported
+// before listings travelled — must exist here; when one does not, nothing is written
 // and Missing names them. A split factor travels with its day.
 func (c *Commands) ImportEODs(ctx context.Context, file *EODFile, dryRun bool) (*EODResult, error) {
 	if err := file.check(KindEOD); err != nil {
@@ -261,16 +268,28 @@ func (c *Commands) ImportEODs(ctx context.Context, file *EODFile, dryRun bool) (
 		if err != nil {
 			return fmt.Errorf("backup import: listings: %w", err)
 		}
+		var create []EODListing
 		for _, l := range file.Listings {
-			if _, ok := listingIDs[l.ListingRef]; !ok {
+			switch _, ok := listingIDs[l.ListingRef]; {
+			case ok:
+				result.Listings.Existing++
+			case l.Instrument == nil:
 				result.Missing.Listings = append(result.Missing.Listings, l.ListingRef)
+			default:
+				create = append(create, l)
 			}
 		}
 		if !result.Missing.empty() {
+			sortListingRefs(result.Missing.Listings)
 			return ErrMissingReferences
 		}
 
 		now := c.now().UTC()
+		if err := c.createListings(ctx, create, listingIDs, now); err != nil {
+			return err
+		}
+		result.Listings.New = len(create)
+
 		for _, l := range file.Listings {
 			listingID := listingIDs[l.ListingRef]
 			eods := make([]*marketdata.EOD, 0, len(l.EODs))
@@ -287,13 +306,45 @@ func (c *Commands) ImportEODs(ctx context.Context, file *EODFile, dryRun bool) (
 			}
 			result.EODs.New += added
 			result.EODs.Existing += len(eods) - added
-			if added > 0 {
-				result.Listings.New++
-			} else {
-				result.Listings.Existing++
-			}
 		}
 		return nil
 	})
 	return settle(result, err)
+}
+
+// createListings writes the file's listings this instance lacks and adds their ids to
+// listingIDs. Each is linked to this instance's provider for its source, when there is
+// one. Like an adopted catalogue entry it has no accumulated range, so for an API source
+// the first end-of-day read syncs what the file did not bring.
+func (c *Commands) createListings(ctx context.Context, create []EODListing, listingIDs map[ListingRef]uuid.UUID, now time.Time) error {
+	if len(create) == 0 {
+		return nil
+	}
+	providerIDs, err := c.eods.ProviderIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("backup import: providers: %w", err)
+	}
+	listings := make([]*marketdata.Listing, 0, len(create))
+	for _, l := range create {
+		listing, err := marketdata.NewListing(l.Symbol, l.Name, l.Source)
+		if err != nil {
+			return fmt.Errorf("backup import: listing %s: %w", l.Symbol, err)
+		}
+		in := l.Instrument
+		listing.Type, listing.Ticker, listing.ISIN = in.Type, in.Ticker, in.ISIN
+		listing.Description, listing.Exchange, listing.Region = in.Description, in.Exchange, in.Region
+		listing.Currency, listing.Active = in.Currency, in.Active
+		listing.CreatedAt, listing.UpdatedAt = now, now
+		if name, err := marketdata.ProviderNameFromSource(l.Source); err == nil {
+			if id, ok := providerIDs[name]; ok {
+				listing.ProviderID = &id
+			}
+		}
+		listings = append(listings, listing)
+		listingIDs[l.ListingRef] = listing.ID
+	}
+	if err := c.eods.InsertListings(ctx, listings); err != nil {
+		return fmt.Errorf("backup import: listings: %w", err)
+	}
+	return nil
 }

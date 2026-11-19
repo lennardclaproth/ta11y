@@ -279,17 +279,33 @@ type AssetPurchase struct {
 	CreatedAt   time.Time   `json:"created_at"`
 }
 
-// EODFile is the instance's end-of-day prices, per listing.
+// EODFile is the instance's listings with their end-of-day prices.
 type EODFile struct {
 	Header
 	Listings []EODListing `json:"listings"`
 }
 
-// EODListing is one listing's prices.
+// EODListing is one listing with its prices. Instrument is what lets an import create
+// the listing where it is missing; a file exported before listings travelled has none,
+// and then the listing must exist on the target.
 type EODListing struct {
 	ListingRef
-	Name string `json:"name"`
-	EODs []EOD  `json:"eods"`
+	Name       string      `json:"name"`
+	Instrument *Instrument `json:"instrument,omitempty"`
+	EODs       []EOD       `json:"eods"`
+}
+
+// Instrument is a listing's descriptive data. Provider settings and keys never travel:
+// an imported listing is linked to this instance's provider for its source.
+type Instrument struct {
+	Type        *string         `json:"type,omitempty"`
+	Ticker      *string         `json:"ticker,omitempty"`
+	ISIN        *string         `json:"isin,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Exchange    *string         `json:"exchange,omitempty"`
+	Region      *string         `json:"region,omitempty"`
+	Currency    *money.Currency `json:"currency,omitempty" swaggertype:"string"`
+	Active      bool            `json:"active"`
 }
 
 // EOD is one day's prices.

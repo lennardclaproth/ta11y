@@ -446,7 +446,7 @@ func TestEODBackupMergesDaysAndKeepsSplits(t *testing.T) {
 		if err != nil {
 			t.Fatalf("import: %v", err)
 		}
-		if result.EODs != (backup.Count{New: 1, Existing: 1}) || result.Listings != (backup.Count{New: 1}) {
+		if result.EODs != (backup.Count{New: 1, Existing: 1}) || result.Listings != (backup.Count{Existing: 1}) {
 			t.Fatalf("import counts: %+v", result)
 		}
 		eods, err := store.ListingEODs(ctx, listingID)
@@ -454,10 +454,85 @@ func TestEODBackupMergesDaysAndKeepsSplits(t *testing.T) {
 			t.Fatalf("eods after import: %v, %v", eods, err)
 		}
 
+		// A file from before listings travelled carries no instrument data, so a listing
+		// it names must already be here.
 		file.Listings[0].Symbol = "MISSING.AS"
+		file.Listings[0].Instrument = nil
 		result, err = commands.ImportEODs(ctx, file, false)
 		if !errors.Is(err, backup.ErrMissingReferences) || len(result.Missing.Listings) != 1 {
 			t.Fatalf("expected the missing listing to be named, got %+v, %v", result, err)
+		}
+	})
+}
+
+func TestEODBackupCreatesMissingListings(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		ctx := context.Background()
+		store, queries, commands := backupHarness(db)
+		listingID := seedListing(t, db, "ASML.AS")
+		seedEOD(t, db, listingID, "ASML.AS", time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), 600, 1)
+		seedListing(t, db, "UNPRICED.AS")
+		provider, err := marketdata.NewAPIProviderWithAPIKey(marketdata.ProviderMarketStack, "https://example.test", "test-key")
+		if err != nil {
+			t.Fatalf("build provider: %v", err)
+		}
+		if err := storage.NewSQLXMarketDataStore(db).CreateProvider(ctx, provider); err != nil {
+			t.Fatalf("create provider: %v", err)
+		}
+
+		exported, err := queries.ExportEODs(ctx)
+		if err != nil {
+			t.Fatalf("export: %v", err)
+		}
+		file := roundTrip(t, exported)
+		if len(file.Listings) != 2 {
+			t.Fatalf("a listing without prices must be exported too: %+v", file.Listings)
+		}
+		for i := range file.Listings {
+			if file.Listings[i].Instrument == nil {
+				t.Fatalf("listing %s exported without instrument data", file.Listings[i].Symbol)
+			}
+			file.Listings[i].Symbol = "NEW-" + file.Listings[i].Symbol
+		}
+		isin := "XX0000000000"
+		file.Listings[0].Instrument.ISIN = &isin
+
+		dry, err := commands.ImportEODs(ctx, file, true)
+		if err != nil || dry.Listings != (backup.Count{New: 2}) || dry.EODs != (backup.Count{New: 1}) {
+			t.Fatalf("dry run: %+v, %v", dry, err)
+		}
+		if ids, _ := store.ListingIDs(ctx); len(ids) != 2 {
+			t.Fatalf("a dry run must not create listings, have %d", len(ids))
+		}
+
+		result, err := commands.ImportEODs(ctx, file, false)
+		if err != nil || result.Listings != (backup.Count{New: 2}) || result.EODs != (backup.Count{New: 1}) {
+			t.Fatalf("import: %+v, %v", result, err)
+		}
+		listings, err := store.Listings(ctx)
+		if err != nil {
+			t.Fatalf("listings: %v", err)
+		}
+		created := 0
+		for _, l := range listings {
+			if l.Symbol != file.Listings[0].Symbol && l.Symbol != file.Listings[1].Symbol {
+				continue
+			}
+			created++
+			if l.ProviderID == nil || *l.ProviderID != provider.ID {
+				t.Fatalf("listing %s not linked to this instance's provider: %v", l.Symbol, l.ProviderID)
+			}
+			if l.Symbol == file.Listings[0].Symbol && (l.ISIN == nil || *l.ISIN != isin) {
+				t.Fatalf("listing %s lost its instrument data: %+v", l.Symbol, l)
+			}
+		}
+		if created != 2 {
+			t.Fatalf("expected both listings created, found %d", created)
+		}
+
+		again, err := commands.ImportEODs(ctx, file, false)
+		if err != nil || again.Listings != (backup.Count{Existing: 2}) || again.EODs != (backup.Count{Existing: 1}) {
+			t.Fatalf("second import: %+v, %v", again, err)
 		}
 	})
 }
