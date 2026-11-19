@@ -56,7 +56,7 @@
 	<span class="h-2.5 min-w-6 flex-1 rounded-full bg-slate-100">
 		<span
 			class="block h-full rounded-full"
-			style:width="{max > 0 ? (row.value / max) * 100 : 0}%"
+			style:width="{max > 0 ? Math.max(0, row.value / max) * 100 : 0}%"
 			style:background-color={row.color ?? ramp[i % ramp.length]}
 		></span>
 	</span>
