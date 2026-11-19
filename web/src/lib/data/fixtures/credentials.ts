@@ -1,4 +1,4 @@
-import type { ProviderCredential } from '$lib/api/types';
+import type { APIProvider, ProviderCredential } from '$lib/api/types';
 
 /**
  * Masks a key the way the backend's `marketdata.MaskAPIKey` does, so mock hints look
@@ -16,11 +16,19 @@ export function maskKey(key: string): string {
  * mock mirrors the real contract: listing never exposes a key, only revealing does.
  */
 export const mockKeys: Record<string, string> = {
-	'prv-marketstack': 'ms_demo_key_2f9c41ab',
-	'prv-alphavantage': 'av_demo_key_77d1'
+	'prv-marketstack': 'ms_demo_key_2f9c41ab'
 };
 
-/** Provider connection records, mirroring `GET /marketdata/providers`. */
+/** The API providers a key can be added for, mirroring `GET /marketdata/providers/api`. */
+export const apiProviders: APIProvider[] = [
+	{ name: 'marketstack', default_base_uri: 'https://api.marketstack.com/v2' },
+	{ name: 'alphavantage', default_base_uri: 'https://www.alphavantage.co' }
+];
+
+/**
+ * Provider connection records, mirroring `GET /marketdata/providers`. Alpha Vantage has
+ * no key yet, so fixture mode shows the "no key" state.
+ */
 export const providerCredentials: ProviderCredential[] = [
 	{
 		id: 'prv-marketstack',
@@ -33,17 +41,6 @@ export const providerCredentials: ProviderCredential[] = [
 		used: 179,
 		total: 5000,
 		resets_at: '2026-10-01T00:00:00Z'
-	},
-	{
-		id: 'prv-alphavantage',
-		name: 'alphavantage',
-		ingestion_mode: 'API',
-		base_uri: 'https://www.alphavantage.co',
-		has_api_key: true,
-		api_key_hint: maskKey(mockKeys['prv-alphavantage']),
-		remaining: 0,
-		used: 0,
-		total: 0
 	},
 	{
 		// A manual provider ingests uploaded files, so there is no endpoint or key to set.
