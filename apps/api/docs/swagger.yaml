@@ -1311,6 +1311,22 @@ definitions:
       rhythm:
         type: string
     type: object
+  handlers.APIProviderResponse:
+    properties:
+      default_base_uri:
+        type: string
+      name:
+        type: string
+    type: object
+  handlers.AddProviderAPIKeyRequest:
+    properties:
+      api_key:
+        type: string
+      base_uri:
+        type: string
+      name:
+        type: string
+    type: object
   handlers.CatalogueSearchRequest:
     properties:
       limit:
@@ -5196,6 +5212,48 @@ paths:
       summary: List provider credentials
       tags:
       - providers
+    post:
+      consumes:
+      - application/json
+      description: Add an API key for an API market-data provider. An omitted base
+        URI uses the provider's default; a given one must be https on a public host.
+        The response withholds the stored key. A key the provider already has is rejected
+        with 409.
+      parameters:
+      - description: API key payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AddProviderAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.ProviderCredentialResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add a provider API key
+      tags:
+      - providers
   /marketdata/providers/{provider_id}/credentials:
     patch:
       consumes:
@@ -5285,6 +5343,22 @@ paths:
               type: string
             type: object
       summary: Reveal a provider API key
+      tags:
+      - providers
+  /marketdata/providers/api:
+    get:
+      description: Return the API market-data providers an API key can be added for,
+        with the base URI a new key defaults to. Listed whether or not a key is configured.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.APIProviderResponse'
+            type: array
+      summary: List API providers
       tags:
       - providers
   /marketdata/quotes:

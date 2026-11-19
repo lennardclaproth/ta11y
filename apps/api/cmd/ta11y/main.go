@@ -307,7 +307,10 @@ func buildApplication(
 	marketDataQuotes := marketdata.NewQuotes(marketDataStore, marketDataQueries, marketDataCommands, map[marketdata.Source]marketdata.QuoteCatalogue{
 		marketdata.SourceAlphaVantage: alphaVantageClient,
 	})
-	marketDataCreds := marketdata.NewCredentials(marketDataStore)
+	marketDataCreds := marketdata.NewCredentials(marketDataStore, []marketdata.APIProviderDefault{
+		{Name: marketdata.ProviderMarketStack, BaseURI: cfg.Providers.MarketStack.BaseURI},
+		{Name: marketdata.ProviderAlphaVantage, BaseURI: cfg.Providers.AlphaVantage.BaseURI},
+	})
 
 	accountCommands := account.NewCommands(accountStore, bus)
 	accountQueries := account.NewQueries(accountStore)
@@ -504,6 +507,8 @@ func registerRoutes(router *apphttp.Router, app *application) {
 	adminOnly("POST /marketdata/catalogue/sync", marketdatahttp.StartCatalogueSync(app.log, app.marketDataCatalog))
 	adminOnly("GET /marketdata/catalogue/status", marketdatahttp.GetCatalogueStatus(app.log, app.marketDataQueries))
 	adminOnly("GET /marketdata/providers", marketdatahttp.GetProviderCredentials(app.log, app.marketDataCreds))
+	adminOnly("POST /marketdata/providers", marketdatahttp.AddProviderAPIKey(app.log, app.marketDataCreds))
+	adminOnly("GET /marketdata/providers/api", marketdatahttp.GetAPIProviders(app.marketDataCreds))
 	adminOnly("PATCH /marketdata/providers/{provider_id}/credentials", marketdatahttp.UpdateProviderCredentials(app.log, app.marketDataCreds))
 	adminOnly("POST /marketdata/providers/{provider_id}/credentials/reveal", marketdatahttp.RevealProviderAPIKey(app.log, app.marketDataCreds))
 

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- [028] Added API keys from the **Credentials** page: MarketStack and Alpha Vantage are always listed, with a "No key yet" row when an instance started without their environment keys, and **Add key** stores a new key for either provider next to the keys it already has, with the default base URL prefilled. A key the provider already has is refused instead of silently skipped. New endpoints `POST /marketdata/providers` and `GET /marketdata/providers/api`.
 - [020] Made Cashflow, Portfolio and Assets scroll: the overview charts take the screen's height, and the table keeps a screen-high panel of its own below them instead of being squeezed under the cards.
 - [024] Added `GET /assets/classes/growth`: every live class's worth over time in one request (`from`/`to` optional), for the stacked chart and the per-class trend on Assets.
 - [020] Added a full-table slide-over to the ledger on Cashflow, Portfolio and Assets: a ghost button at the far right of the ledger header opens the same toolbar, filters, paging and selection at near full width.
