@@ -285,11 +285,16 @@
 		).data;
 	}
 
+	// A drag and its Reset change the period in quick succession; only the newest load may write.
+	let loadAllRequest = 0;
+
 	async function loadAll() {
+		const request = ++loadAllRequest;
 		loading = true;
 		error = null;
 		try {
 			await accountStore.ensureLoaded();
+			if (request !== loadAllRequest) return;
 			// No account yet is an empty state, not a failure: firing account-scoped
 			// requests with the placeholder id would 4xx and read as a load error.
 			if (!accountStore.hasAccount) {
@@ -305,12 +310,14 @@
 				}),
 				loadTransactions()
 			]);
+			if (request !== loadAllRequest) return;
 			snapshots = snaps;
 			await loadPositions();
 		} catch {
+			if (request !== loadAllRequest) return;
 			error = 'Failed to load portfolio';
 		} finally {
-			loading = false;
+			if (request === loadAllRequest) loading = false;
 		}
 	}
 

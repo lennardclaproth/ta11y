@@ -155,11 +155,16 @@
 		document.querySelector<HTMLElement>('[aria-label="Open the full table"]')?.focus();
 	}
 
+	// A drag and its Reset change the period in quick succession; only the newest load may write.
+	let requestId = 0;
+
 	async function loadAll() {
+		const id = ++requestId;
 		loading = true;
 		error = null;
 		try {
 			await accountStore.ensureLoaded();
+			if (id !== requestId) return;
 			// No account yet is an empty state, not a failure.
 			if (!accountStore.hasAccount) {
 				classes = [];
@@ -173,12 +178,14 @@
 					to: to || undefined
 				})
 			]);
+			if (id !== requestId) return;
 			classes = cls;
 			growth = series;
 		} catch {
+			if (id !== requestId) return;
 			error = 'Failed to load assets';
 		} finally {
-			loading = false;
+			if (id === requestId) loading = false;
 		}
 	}
 

@@ -298,7 +298,12 @@
 		void load(currentQuery());
 	});
 
+	// Dragging and resetting a chart range changes the period in quick succession; only the
+	// newest analytics load may write the charts.
+	let analyticsRequestId = 0;
+
 	async function loadAnalytics() {
+		const id = ++analyticsRequestId;
 		analyticsLoading = true;
 		try {
 			const range = { from: from || undefined, to: to || undefined };
@@ -306,17 +311,19 @@
 				getCashflowMonthly(range),
 				getCashflowTagDistribution(range)
 			]);
+			if (id !== analyticsRequestId) return;
 			monthly = monthlyRes.data;
 			incoming = dist.incoming;
 			outgoing = dist.outgoing;
 		} catch {
+			if (id !== analyticsRequestId) return;
 			// Analytics are supplementary: leave the charts to render their own empty
 			// state rather than letting an unhandled rejection escape the page.
 			monthly = [];
 			incoming = [];
 			outgoing = [];
 		} finally {
-			analyticsLoading = false;
+			if (id === analyticsRequestId) analyticsLoading = false;
 		}
 	}
 
