@@ -10,14 +10,129 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lennardclaproth/my-finances-tracker/internal/money"
+	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
 type CashFlowDirection string
+
+func ParseDirection(raw string) (*CashFlowDirection, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return nil, nil
+	case "in", "income":
+		direction := CashIn
+		return &direction, nil
+	case "out", "expense":
+		direction := CashOut
+		return &direction, nil
+	default:
+		return nil, fmt.Errorf("direction must be either in or out")
+	}
+}
+
+// Purpose is what a transaction counts as towards the monthly wealth-growth goal: the
+// income the goal is a share of, the money put towards wealth, or nothing at all. It is
+// independent of the tag and of the ignored flag -- a transfer to a savings account is
+// usually ignored for the cashflow totals and is still a contribution.
+type Purpose string
+
+const (
+	// PurposeNone is the state of a transaction nobody has pointed at yet.
+	PurposeNone Purpose = ""
+	// PurposeIncome marks incoming money as part of the month's income.
+	PurposeIncome Purpose = "income"
+	// PurposeWealth marks outgoing money as a contribution towards wealth.
+	PurposeWealth Purpose = "wealth"
+)
+
+// RequiredDirection reports the direction a purpose can be applied to. Only incoming money
+// can be income and only outgoing money can be a contribution: a transfer between your own
+// accounts leaves both sides in the ledger, and counting them both would double the month.
+func (p Purpose) RequiredDirection() *CashFlowDirection {
+	switch p {
+	case PurposeIncome:
+		direction := CashIn
+		return &direction
+	case PurposeWealth:
+		direction := CashOut
+		return &direction
+	default:
+		return nil
+	}
+}
+
+// ParsePurpose reads a purpose from client input. "none" and the empty string both mean
+// "not assigned", which is also what clearing a purpose writes.
+func ParsePurpose(raw string) (Purpose, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "none":
+		return PurposeNone, nil
+	case string(PurposeIncome):
+		return PurposeIncome, nil
+	case string(PurposeWealth):
+		return PurposeWealth, nil
+	default:
+		return "", ErrInvalidPurpose
+	}
+}
+
+// SplitPurposes reads a comma-separated purpose filter, e.g. "income,none". An empty input
+// yields no filter rather than a filter on "not assigned".
+func SplitPurposes(raw string) ([]Purpose, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	out := make([]Purpose, 0, 3)
+	seen := make(map[Purpose]struct{}, 3)
+	for _, entry := range strings.Split(raw, ",") {
+		if strings.TrimSpace(entry) == "" {
+			continue
+		}
+		purpose, err := ParsePurpose(entry)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[purpose]; ok {
+			continue
+		}
+		seen[purpose] = struct{}{}
+		out = append(out, purpose)
+	}
+	return out, nil
+}
+
+func SplitTags(tags string) []string {
+	if strings.TrimSpace(tags) == "" {
+		return nil
+	}
+
+	raw := strings.Split(tags, ",")
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		tag := strings.TrimSpace(entry)
+		if tag == "" {
+			continue
+		}
+
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
 type AccountType string
 
+// CsvParser reads a vendor export. The sequence yields every data row with its
+// RowNumber set: a row that could not be read comes with its error rather than being
+// dropped, so an import can count it as failed.
 type CsvParser interface {
-	ParseAll(rc io.ReadCloser) (iter.Seq2[int, TransactionData], error)
+	ParseAll(rc io.ReadCloser) (iter.Seq2[TransactionData, error], error)
 }
 
 const (
@@ -32,9 +147,13 @@ const (
 	CashOut CashFlowDirection = "out"
 )
 
+// SourceManual is the source of a transaction entered by hand. Entries made against a
+// named vendor carry "manual:<vendor>"; imported rows carry the vendor name alone.
+const SourceManual = "manual"
+
 type Transaction struct {
 	ID          uuid.UUID         `db:"id"`
-	AccountID   *uuid.UUID        `db:"account_id"`
+	AccountID   uuid.UUID         `db:"account_id"`
 	Description string            `db:"description"`
 	Note        string            `db:"note"`
 	Source      string            `db:"source"`
@@ -45,20 +164,19 @@ type Transaction struct {
 	CreatedAt   time.Time         `db:"created_at"`
 	UpdatedAt   time.Time         `db:"updated_at"`
 	Tag         string            `db:"tag"`
+	Purpose     Purpose           `db:"purpose"`
 	RowNumber   int               `db:"row_number"`
 	Ignored     bool              `db:"ignored"`
-	ImportID    uuid.UUID         `db:"import_id"`
+	ImportID    *uuid.UUID        `db:"import_id"`
 	AccountType *AccountType      `db:"account_type"` // Allow nullable account type.
-}
-
-type TransactionData struct {
-	Description string
-	Note        string
-	Source      string
-	Direction   CashFlowDirection
-	Amount      float64
-	Date        time.Time
-	AccountType *AccountType
+	// IgnoredByRuleID names the ignore rule that ignored this transaction, nil when
+	// nobody's rule did. It is what makes a rule that is too wide visible per row
+	// rather than only as a total.
+	IgnoredByRuleID *uuid.UUID `db:"ignored_by_rule_id"`
+	// IgnoreOverridden records that the ignored state was decided by hand. Ignore
+	// rules leave those rows alone, so a transaction put back by hand stays back
+	// through later imports and later applications of the same rule.
+	IgnoreOverridden bool `db:"ignore_overridden"`
 }
 
 var (
@@ -68,16 +186,9 @@ var (
 )
 
 // NewTransaction creates a new Transaction instance and generates its checksum.
-func NewTransaction(desc, note, source string, direction CashFlowDirection, amount float64, date time.Time, rowNumber int, importID uuid.UUID, accountType *AccountType, accountID ...*uuid.UUID) (*Transaction, error) {
-	// Guard on domain level against invalid amount values
-	amountCents, err := money.NewPrice(amount)
-	if err != nil {
-		return nil, fmt.Errorf("NewTransaction failed: %w", err)
-	}
-	var accID *uuid.UUID
-	if len(accountID) > 0 {
-		accID = accountID[0]
-	}
+// rowNumber records where the row sat in its source file; dedupSeq separates rows
+// with identical content inside one file and is what the checksum uses.
+func NewTransaction(desc, note, source, tag string, direction CashFlowDirection, amount money.Price, date time.Time, rowNumber, dedupSeq int, importID *uuid.UUID, accountType *AccountType, accID uuid.UUID) (*Transaction, error) {
 	t := &Transaction{
 		ID:          uuid.New(),
 		AccountID:   accID,
@@ -85,22 +196,98 @@ func NewTransaction(desc, note, source string, direction CashFlowDirection, amou
 		Note:        note,
 		Source:      source,
 		Direction:   direction,
-		AmountCents: amountCents,
+		AmountCents: amount,
 		Date:        date,
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 		RowNumber:   rowNumber,
 		ImportID:    importID,
 		AccountType: accountType,
+		Tag:         tag,
 	}
-	t.Checksum = t.generateChecksum()
+	t.Checksum = t.generateChecksum(dedupSeq)
 	return t, nil
+}
+
+// checksumDateLayout is the day precision both the checksum and the dedup key work at.
+const checksumDateLayout = "20060102"
+
+// DedupKey is the content generateChecksum digests, normalised the same way and minus
+// the account, which is constant within one import, and the sequence the key is used to
+// produce.
+//
+// The importer sequences rows on this key, so the two have to stay in step. A key that
+// separates rows the checksum cannot separate gives both of them sequence 1, so they end
+// up with the same checksum and the bulk insert silently drops one as a duplicate.
+func (d TransactionData) DedupKey() []string {
+	return []string{
+		strings.TrimSpace(d.Description),
+		strings.TrimSpace(d.Note),
+		strings.TrimSpace(d.Source),
+		string(d.Direction),
+		fmt.Sprintf("%d", d.Amount),
+		d.Date.Format(checksumDateLayout),
+	}
+}
+
+// IsManual reports whether the transaction was entered by hand rather than imported.
+// Only manual transactions may be moved to another date: the checksum that recognises
+// a re-imported row carries its date, so moving an imported row would make the next
+// import of the same statement insert it again.
+func (t *Transaction) IsManual() bool {
+	return t.Source == SourceManual || strings.HasPrefix(t.Source, SourceManual+":")
+}
+
+// MovedTo returns a copy of the transaction dated date, with the checksum recomputed so
+// its dedup identity follows the new date.
+func (t *Transaction) MovedTo(date time.Time) *Transaction {
+	moved := *t
+	moved.Date = date.UTC()
+	moved.UpdatedAt = time.Now().UTC()
+	moved.Checksum = moved.generateChecksum(moved.RowNumber)
+	return &moved
+}
+
+// maxRecoverableDedupSeq bounds the search RekeyedChecksum makes for the sequence a
+// stored checksum was built with. Identical rows inside one file are rare, so a few
+// dozen sequences cover every import seen in practice.
+const maxRecoverableDedupSeq = 64
+
+// RekeyedChecksum returns the checksum the transaction would carry had it been created
+// in accID with the same dedup sequence, so a row restored into another account still
+// dedupes against a later import of the same statement there. The sequence is not
+// stored: it is recovered by reproducing the stored checksum under the transaction's own
+// AccountID. It reports false when no sequence reproduces it.
+func (t *Transaction) RekeyedChecksum(accID uuid.UUID) (string, bool) {
+	for seq := 0; seq <= maxRecoverableDedupSeq; seq++ {
+		if sum, ok := t.rekeyedWith(seq, accID); ok {
+			return sum, true
+		}
+	}
+	// MovedTo digests the row number rather than the import's sequence.
+	return t.rekeyedWith(t.RowNumber, accID)
+}
+
+func (t *Transaction) rekeyedWith(seq int, accID uuid.UUID) (string, bool) {
+	if t.generateChecksum(seq) != t.Checksum {
+		return "", false
+	}
+	rekeyed := *t
+	rekeyed.AccountID = accID
+	return rekeyed.generateChecksum(seq), true
 }
 
 // generateChecksum creates a checksum for the transaction based on the fields
 // description, note, source, amountCents, and date. It uses amountCents instead
 // of amount to avoid floating-point precision issues.
-func (t *Transaction) generateChecksum() string {
+//
+// It digests what the row is, not where it sat in the file: dedupSeq separates
+// identical rows within one import, so the same transaction in a partly overlapping
+// export produces the same checksum and is recognised as already imported.
+//
+// TransactionData.DedupKey must digest the same fields; see its doc for what goes wrong
+// when the two drift apart.
+func (t *Transaction) generateChecksum(dedupSeq int) string {
 	// initialize fields to be used in checksum generation, these fields need to be
 	// of type string
 	desc := strings.TrimSpace(t.Description)
@@ -108,15 +295,15 @@ func (t *Transaction) generateChecksum() string {
 	source := strings.TrimSpace(t.Source)
 	direction := string(t.Direction)
 	amountCents := fmt.Sprintf("%d", t.AmountCents)
-	rowNumber := fmt.Sprintf("%d", t.RowNumber)
-	date := t.Date.Format("20060102") // Standard date format
+	sequence := fmt.Sprintf("%d", dedupSeq)
+	date := t.Date.Format(checksumDateLayout)
 	accountID := ""
-	if t.AccountID != nil {
+	if t.AccountID != uuid.Nil {
 		accountID = t.AccountID.String()
 	}
 	// concatenate all fields to form the payload string to generate a checksum
 	const sep = "\x1F" // Unit Separator character see -> https://www.ascii-code.com/character/%E2%90%9F
-	payload := strings.Join([]string{desc, note, source, direction, amountCents, date, rowNumber, accountID}, sep)
+	payload := strings.Join([]string{desc, note, source, direction, amountCents, date, sequence, accountID}, sep)
 	// digest the payload in byte format and encode it to hexadecimal string
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])

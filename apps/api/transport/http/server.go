@@ -1,0 +1,170 @@
+package http
+
+import (
+	"context"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"go.elastic.co/apm/module/apmhttp/v2"
+	"go.elastic.co/apm/v2"
+)
+
+type Server struct {
+	addr        string
+	router      *Router
+	log         logging.Logger
+	mux         *http.ServeMux
+	corsOrigins []string
+
+	apiPrefix string
+	site      http.Handler
+}
+
+// ServerOption configures optional Server behaviour.
+type ServerOption func(*Server)
+
+// WithSite serves site (the web app) at the root and moves the API under apiPrefix, so one
+// origin carries both. The prefix is stripped before the API's middleware and routes run,
+// which therefore see the same paths as without a site.
+func WithSite(apiPrefix string, site http.Handler) ServerOption {
+	return func(s *Server) {
+		s.apiPrefix = strings.TrimSuffix(apiPrefix, "/")
+		s.site = site
+	}
+}
+
+const (
+	readTimeout       = 15 * time.Second
+	readHeaderTimeout = 5 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = 60 * time.Second
+)
+
+// NewServer creates and returns a new Server for the given address and database.
+// corsOrigins are the browser origins permitted to call the API cross-origin.
+func NewServer(addr string, router *Router, log logging.Logger, corsOrigins []string, options ...ServerOption) *Server {
+	s := &Server{
+		addr:        addr,
+		router:      router,
+		log:         log,
+		mux:         http.NewServeMux(),
+		corsOrigins: corsOrigins,
+	}
+	for _, option := range options {
+		option(s)
+	}
+
+	s.registerRoutes()
+	return s
+}
+
+// swaggerURL is the browsable Swagger address for a listen address; an empty or
+// wildcard host is shown as localhost.
+func swaggerURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://localhost" + addr + "/swagger/index.html"
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/swagger/index.html"
+}
+
+// Run starts the http server on the address provided
+func (s *Server) Run(ctx context.Context) error {
+	handler := apmhttp.Wrap(s.mux, apmhttp.WithServerRequestIgnorer(func(r *http.Request) bool {
+		if shouldIgnoreAPMServerRequest(r) {
+			return true
+		}
+		return apm.DefaultTracer().IgnoredTransactionURL(r.URL)
+	}))
+	handler = WithRequestIdentifiers()(handler)
+	// Origin is checked inside CORS so preflight is still answered, but before routing
+	// so a rejected cross-site mutation never reaches a handler.
+	handler = WithOriginCheck(s.corsOrigins)(handler)
+	handler = WithCORS(s.corsOrigins)(handler)
+	handler = s.withSite(handler)
+
+	server := s.newHTTPServer(handler)
+
+	s.log.Info(context.Background(),
+		"ta11y is listening for incoming requests...",
+		"addr", s.addr,
+		"swagger_url", swaggerURL(s.addr),
+	)
+	// Run server in a goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- server.ListenAndServe()
+	}()
+
+	// Wait for interrupt or server error
+	select {
+	case <-ctx.Done():
+		s.log.Info(ctx, "Shutting down gracefully...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			s.log.Error(ctx, "graceful shutdown failed", err)
+			return err
+		}
+		s.log.Info(ctx, "Server stopped cleanly.")
+		return nil
+	case err := <-errChan:
+		if err != nil && err != http.ErrServerClosed {
+			s.log.Error(ctx, "server failed", err)
+			return err
+		}
+		return nil
+	}
+}
+
+// shouldIgnoreAPMServerRequest returns true for requests that should not create APM server transactions.
+func shouldIgnoreAPMServerRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Method), http.MethodGet) {
+		if strings.TrimSpace(r.Pattern) == "GET /ws/accounts/{account_id}" {
+			return true
+		}
+		if strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/ws/accounts/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              s.addr,
+		Handler:           handler,
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: readHeaderTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+}
+
+// withSite mounts api under the API prefix next to the web app, when a site is configured.
+func (s *Server) withSite(api http.Handler) http.Handler {
+	if s.site == nil {
+		return api
+	}
+	root := http.NewServeMux()
+	root.Handle(s.apiPrefix+"/", http.StripPrefix(s.apiPrefix, api))
+	root.Handle("/", s.site)
+	return root
+}
+
+func (s *Server) registerRoutes() {
+	if s.router == nil {
+		panic("router is nil")
+	}
+	s.router.Register(s.mux)
+}

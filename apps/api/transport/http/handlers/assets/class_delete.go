@@ -1,0 +1,75 @@
+package assets
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
+)
+
+type DeleteClassRequest struct {
+}
+
+func (r DeleteClassRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	return len(problems) == 0, problems
+}
+
+// DeleteClass deletes a manual class.
+//
+// @Summary Delete class
+// @Description Deletes a manual class and its items/mutations.
+// @Tags assets
+// @Accept json
+// @Produce json
+// @Param class_id path string true "Class ID"
+// @Param request body DeleteClassRequest true "Delete class payload"
+// @Success 204 "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /assets/classes/{class_id} [delete]
+func DeleteClass(log logging.Logger, commands assets.Commands) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil || classID == uuid.Nil {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{
+				"asset_id": "asset_id must be a valid UUID",
+			})
+			return
+		}
+		req, err := httpx.JSONDecode[DeleteClassRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
+		}
+
+		isValid, problems := req.isValid()
+		if !isValid {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+
+		// errors.Is takes (err, target); the arguments were reversed, so a missing class fell
+		// through to the 500 branch instead of answering 404.
+		switch err = commands.DeleteClass(r.Context(), accountID, classID); {
+		case errors.Is(err, assets.ErrClassAccountMismatch), errors.Is(err, assets.ErrClassNotFound):
+			_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"error": "class not found"})
+		case err != nil:
+			log.Error(r.Context(), "delete class: failed to delete class", err)
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete class"})
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+}

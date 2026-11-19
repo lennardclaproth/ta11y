@@ -1,0 +1,573 @@
+package portfolio
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	portfoliodomain "github.com/lennardclaproth/ta11y/internal/portfolio"
+	httpx "github.com/lennardclaproth/ta11y/transport/http"
+)
+
+type portfolioTransactionLister interface {
+	FetchForAccount(
+		ctx context.Context,
+		query portfoliodomain.TransactionListQuery,
+	) (*portfoliodomain.TransactionListResult, error)
+}
+
+// GetPortfolioTransactionsRequest contains filters, sorting, and pagination for portfolio transactions.
+type GetPortfolioTransactionsRequest struct {
+	From      string `query:"from"`
+	To        string `query:"to"`
+	Limit     int    `query:"limit"`
+	Offset    int    `query:"offset"`
+	SortBy    string `query:"sort_by"`
+	SortOrder string `query:"sort_order"`
+	Q         string `query:"q"`
+	Type      string `query:"type"`
+	Origin    string `query:"origin"`
+	Source    string `query:"source"`
+	Listing   string `query:"listing"`
+}
+
+func (r GetPortfolioTransactionsRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	if r.Limit < 0 {
+		problems["limit"] = "limit must be greater than or equal to 0"
+	}
+	if r.Limit != 0 && r.Limit != 10 && r.Limit != 25 && r.Limit != 50 && r.Limit != 100 {
+		problems["limit"] = "limit must be one of: 10, 25, 50, 100"
+	}
+	if r.Offset < 0 {
+		problems["offset"] = "offset must be greater than or equal to 0"
+	}
+	if r.SortBy != "" && strings.ToLower(strings.TrimSpace(r.SortBy)) != string(portfoliodomain.TransactionSortByDate) {
+		problems["sort_by"] = "sort_by must be one of: date"
+	}
+	if r.SortOrder != "" {
+		switch strings.ToLower(strings.TrimSpace(r.SortOrder)) {
+		case string(portfoliodomain.TransactionSortOrderAsc), string(portfoliodomain.TransactionSortOrderDesc):
+		default:
+			problems["sort_order"] = "sort_order must be either asc or desc"
+		}
+	}
+	if r.Type != "" {
+		switch strings.ToUpper(strings.TrimSpace(r.Type)) {
+		case string(portfoliodomain.TxBuy),
+			string(portfoliodomain.TxSell),
+			string(portfoliodomain.TxDividend),
+			string(portfoliodomain.TxTax),
+			string(portfoliodomain.TxFee),
+			string(portfoliodomain.TxCash):
+		default:
+			problems["type"] = "type must be one of: BUY, SELL, DIVIDEND, TAX, FEE, CASH"
+		}
+	}
+	if r.Origin != "" {
+		switch strings.ToUpper(strings.TrimSpace(r.Origin)) {
+		case string(portfoliodomain.TransactionOriginImport), string(portfoliodomain.TransactionOriginManual):
+		default:
+			problems["origin"] = "origin must be one of: IMPORT, MANUAL"
+		}
+	}
+	return len(problems) == 0, problems
+}
+
+// CreateManualPortfolioTransactionRequest creates a manual portfolio transaction.
+type CreateManualPortfolioTransactionRequest struct {
+	VendorID    uuid.UUID  `json:"vendor_id"`
+	OccurredAt  string     `json:"occurred_at"`
+	Type        string     `json:"type"`
+	ListingID   *uuid.UUID `json:"listing_id,omitempty"`
+	Amount      string     `json:"amount"`
+	Quantity    *string    `json:"quantity,omitempty"`
+	Description *string    `json:"description,omitempty"`
+}
+
+func (r CreateManualPortfolioTransactionRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	if r.VendorID == uuid.Nil {
+		problems["vendor_id"] = "vendor_id is required"
+	}
+	if strings.TrimSpace(r.OccurredAt) == "" {
+		problems["occurred_at"] = "occurred_at is required"
+	}
+	if strings.TrimSpace(r.Type) == "" {
+		problems["type"] = "type is required"
+	}
+	if strings.TrimSpace(r.Amount) == "" {
+		problems["amount"] = "amount is required"
+	}
+	return len(problems) == 0, problems
+}
+
+// PaginationResponse describes offset pagination metadata.
+type PaginationResponse struct {
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+	Total  int `json:"total"`
+}
+
+// PortfolioTransactionResponse represents one portfolio transaction in read APIs.
+type PortfolioTransactionResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	AccountID   uuid.UUID  `json:"account_id"`
+	Origin      string     `json:"origin"`
+	Source      string     `json:"source"`
+	OccurredAt  time.Time  `json:"occurred_at"`
+	Type        string     `json:"type"`
+	ListingID   *uuid.UUID `json:"listing_id,omitempty"`
+	ISIN        *string    `json:"isin,omitempty"`
+	Symbol      *string    `json:"symbol,omitempty"`
+	Description string     `json:"description"`
+	Amount      string     `json:"amount"`
+	Quantity    string     `json:"quantity"`
+	UnitPrice   string     `json:"unit_price"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// PortfolioTransactionsResponse returns paginated portfolio transactions.
+type PortfolioTransactionsResponse struct {
+	Pagination PaginationResponse             `json:"pagination"`
+	Data       []PortfolioTransactionResponse `json:"data"`
+}
+
+// ManualPortfolioTransactionResponse represents a created manual portfolio transaction.
+type ManualPortfolioTransactionResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	AccountID   uuid.UUID  `json:"account_id"`
+	Origin      string     `json:"origin"`
+	Source      string     `json:"source"`
+	OccurredAt  time.Time  `json:"occurred_at"`
+	Type        string     `json:"type"`
+	ListingID   *uuid.UUID `json:"listing_id,omitempty"`
+	ISIN        *string    `json:"isin,omitempty"`
+	Symbol      *string    `json:"symbol,omitempty"`
+	Description string     `json:"description"`
+	Amount      string     `json:"amount"`
+	Quantity    string     `json:"quantity"`
+	UnitPrice   string     `json:"unit_price"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	// Rebuild reports the rebuild this write scheduled:
+	// "started" (recalculating in the background; a portfolio.rebuilt websocket event
+	// follows when done) or "skipped" (nothing was scheduled).
+	Rebuild string `json:"rebuild"`
+}
+
+// ChangePortfolioTransactionDateRequest moves one manual transaction to another date.
+type ChangePortfolioTransactionDateRequest struct {
+	ID         uuid.UUID `json:"id"`
+	OccurredAt string    `json:"occurred_at"`
+}
+
+func (r ChangePortfolioTransactionDateRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	if r.ID == uuid.Nil {
+		problems["id"] = "id is required"
+	}
+	if strings.TrimSpace(r.OccurredAt) == "" {
+		problems["occurred_at"] = "occurred_at is required"
+	}
+	return len(problems) == 0, problems
+}
+
+// ChangePortfolioTransactionDateResponse returns the transaction on its new date.
+type ChangePortfolioTransactionDateResponse struct {
+	ID         uuid.UUID `json:"id"`
+	OccurredAt time.Time `json:"occurred_at"`
+	Rebuild    string    `json:"rebuild"`
+}
+
+// GetPortfolioTransactions returns transaction history for a portfolio account.
+//
+// @Summary Get portfolio transactions
+// @Description Returns portfolio transactions for the given account and optional date range.
+// @Tags portfolio
+// @Accept json
+// @Produce json
+// @Param from query string false "Start date (YYYY-MM-DD)"
+// @Param to query string false "End date (YYYY-MM-DD)"
+// @Param limit query int false "Page size (10, 25, 50, 100)"
+// @Param offset query int false "Offset"
+// @Param sort_by query string false "Sort field: date"
+// @Param sort_order query string false "Sort order: asc or desc"
+// @Param q query string false "Contains search over description, source, symbol, isin"
+// @Param type query string false "Transaction type: BUY, SELL, DIVIDEND, TAX, FEE, CASH"
+// @Param origin query string false "Transaction origin: IMPORT, MANUAL"
+// @Param source query string false "Case-insensitive contains filter on source"
+// @Param listing query string false "Case-insensitive contains filter on symbol/isin"
+// @Success 200 {object} PortfolioTransactionsResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /portfolio/transactions [get]
+func GetPortfolioTransactions(
+	log logging.Logger,
+	fetcher account.QueryStore,
+	lister portfolioTransactionLister,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+		req, err := httpx.DecodeQuery[GetPortfolioTransactionsRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid query parameters"})
+			return
+		}
+		if ok, problems := req.isValid(); !ok {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+		if fetcher == nil {
+			log.Error(r.Context(), "portfolio transactions: account fetcher is not configured", errors.New("account fetcher not configured"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
+			return
+		}
+		if lister == nil {
+			log.Error(r.Context(), "portfolio transactions: lister is not configured", errors.New("portfolio transaction lister not configured"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
+			return
+		}
+
+		if _, err := fetcher.GetByID(r.Context(), accountID); err != nil {
+			if errors.Is(err, account.ErrAccountNotFound) {
+				_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"account_id": account.ErrAccountNotFound.Error()})
+				return
+			}
+			log.Error(r.Context(), "portfolio transactions: failed to fetch account", err, "account_id", accountID.String())
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
+			return
+		}
+
+		query, problems := toPortfolioTransactionListQuery(accountID, req)
+		if len(problems) > 0 {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+
+		result, err := lister.FetchForAccount(r.Context(), query)
+		if err != nil {
+			log.Error(r.Context(), "portfolio transactions: failed to list transactions", err, "account_id", accountID.String())
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to get portfolio transactions"})
+			return
+		}
+		if result == nil {
+			result = &portfoliodomain.TransactionListResult{}
+		}
+
+		items := toPortfolioTransactionResponses(result.Transactions)
+		_ = httpx.JSONEncode(w, http.StatusOK, PortfolioTransactionsResponse{
+			Pagination: PaginationResponse{
+				Limit:  query.Limit,
+				Offset: query.Offset,
+				Count:  len(items),
+				Total:  result.Total,
+			},
+			Data: items,
+		})
+	})
+}
+
+func toPortfolioTransactionListQuery(accountID uuid.UUID, req GetPortfolioTransactionsRequest) (portfoliodomain.TransactionListQuery, map[string]string) {
+	problems := make(map[string]string)
+	limit := req.Limit
+	if limit == 0 {
+		limit = 25
+	}
+
+	var txType *portfoliodomain.TransactionType
+	if normalizedType := strings.ToUpper(strings.TrimSpace(req.Type)); normalizedType != "" {
+		typed := portfoliodomain.TransactionType(normalizedType)
+		txType = &typed
+	}
+
+	var origin *portfoliodomain.TransactionOrigin
+	if normalizedOrigin := strings.ToUpper(strings.TrimSpace(req.Origin)); normalizedOrigin != "" {
+		typed := portfoliodomain.TransactionOrigin(normalizedOrigin)
+		origin = &typed
+	}
+
+	from, to, err := date.ParseFromTo(req.From, req.To)
+	if err != nil {
+		problems["date_range"] = err.Error()
+	}
+	if to != nil {
+		toEnd := date.EndOfDayUTC(*to)
+		to = &toEnd
+	}
+
+	return portfoliodomain.TransactionListQuery{
+		AccountID: accountID,
+		From:      from,
+		To:        to,
+		Limit:     limit,
+		Offset:    req.Offset,
+		SortBy:    portfoliodomain.NormalizeTransactionSortBy(req.SortBy),
+		SortOrder: portfoliodomain.NormalizeTransactionSortOrder(req.SortOrder),
+		Q:         strings.TrimSpace(req.Q),
+		Type:      txType,
+		Origin:    origin,
+		Source:    strings.TrimSpace(req.Source),
+		Listing:   strings.TrimSpace(req.Listing),
+	}, problems
+}
+
+func toPortfolioTransactionResponses(rows []portfoliodomain.TransactionWithListingID) []PortfolioTransactionResponse {
+	out := make([]PortfolioTransactionResponse, 0, len(rows))
+	for _, tx := range rows {
+		accountID := uuid.Nil
+		if tx.AccountID != nil {
+			accountID = *tx.AccountID
+		}
+		out = append(out, PortfolioTransactionResponse{
+			ID:          tx.ID,
+			AccountID:   accountID,
+			Origin:      string(tx.Origin),
+			Source:      tx.Source,
+			OccurredAt:  tx.OccurredAt,
+			Type:        string(tx.Type),
+			ListingID:   tx.ListingID,
+			ISIN:        tx.ISIN,
+			Symbol:      displaySymbol(tx),
+			Description: tx.Description,
+			Amount:      formatDecimal(portfoliodomain.SignedAmountForRead(tx.Type, tx.Quantity, tx.AmountCents.Float64())),
+			Quantity:    formatDecimal(tx.Quantity),
+			UnitPrice:   formatDecimal(tx.UnitPrice.Float64()),
+			CreatedAt:   tx.CreatedAt,
+			UpdatedAt:   tx.UpdatedAt,
+		})
+	}
+	return out
+}
+
+// displaySymbol is the transaction's own symbol, or the linked listing's when it has none.
+func displaySymbol(tx portfoliodomain.TransactionWithListingID) *string {
+	if tx.Symbol != nil && strings.TrimSpace(*tx.Symbol) != "" {
+		return tx.Symbol
+	}
+	return tx.ListingSymbol
+}
+
+// CreateManualPortfolioTransaction creates a manual portfolio transaction and rebuilds the portfolio.
+//
+// @Summary Create manual portfolio transaction
+// @Description Creates a manual portfolio transaction, then rebuilds positions and snapshots in the background so they include it. The response answers before the rebuild runs; a portfolio.rebuilt websocket event follows when it is done.
+// @Tags portfolio
+// @Accept json
+// @Produce json
+// @Param request body CreateManualPortfolioTransactionRequest true "Manual portfolio transaction payload"
+// @Success 201 {object} ManualPortfolioTransactionResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /portfolio/transactions/manual [post]
+func CreateManualPortfolioTransaction(
+	log logging.Logger,
+	commands *portfoliodomain.Commands,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+		req, err := httpx.JSONDecode[CreateManualPortfolioTransactionRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
+		}
+		if ok, problems := req.isValid(); !ok {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+		if commands == nil {
+			log.Error(r.Context(), "manual portfolio transaction: creator is not configured", errors.New("manual portfolio transaction creator not configured"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create portfolio transaction"})
+			return
+		}
+
+		result, err := commands.CreateTransaction(r.Context(), portfoliodomain.ManualTransactionInput{
+			AccountID:   accountID,
+			VendorID:    req.VendorID,
+			OccurredAt:  req.OccurredAt,
+			Type:        req.Type,
+			ListingID:   req.ListingID,
+			Amount:      req.Amount,
+			Quantity:    req.Quantity,
+			Description: req.Description,
+		})
+		if err != nil {
+			writeManualPortfolioTransactionError(w, r, log, err)
+			return
+		}
+		if result == nil || result.Transaction == nil || result.Transaction.AccountID == nil {
+			log.Error(r.Context(), "manual portfolio transaction: invalid create result", errors.New("manual transaction missing account or transaction"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create portfolio transaction"})
+			return
+		}
+
+		_ = httpx.JSONEncode(w, http.StatusCreated, toManualPortfolioTransactionResponse(result))
+	})
+}
+
+// ChangePortfolioTransactionDate moves a manual portfolio transaction to another date.
+//
+// @Summary Change a portfolio transaction date
+// @Description Moves a manually entered portfolio transaction to another date, today or earlier, then rebuilds positions and snapshots in the background. Imported transactions keep their statement date.
+// @Tags portfolio
+// @Accept json
+// @Produce json
+// @Param request body ChangePortfolioTransactionDateRequest true "Change date payload"
+// @Success 200 {object} ChangePortfolioTransactionDateResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /portfolio/transactions/date [post]
+func ChangePortfolioTransactionDate(
+	log logging.Logger,
+	commands *portfoliodomain.Commands,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accountID, ok := httpx.AccountID(w, r)
+		if !ok {
+			return
+		}
+		req, err := httpx.JSONDecode[ChangePortfolioTransactionDateRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
+		}
+		if ok, problems := req.isValid(); !ok {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+		if commands == nil {
+			log.Error(r.Context(), "portfolio change date: commands are not configured", errors.New("portfolio commands not configured"))
+			_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to change the transaction date"})
+			return
+		}
+
+		tx, rebuild, err := commands.ChangeTransactionDate(r.Context(), accountID, req.ID, req.OccurredAt)
+		if err != nil {
+			writeChangePortfolioTransactionDateError(w, r, log, err)
+			return
+		}
+		_ = httpx.JSONEncode(w, http.StatusOK, ChangePortfolioTransactionDateResponse{
+			ID:         tx.ID,
+			OccurredAt: tx.OccurredAt,
+			Rebuild:    string(rebuild.Outcome),
+		})
+	})
+}
+
+func writeChangePortfolioTransactionDateError(w http.ResponseWriter, r *http.Request, log logging.Logger, err error) {
+	switch {
+	case errors.Is(err, portfoliodomain.ErrTransactionNotFound):
+		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"id": portfoliodomain.ErrTransactionNotFound.Error()})
+	case errors.Is(err, portfoliodomain.ErrTransactionDateNotEditable):
+		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"transaction": portfoliodomain.ErrTransactionDateNotEditable.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualOccurredAtInFuture):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"occurred_at": portfoliodomain.ErrManualOccurredAtInFuture.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualInvalidOccurredAt):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"occurred_at": portfoliodomain.ErrManualInvalidOccurredAt.Error()})
+	case errors.Is(err, portfoliodomain.ErrDuplicateTransaction):
+		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"transaction": "duplicate transaction"})
+	default:
+		log.Error(r.Context(), "portfolio change date: failed to move transaction", err)
+		_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to change the transaction date"})
+	}
+}
+
+func writeManualPortfolioTransactionError(w http.ResponseWriter, r *http.Request, log logging.Logger, err error) {
+	switch {
+	case errors.Is(err, portfoliodomain.ErrManualAccountNotFound):
+		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"account_id": err.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualVendorNotFound):
+		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"vendor_id": err.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualListingNotFound):
+		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"listing_id": err.Error()})
+	case errors.Is(err, portfoliodomain.ErrManualVendorTypeNotSupported):
+		_ = httpx.JSONEncode(w, http.StatusUnprocessableEntity, map[string]string{"vendor_id": err.Error()})
+	case errors.Is(err, portfoliodomain.ErrDuplicateTransaction):
+		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"transaction": "duplicate transaction"})
+	case isManualValidationErr(err):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"transaction": err.Error()})
+	default:
+		log.Error(r.Context(), "manual portfolio transaction: failed to create transaction", err)
+		_ = httpx.JSONEncode(w, http.StatusInternalServerError, map[string]string{"error": "failed to create portfolio transaction"})
+	}
+}
+
+func toManualPortfolioTransactionResponse(result *portfoliodomain.ManualTransactionCreateResult) ManualPortfolioTransactionResponse {
+	tx := result.Transaction
+	return ManualPortfolioTransactionResponse{
+		ID:          tx.ID,
+		AccountID:   *tx.AccountID,
+		Origin:      string(tx.Origin),
+		Source:      tx.Source,
+		OccurredAt:  tx.OccurredAt,
+		Type:        string(tx.Type),
+		ListingID:   result.ListingID,
+		ISIN:        tx.ISIN,
+		Symbol:      tx.Symbol,
+		Description: tx.Description,
+		Amount:      formatDecimal(result.SignedAmount),
+		Quantity:    formatDecimal(tx.Quantity),
+		UnitPrice:   formatDecimal(tx.UnitPrice.Float64()),
+		CreatedAt:   tx.CreatedAt,
+		UpdatedAt:   tx.UpdatedAt,
+		Rebuild:     string(result.Rebuild.Outcome),
+	}
+}
+
+func isManualValidationErr(err error) bool {
+	return errors.Is(err, portfoliodomain.ErrManualVendorNotActive) ||
+		errors.Is(err, portfoliodomain.ErrManualInvalidOccurredAt) ||
+		errors.Is(err, portfoliodomain.ErrManualOccurredAtInFuture) ||
+		errors.Is(err, portfoliodomain.ErrManualInvalidType) ||
+		errors.Is(err, portfoliodomain.ErrManualInvalidAmount) ||
+		errors.Is(err, portfoliodomain.ErrManualInvalidQuantity) ||
+		errors.Is(err, portfoliodomain.ErrManualQuantityRequired) ||
+		errors.Is(err, portfoliodomain.ErrManualQuantityForbidden) ||
+		errors.Is(err, portfoliodomain.ErrManualListingRequired) ||
+		errors.Is(err, portfoliodomain.ErrManualListingForbidden) ||
+		errors.Is(err, portfoliodomain.ErrManualNonCashAmountMustBePos) ||
+		errors.Is(err, portfoliodomain.ErrManualCashAmountMustBeNonZero) ||
+		errors.Is(err, portfoliodomain.ErrManualQuantityMustBePositive) ||
+		errors.Is(err, portfoliodomain.ErrManualListingIdentityMissing)
+}
+
+func formatDecimal(v float64) string {
+	raw := strconv.FormatFloat(v, 'f', 6, 64)
+	raw = strings.TrimRight(raw, "0")
+	raw = strings.TrimRight(raw, ".")
+	if raw == "-0" || raw == "" {
+		return "0"
+	}
+	return raw
+}

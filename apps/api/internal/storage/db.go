@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -28,24 +30,36 @@ const (
 	SchemaImports    = "import"
 	SchemaMarketData = "marketdata"
 	SchemaAssets     = "assets"
+	SchemaWealthGoal = "wealthgoal"
 )
 
 const (
-	TableVendors       = "vendors"
-	TableTransactions  = "transactions"
-	TableImports       = "imports"
-	TableListings      = "listings"
-	TableHistories     = "dailies"
-	TableDailyUploads  = "daily_uploads"
-	TableProviders     = "providers"
-	TableAccounts      = "accounts"
-	TablePositions     = "positions"
-	TablePosSnapshots  = "position_snapshots"
-	TablePortSnapshots = "portfolio_snapshots"
-	TableAssetClasses  = "classes"
-	TableAssetItems    = "items"
-	TableAssetHistory  = "histories"
-	TableAssetSnapshot = "snapshots"
+	TableVendors         = "vendors"
+	TableTransactions    = "transactions"
+	TableIgnoreRules     = "ignore_rules"
+	TableImports         = "imports"
+	TableListings        = "listings"
+	TableEOD             = "eods"
+	TableEODUploads      = "eod_uploads"
+	TableProviders       = "providers"
+	TableProviderListing = "provider_listings"
+	TableCatalogueSyncs  = "catalogue_syncs"
+	TableAccounts        = "accounts"
+	TableIdentities      = "identities"
+	TableSessions        = "sessions"
+	TablePositions       = "positions"
+	TablePosSnapshots    = "position_snapshots"
+	TablePortSnapshots   = "portfolio_snapshots"
+	TableAssetClasses    = "classes"
+	TableAssetItems      = "items"
+	TableAssetMutations  = "mutations"
+	TableAssetPurchases  = "purchases"
+	TableAssetSnapshot   = "snapshots"
+	TableWealthGoals     = "goals"
+
+	TableRecurringItems      = "recurring_items"
+	TableRecurringLinks      = "recurring_links"
+	TableRecurringDismissals = "recurring_dismissals"
 )
 
 type DB struct {
@@ -62,7 +76,7 @@ func NewDB(connStr string, connType ConnectionType) *DB {
 		err error
 	)
 	if connType == Sqlite {
-		db, err = sql.Open("sqlite", connStr)
+		db, err = sql.Open("sqlite", sqliteDSN(connStr))
 	} else {
 		db, err = apmsql.Open(string(connType), connStr)
 	}
@@ -75,11 +89,44 @@ func NewDB(connStr string, connType ConnectionType) *DB {
 	return &DB{DB: sqlxDB}
 }
 
+// sqliteBusyTimeout is how long a SQLite connection waits for a lock before it
+// gives up. SQLite locks the whole database for a write, and the event handlers
+// write on their own pooled connections while a request reads on another; with
+// the default timeout of zero the loser fails instantly with SQLITE_BUSY instead
+// of waiting out a write that takes milliseconds. Postgres needs no equivalent.
+const sqliteBusyTimeout = 5 * time.Second
+
+// sqliteDSN adds the busy timeout to a SQLite connection string, preserving any
+// parameters the configured string already carries.
+//
+// Transactions also begin IMMEDIATE, taking the write lock up front. A deferred
+// transaction that reads first and writes later cannot wait for the lock: SQLite
+// answers SQLITE_BUSY at once rather than risk a deadlock, so a request writing while
+// an event handler rebuilds snapshots failed despite the busy timeout.
+func sqliteDSN(connStr string) string {
+	separator := "?"
+	if strings.Contains(connStr, "?") {
+		separator = "&"
+	}
+	return fmt.Sprintf("%s%s_pragma=busy_timeout(%d)&_txlock=immediate", connStr, separator, sqliteBusyTimeout.Milliseconds())
+}
+
 func qualifyTable(db *DB, schema, table string) string {
 	if db == nil || db.DriverName() == string(Sqlite) {
 		return table
 	}
 	return fmt.Sprintf("%s.%s", schema, table)
+}
+
+// qualifyTableAs resolves a table name across dialects when the SQLite name is not
+// the bare Postgres table name. On Postgres it returns the schema-qualified name; on
+// SQLite (which has no schemas) it returns the flattened, prefixed name the
+// migrations use (e.g. portfolio.accounts -> portfolio_accounts).
+func qualifyTableAs(db *DB, schema, pgTable, sqliteTable string) string {
+	if db == nil || db.DriverName() == string(Sqlite) {
+		return sqliteTable
+	}
+	return fmt.Sprintf("%s.%s", schema, pgTable)
 }
 
 func (db *DB) GetExecutor(ctx context.Context) sqlx.ExtContext {

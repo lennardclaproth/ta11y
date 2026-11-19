@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make build)",
+      "Bash(make test)",
+      "Bash(make test-integration)",
+      "Bash(make test-all)",
+      "Bash(make lint)",
+      "Bash(make fmt)",
+      "Bash(make vet)",
+      "Bash(make swagger)",
+      "Bash(make migrate-status)",
+      "Bash(make help)",
+      "Bash(go build *)",
+      "Bash(go vet *)",
+      "Bash(go test *)",
+      "Bash(go list *)",
+      "Bash(gofmt *)",
+      "Bash(golangci-lint run *)",
+      "Bash(npm run check *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run format *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
+      "Bash(git worktree list)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Edit(./apps/api/docs/swagger.json)",
+      "Edit(./apps/api/docs/swagger.yaml)",
+      "Edit(./apps/api/docs/docs.go)",
+      "Write(./apps/api/docs/swagger.json)",
+      "Write(./apps/api/docs/swagger.yaml)",
+      "Write(./apps/api/docs/docs.go)"
+    ],
+    "ask": [
+      "Edit(./apps/api/migrations/**)",
+      "Write(./apps/api/migrations/**)",
+      "Edit(./deploy/**)",
+      "Write(./deploy/**)",
+      "Edit(./.github/**)",
+      "Write(./.github/**)",
+      "Edit(./apps/api/go.mod)",
+      "Edit(./web/package.json)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-context.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gowork-guard.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gofmt-file.mjs\"",
+            "statusMessage": "gofmt",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-changed.mjs\"",
+            "statusMessage": "go build + vet",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

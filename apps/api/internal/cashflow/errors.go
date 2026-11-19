@@ -1,0 +1,56 @@
+package cashflow
+
+import "fmt"
+
+// Transaction Errors
+var (
+	ErrTransactionsRequired              = fmt.Errorf("transactions are required")
+	ErrTransactionLimitExceeded          = fmt.Errorf("transactions exceeds maximum batch size")
+	ErrManualCashflowInvalidDate         = fmt.Errorf("date must be in YYYY-MM-DD format")
+	ErrCashflowDateInFuture              = fmt.Errorf("date must be today or earlier")
+	ErrCashflowDateNotEditable           = fmt.Errorf("only manually entered transactions can be moved to another date")
+	ErrManualCashflowInvalidAmount       = fmt.Errorf("amount must be a positive decimal string with up to 6 decimals")
+	ErrManualCashflowInvalidType         = fmt.Errorf("type must be one of: in, out, income, expense")
+	ErrManualCashflowDescriptionRequired = fmt.Errorf("description is required")
+	ErrManualCashflowNoteRequired        = fmt.Errorf("note is required")
+	ErrManualCashflowTagRequired         = fmt.Errorf("tag is required")
+	ErrInvalidPurpose                    = fmt.Errorf("purpose must be one of: income, wealth, none")
+)
+
+// Ignore rule Errors
+var (
+	ErrIgnoreRuleNameRequired      = fmt.Errorf("name is required")
+	ErrIgnoreRuleNameTooLong       = fmt.Errorf("name must be at most 120 characters")
+	ErrIgnoreRuleInvalidMatchField = fmt.Errorf("match_field must be either description or note")
+	ErrIgnoreRuleInvalidDirection  = fmt.Errorf("direction must be empty, in, or out")
+	ErrIgnoreRuleContainsTooShort  = fmt.Errorf("contains must be at least 3 characters")
+	ErrIgnoreRuleContainsTooLong   = fmt.Errorf("contains must be at most 255 characters")
+	// ErrIgnoreRuleContainsWildcard explains the refusal rather than silently bending
+	// the text: % and _ are LIKE wildcards, so "a%z" would pass the minimum length and
+	// still match nearly every statement. A backslash is the LIKE escape character on
+	// Postgres but an ordinary character on SQLite, so the same rule would catch
+	// different rows per dialect.
+	ErrIgnoreRuleContainsWildcard = fmt.Errorf(`contains must not use %%, _ or \, which have their own meaning in a search`)
+	ErrIgnoreRuleNotFound         = fmt.Errorf("ignore rule not found")
+)
+
+// Recurring item Errors
+var (
+	ErrRecurringNameRequired         = fmt.Errorf("name is required")
+	ErrRecurringInvalidRhythm        = fmt.Errorf("rhythm must be one of: monthly, quarterly, yearly")
+	ErrRecurringInvalidMonth         = fmt.Errorf("month must be in YYYY-MM format")
+	ErrRecurringItemNotFound         = fmt.Errorf("no recurring item found with the given ID")
+	ErrRecurringItemExists           = fmt.Errorf("a recurring item with that name already exists")
+	ErrRecurringItemEnded            = fmt.Errorf("an ended recurring item takes no new transactions")
+	ErrRecurringTransactionsRequired = fmt.Errorf("at least one transaction is required")
+	ErrRecurringTransactionNotFound  = fmt.Errorf("transaction not found in this account")
+	ErrRecurringSuggestionNotFound   = fmt.Errorf("no suggestion found for that pattern")
+	ErrRecurringDirectionMismatch    = fmt.Errorf("a transaction runs the other way than this recurring item")
+	ErrRecurringTransactionIgnored   = fmt.Errorf("an ignored transaction cannot be linked to a recurring item")
+	ErrRecurringTransactionLinked    = fmt.Errorf("these transactions already belong to another recurring item")
+)
+
+// Account Errors
+var (
+	ErrAccountNotFound = fmt.Errorf("account not found")
+)

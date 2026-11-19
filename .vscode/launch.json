@@ -9,10 +9,24 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/apps/api/cmd/server",
+            "program": "${workspaceFolder}/apps/api/cmd/ta11y",
             "cwd": "${workspaceFolder}/apps/api",
             "envFile": "${workspaceFolder}/apps/api/.env",
             "args": []
+        },
+        {
+            "name": "Launch Portal",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev -- --port 5199 --strictPort",
+            "cwd": "${workspaceFolder}/web"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Server + Portal",
+            "configurations": ["Launch Server", "Launch Portal"],
+            "stopAll": true
         }
     ]
 }

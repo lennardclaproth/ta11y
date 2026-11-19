@@ -1,0 +1,45 @@
+# Configuration baked into the Cloud Run image (selected by CONFIG_PATH in the root Dockerfile).
+# It holds no secrets and no deployment-specific values: those come from the environment the
+# Cloud Run service sets (deploy/terraform/run.tf) -- DATABASE_URL, AUTH_FRONTEND_URL,
+# AUTH_ALLOWED_EMAILS, GOOGLE_REDIRECT_URL, GOOGLE_CLIENT_ID/SECRET and the provider API keys.
+# PORT is set by Cloud Run.
+server:
+  environment: production
+  port: 8080
+  # The image carries the web build here; the API moves under /api on the same origin, so no
+  # CORS origins are needed.
+  web_dir: /app/web
+
+database:
+  type: postgres
+  connection_string: "" # DATABASE_URL
+
+auth:
+  enabled: true
+  session_ttl: 720h
+  frontend_url: "" # AUTH_FRONTEND_URL
+  allowed_emails: [] # AUTH_ALLOWED_EMAILS
+  providers:
+    google:
+      issuer: https://accounts.google.com
+      redirect_url: "" # GOOGLE_REDIRECT_URL
+
+logging:
+  level: info
+
+# Elastic APM is switched off in Cloud Run with ELASTIC_APM_ACTIVE=false; validation still
+# requires a server URL, so this one is never contacted.
+apm:
+  server_url: http://localhost:8200
+  service_name: ta11y
+  environment: production
+  log_level: warn
+
+# Cloud Run's /tmp is in-memory and per instance: uploads live only until their import
+# finishes, which is all the importer needs.
+disk_storage:
+  base_path: /tmp/ta11y
+
+# A seed must finish while the instance is up; ten pages is ten provider requests.
+marketdata:
+  max_seed_pages: 10

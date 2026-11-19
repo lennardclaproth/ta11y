@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/observability"
+	"github.com/lennardclaproth/ta11y/internal/observability"
 )
 
 type SlogLogger struct {

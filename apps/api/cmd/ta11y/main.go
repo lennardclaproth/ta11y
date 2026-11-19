@@ -1,0 +1,608 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	_ "github.com/lennardclaproth/ta11y/docs"
+	"github.com/lennardclaproth/ta11y/internal/account"
+	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/auth"
+	"github.com/lennardclaproth/ta11y/internal/backup"
+	"github.com/lennardclaproth/ta11y/internal/bootstrap"
+	"github.com/lennardclaproth/ta11y/internal/cashflow"
+	"github.com/lennardclaproth/ta11y/internal/config"
+	"github.com/lennardclaproth/ta11y/internal/eventbus"
+	memorybus "github.com/lennardclaproth/ta11y/internal/eventbus/memory"
+	"github.com/lennardclaproth/ta11y/internal/files"
+	"github.com/lennardclaproth/ta11y/internal/importer"
+	importercashflow "github.com/lennardclaproth/ta11y/internal/importer/cashflow"
+	cashflowparsers "github.com/lennardclaproth/ta11y/internal/importer/cashflow/parsers"
+	importereod "github.com/lennardclaproth/ta11y/internal/importer/eod"
+	eodparsers "github.com/lennardclaproth/ta11y/internal/importer/eod/parsers"
+	importerportfolio "github.com/lennardclaproth/ta11y/internal/importer/portfolio"
+	portfolioparsers "github.com/lennardclaproth/ta11y/internal/importer/portfolio/parsers"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/marketdata/alphavantage"
+	"github.com/lennardclaproth/ta11y/internal/marketdata/marketstack"
+	"github.com/lennardclaproth/ta11y/internal/notify"
+	"github.com/lennardclaproth/ta11y/internal/portfolio"
+	"github.com/lennardclaproth/ta11y/internal/storage"
+	"github.com/lennardclaproth/ta11y/internal/vendor"
+	"github.com/lennardclaproth/ta11y/internal/wealthgoal"
+	"github.com/lennardclaproth/ta11y/migrations"
+	apphttp "github.com/lennardclaproth/ta11y/transport/http"
+	basehandlers "github.com/lennardclaproth/ta11y/transport/http/handlers"
+	accounthttp "github.com/lennardclaproth/ta11y/transport/http/handlers/account"
+	assethttp "github.com/lennardclaproth/ta11y/transport/http/handlers/assets"
+	authhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/auth"
+	backuphttp "github.com/lennardclaproth/ta11y/transport/http/handlers/backup"
+	cashflowhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/cashflow"
+	importerhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/importer"
+	marketdatahttp "github.com/lennardclaproth/ta11y/transport/http/handlers/marketdata"
+	portfoliohttp "github.com/lennardclaproth/ta11y/transport/http/handlers/portfolio"
+	vendorshttp "github.com/lennardclaproth/ta11y/transport/http/handlers/vendors"
+	wealthgoalhttp "github.com/lennardclaproth/ta11y/transport/http/handlers/wealthgoal"
+	assetsevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/assets"
+	cashflowevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/cashflow"
+	importerevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/importer"
+	portfolioevents "github.com/lennardclaproth/ta11y/transport/messaging/handlers/portfolio"
+	httpSwagger "github.com/swaggo/http-swagger"
+)
+
+const (
+	eventQueueSize = 128
+
+	// busDrainTimeout bounds how long shutdown waits for queued events. Together with
+	// the HTTP server's own 5s shutdown it stays inside Cloud Run's 10s SIGTERM grace.
+	busDrainTimeout = 4 * time.Second
+
+	// importRecoveryGrace spares imports touched this recently from start-up recovery:
+	// during a rolling deploy the previous instance may still be finishing them.
+	importRecoveryGrace = 2 * time.Minute
+)
+
+type application struct {
+	log logging.Logger
+	hub *notify.Hub
+
+	accountCommands *account.Commands
+	accountQueries  *account.Queries
+	authCommands    *auth.Commands
+	authQueries     *auth.Queries
+	authRegistry    *auth.Registry
+	authFallback    *auth.Principal
+	authStore       *storage.SQLXAuthStore
+	authCookies     apphttp.CookieSettings
+	frontendURL     string
+	vendorCommands  *vendor.Commands
+	vendorQueries   *vendor.Queries
+
+	cashflowCommands  *cashflow.Commands
+	cashflowQueries   *cashflow.Queries
+	recurringCommands *cashflow.RecurringCommands
+	recurringQueries  *cashflow.RecurringQueries
+
+	wealthGoalCommands *wealthgoal.Commands
+	wealthGoalQueries  *wealthgoal.Queries
+
+	portfolioCommands *portfolio.Commands
+	portfolioQueries  *portfolio.Queries
+	portfolioBuilder  *portfolio.Builder
+	portfolioStore    *storage.SQLXPortfolioStore
+
+	assetsCommands *assets.Commands
+	assetsQueries  *assets.Queries
+	assetsBuilder  *assets.Builder
+	assetsSyncer   *assets.Syncer
+	assetsHoldings *assets.HoldingsSyncer
+
+	importerCommands   *importer.Commands
+	importerQueries    *importer.Queries
+	marketDataCommands *marketdata.Commands
+	marketDataQueries  *marketdata.Queries
+	marketDataCatalog  *marketdata.Catalogue
+	marketDataCreds    *marketdata.Credentials
+	marketDataQuotes   *marketdata.Quotes
+
+	backupCommands *backup.Commands
+	backupQueries  *backup.Queries
+}
+
+func main() {
+	if err := run(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ta11y: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := config.ReadConfig()
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	log := logging.NewSlogLogger(cfg.Logging.GetLogLevel())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	connType := storage.ConnectionType(cfg.Database.Type)
+	db := storage.NewDB(cfg.Database.ConnStr, connType)
+	defer closeDB(log, db)
+
+	migrator := migrations.NewMigrator(db, connType, log)
+	if err := migrator.EnsureDBExists(ctx, cfg.Database.ConnStr); err != nil {
+		return fmt.Errorf("ensure database exists: %w", err)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	if err := migrator.RunMigrations(ctx, db, connType); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	bus := memorybus.NewMemoryBus(
+		memorybus.WithQueueSize(eventQueueSize),
+		memorybus.WithBackpressure(memorybus.BackpressureError),
+		memorybus.WithLogger(log),
+	)
+	defer closeBus(log, bus)
+
+	app := buildApplication(cfg, log, bus, db)
+	defer closeHub(log, app.hub)
+
+	// Provider discovery reaches the network, so a misconfigured provider fails the
+	// boot rather than the first sign-in attempt.
+	registry, err := buildAuthRegistry(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+	app.authRegistry = registry
+
+	if err := registerEventHandlers(bus, app); err != nil {
+		return err
+	}
+
+	bootstrap.Vendors(ctx, app.vendorCommands, log)
+	bootstrap.Providers(ctx, app.marketDataCommands, cfg.Providers, log)
+	bootstrap.Accounts(ctx, app.accountCommands, app.accountQueries, cfg.Auth.BootstrapAdminEmail, log)
+
+	// With sign-in switched off the API keeps behaving as the single bootstrapped
+	// account, so local development and the test suite need no session. Config refuses
+	// this combination outside development.
+	if !cfg.Auth.Enabled {
+		fallback, err := bootstrap.FallbackPrincipal(ctx, app.accountQueries)
+		if err != nil {
+			return fmt.Errorf("resolve unauthenticated fallback account: %w", err)
+		}
+		app.authFallback = fallback
+		log.Warn(ctx, "authentication is disabled; every request runs as the bootstrapped account",
+			"account_id", fallback.AccountID.String())
+	}
+
+	recoverInterruptedWork(ctx, app, log)
+
+	go auth.SweepExpiredSessions(ctx, app.authStore, log)
+
+	router := apphttp.NewRouter()
+	registerRoutes(router, app)
+
+	var serverOptions []apphttp.ServerOption
+	if cfg.Server.WebDir != "" {
+		serverOptions = append(serverOptions, apphttp.WithSite(config.APIPrefix, apphttp.SiteHandler(cfg.Server.WebDir)))
+		log.Info(ctx, "serving the web app", "dir", cfg.Server.WebDir, "api_prefix", config.APIPrefix)
+	}
+	server := apphttp.NewServer(cfg.Server.Addr(), router, log, cfg.Server.AllowedOrigins(), serverOptions...)
+	runErr := server.Run(ctx)
+	drainBus(log, bus)
+	return runErr
+}
+
+// apiPathPrefix is the browser-side path the API lives under: APIPrefix when the server
+// also serves the web app, otherwise the root.
+func apiPathPrefix(cfg *config.Config) string {
+	if cfg.Server.WebDir == "" {
+		return ""
+	}
+	return config.APIPrefix
+}
+
+// recoverInterruptedWork fails background work a previous process started but never
+// finished, so nothing shows as running forever after a restart. It runs before the
+// server accepts requests. A failure is logged rather than fatal: the stuck rows are a
+// nuisance, not a reason to refuse to start.
+func recoverInterruptedWork(ctx context.Context, app *application, log logging.Logger) {
+	imports, err := app.importerCommands.RecoverInterrupted(ctx, time.Now().Add(-importRecoveryGrace))
+	if err != nil {
+		log.Warn(ctx, "failed recovering interrupted imports", "error", err.Error())
+	} else if imports > 0 {
+		log.Info(ctx, "failed imports interrupted by a restart", "count", imports)
+	}
+
+	seeds, err := app.marketDataCatalog.RecoverInterrupted(ctx)
+	if err != nil {
+		log.Warn(ctx, "failed recovering interrupted catalogue seeds", "error", err.Error())
+	} else if seeds > 0 {
+		log.Info(ctx, "failed catalogue seeds interrupted by a restart", "count", seeds)
+	}
+}
+
+// drainBus lets queued events finish after the server stops taking requests, so work
+// accepted just before shutdown is not silently dropped by the deferred Close.
+func drainBus(log logging.Logger, bus *memorybus.MemoryBus) {
+	ctx, cancel := context.WithTimeout(context.Background(), busDrainTimeout)
+	defer cancel()
+	if err := bus.Drain(ctx); err != nil {
+		log.Warn(ctx, "event bus did not drain before shutdown", "error", err.Error())
+	}
+}
+
+// buildAuthRegistry discovers the configured identity providers. With auth disabled it
+// returns an empty registry, so the sign-in routes answer 404 instead of the server
+// refusing to start without provider credentials.
+func buildAuthRegistry(ctx context.Context, cfg *config.Config, log logging.Logger) (*auth.Registry, error) {
+	if !cfg.Auth.Enabled {
+		log.Warn(ctx, "authentication is disabled; the API is unauthenticated")
+		return auth.NewEmptyRegistry(), nil
+	}
+
+	configs := make([]auth.ProviderConfig, 0, len(cfg.Auth.Providers))
+	for slug, provider := range cfg.Auth.Providers {
+		configs = append(configs, auth.ProviderConfig{
+			Slug:         slug,
+			Issuer:       provider.Issuer,
+			ClientID:     provider.ClientID,
+			ClientSecret: provider.ClientSecret,
+			RedirectURL:  provider.RedirectURL,
+		})
+	}
+
+	registry, err := auth.NewRegistry(ctx, configs)
+	if err != nil {
+		return nil, fmt.Errorf("build auth registry: %w", err)
+	}
+	log.Info(ctx, "authentication enabled", "providers", registry.Slugs())
+	return registry, nil
+}
+
+func buildApplication(
+	cfg *config.Config,
+	log logging.Logger,
+	bus eventbus.Bus,
+	db *storage.DB,
+) *application {
+	accountStore := storage.NewSQLXAccountStore(db)
+	authStore := storage.NewSQLXAuthStore(db)
+	vendorStore := storage.NewSQLXVendorStore(db)
+	cashflowStore := storage.NewSQLXCashflowStore(db)
+	wealthGoalStore := storage.NewSQLXWealthGoalStore(db)
+	ignoreRuleStore := storage.NewSQLXCashflowIgnoreRuleStore(db)
+	recurringStore := storage.NewSQLXRecurringStore(db)
+	portfolioStore := storage.NewSQLXPortfolioStore(db)
+	assetsStore := storage.NewSQLXAssetsStore(db)
+	importerStore := storage.NewSQLXImporterStore(db)
+	marketDataStore := storage.NewSQLXMarketDataStore(db)
+	backupStore := storage.NewSQLXBackupStore(db)
+	fileStore := files.NewDisk(cfg.DiskStorage.BasePath)
+
+	marketStackClient := marketstack.NewMarketStackClient(marketDataStore, marketdata.ProviderMarketStack)
+	alphaVantageClient := alphavantage.NewClient(marketDataStore, marketdata.ProviderAlphaVantage)
+	marketDataSyncer := marketdata.NewSyncer(marketDataStore, map[marketdata.Source]marketdata.EODFetcher{
+		marketdata.SourceMarketStack:  marketStackClient,
+		marketdata.SourceAlphaVantage: alphaVantageClient,
+	})
+	marketDataCommands := marketdata.NewCommands(marketDataStore, marketDataSyncer)
+	marketDataQueries := marketdata.NewQueries(marketDataStore, marketDataSyncer)
+	marketDataCatalog := marketdata.NewCatalogue(marketDataStore, map[marketdata.Source]marketdata.TickerSearcher{
+		marketdata.SourceMarketStack: marketStackClient,
+	}, marketdata.WithMaxSeedPages(cfg.MarketData.MaxSeedPages))
+	// Only sources that can actually fetch a daily price in euro offer quotes, so
+	// MarketStack -- which the app uses for listed equities -- is deliberately absent.
+	marketDataQuotes := marketdata.NewQuotes(marketDataStore, marketDataQueries, marketDataCommands, map[marketdata.Source]marketdata.QuoteCatalogue{
+		marketdata.SourceAlphaVantage: alphaVantageClient,
+	})
+	marketDataCreds := marketdata.NewCredentials(marketDataStore)
+
+	accountCommands := account.NewCommands(accountStore, bus)
+	accountQueries := account.NewQueries(accountStore)
+	authCommands := auth.NewCommands(authStore, authStore, accountQueries, accountCommands, cfg.Auth.SessionTTL, cfg.Auth.IsEmailAllowed)
+	authQueries := auth.NewQueries(authStore, accountQueries, cfg.Auth.IsEmailAllowed)
+	vendorCommands := vendor.NewCommands(vendorStore)
+	vendorQueries := vendor.NewQueries(vendorStore)
+	cashflowCommands := cashflow.NewCommands(cashflowStore, cashflowStore, ignoreRuleStore, ignoreRuleStore, accountQueries)
+	cashflowQueries := cashflow.NewQueries(cashflowStore, ignoreRuleStore)
+	wealthGoalCommands := wealthgoal.NewCommands(wealthGoalStore)
+	wealthGoalQueries := wealthgoal.NewQueries(wealthGoalStore)
+	recurringCommands := cashflow.NewRecurringCommands(recurringStore, recurringStore, recurringStore)
+	recurringQueries := cashflow.NewRecurringQueries(recurringStore)
+	portfolioQueries := portfolio.NewQueries(portfolioStore, marketDataQueries)
+	portfolioBuilder := portfolio.NewBuilder(marketDataQueries, portfolioStore, portfolioStore, portfolioStore, portfolioStore, bus)
+	portfolioCommands := portfolio.NewCommands(portfolioStore, portfolioStore, *marketDataQueries, *vendorQueries, portfolioBuilder, log)
+	assetsQueries := assets.NewQueries(assetsStore, marketDataQueries)
+	assetsBuilder := assets.NewBuilder(assetsStore, assetsStore)
+	assetsSyncer := assets.NewSyncer(portfolioQueries, assetsBuilder, assetsStore, assetsStore)
+	assetsHoldings := assets.NewHoldingsSyncer(assetsStore, marketDataQueries, assetsStore, log)
+	assetsCommands := assets.NewCommands(assetsStore, assetsStore, *accountQueries, assetsStore, assetsStore, marketDataQuotes, bus)
+	fileQueries := files.NewQueries(fileStore)
+
+	cashflowProcessor := importercashflow.NewProcessor(vendorQueries, fileQueries, cashflowparsers.CreateCsvParser, cashflowCommands)
+	portfolioProcessor := importerportfolio.NewProcessor(vendorQueries, fileQueries, portfolioparsers.CreateCsvParser, portfolioCommands)
+	eodProcessor := importereod.NewProcessor(marketDataQueries, fileQueries, eodparsers.CreateEODParser, marketDataCommands)
+	importerCommands := importer.NewCommands(
+		importerStore,
+		fileStore,
+		fileStore,
+		*vendorQueries,
+		*accountQueries,
+		*marketDataQueries,
+		bus,
+		importer.WithProcessors(cashflowProcessor, portfolioProcessor, eodProcessor),
+	)
+	importerQueries := importer.NewQueries(importerStore, portfolioQueries)
+	backupCommands := backup.NewCommands(backupStore, backupStore, bus)
+	backupQueries := backup.NewQueries(backupStore, backupStore)
+
+	return &application{
+		log: log,
+		hub: notify.NewHub(log),
+
+		accountCommands: accountCommands,
+		accountQueries:  accountQueries,
+		authCommands:    authCommands,
+		authQueries:     authQueries,
+		authStore:       authStore,
+		authCookies: apphttp.CookieSettings{
+			Domain:     cfg.Auth.CookieDomain,
+			Secure:     cfg.Auth.IsCookieSecure(cfg.Server.Environment),
+			PathPrefix: apiPathPrefix(cfg),
+		},
+		frontendURL:    cfg.Auth.FrontendURL,
+		vendorCommands: vendorCommands,
+		vendorQueries:  vendorQueries,
+
+		cashflowCommands:  cashflowCommands,
+		cashflowQueries:   cashflowQueries,
+		recurringCommands: recurringCommands,
+		recurringQueries:  recurringQueries,
+
+		wealthGoalCommands: wealthGoalCommands,
+		wealthGoalQueries:  wealthGoalQueries,
+
+		portfolioCommands: portfolioCommands,
+		portfolioQueries:  portfolioQueries,
+		portfolioBuilder:  portfolioBuilder,
+		portfolioStore:    portfolioStore,
+
+		assetsCommands: assetsCommands,
+		assetsQueries:  assetsQueries,
+		assetsBuilder:  assetsBuilder,
+		assetsSyncer:   assetsSyncer,
+		assetsHoldings: assetsHoldings,
+
+		importerCommands:   importerCommands,
+		importerQueries:    importerQueries,
+		marketDataCommands: marketDataCommands,
+		marketDataQueries:  marketDataQueries,
+		marketDataCatalog:  marketDataCatalog,
+		marketDataCreds:    marketDataCreds,
+		marketDataQuotes:   marketDataQuotes,
+
+		backupCommands: backupCommands,
+		backupQueries:  backupQueries,
+	}
+}
+
+func registerEventHandlers(bus eventbus.Bus, app *application) error {
+	if err := subscribe(bus, account.TopicCreated, portfolioevents.NewAccountCreatedHandler(app.portfolioCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, account.TopicCreated, assetsevents.NewAccountCreatedHandler(app.assetsCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, account.TopicCreated, cashflowevents.NewAccountCreatedHandler(app.cashflowCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, importer.TopicAccepted, importerevents.NewAcceptedHandler(app.importerCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, importer.TopicCompleted, portfolioevents.NewImportCompletedHandler(app.portfolioBuilder, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, importer.TopicCompleted, cashflowevents.NewImportCompletedHandler(app.recurringCommands, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, importer.TopicCompleted, notify.NewImportCompletedHandler(app.hub).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, portfolio.TopicRebuilt, assetsevents.NewPortfolioRebuiltHandler(app.assetsSyncer, app.assetsBuilder, bus, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, portfolio.TopicRebuilt, notify.NewPortfolioRebuiltHandler(app.hub).Handle); err != nil {
+		return err
+	}
+	snapshotsRebuild := assetsevents.NewSnapshotsRebuildRequestedHandler(app.assetsHoldings, app.assetsBuilder, bus, app.log)
+	if err := subscribe(bus, assets.TopicSnapshotsRebuildRequested, snapshotsRebuild.Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, backup.TopicPortfolioRestored, portfolioevents.NewRestoredHandler(app.portfolioBuilder, app.log).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, backup.TopicAssetsRestored, assetsevents.NewRestoredHandler(snapshotsRebuild).Handle); err != nil {
+		return err
+	}
+	if err := subscribe(bus, assets.TopicSnapshotsRebuilt, notify.NewAssetsSnapshotsRebuiltHandler(app.hub).Handle); err != nil {
+		return err
+	}
+	return nil
+}
+
+func subscribe[T any](bus eventbus.Bus, topic string, handler eventbus.Handler[T]) error {
+	if _, err := eventbus.Subscribe(bus, topic, handler); err != nil {
+		return fmt.Errorf("subscribe %s: %w", topic, err)
+	}
+	return nil
+}
+
+// registerRoutes binds every route through one of three tiers. The default is
+// `protected`, so a route added without thought requires a session rather than silently
+// being public; `public` and `adminOnly` are the deliberate exceptions.
+func registerRoutes(router *apphttp.Router, app *application) {
+	withRequestLogging := apphttp.WithRequestLogging(app.log)
+	withAuth := apphttp.WithAuthentication(app.authQueries, app.authFallback, app.log)
+
+	public := func(pattern string, handler http.Handler) {
+		router.HandleWithMiddleware(pattern, handler, withRequestLogging)
+	}
+	protected := func(pattern string, handler http.Handler) {
+		router.HandleWithMiddleware(pattern, handler, withRequestLogging, withAuth)
+	}
+	adminOnly := func(pattern string, handler http.Handler) {
+		router.HandleWithMiddleware(pattern, apphttp.RequireAdmin(handler), withRequestLogging, withAuth)
+	}
+
+	// Unauthenticated by necessity: health checks, API docs, and the sign-in endpoints
+	// themselves. /auth/me and /auth/logout resolve the session on their own so they can
+	// answer "not signed in" rather than being rejected by middleware.
+	public("GET /health", basehandlers.HealthHandler(app.log))
+	public("GET /swagger/", httpSwagger.WrapHandler)
+	public("GET /auth/providers", authhttp.Providers(app.authRegistry))
+	public("GET /auth/me", authhttp.Me(app.log, app.authQueries))
+	public("POST /auth/logout", authhttp.Logout(app.log, app.authCommands, app.authCookies))
+	public("GET /auth/{provider}/login", authhttp.Login(app.log, app.authRegistry, app.authCookies, app.frontendURL))
+	public("GET /auth/{provider}/callback", authhttp.Callback(app.log, app.authRegistry, app.authCommands, app.authCookies, app.frontendURL))
+
+	protected("GET /ws/accounts/{account_id}", app.hub.Handler())
+
+	// Account records describe every user, so listing or creating them is an
+	// administrator's job. Ordinary clients learn their own account from /auth/me.
+	adminOnly("GET /accounts", accounthttp.List(app.log, app.accountQueries))
+	adminOnly("POST /accounts", accounthttp.Create(app.log, *app.accountCommands))
+
+	protected("GET /vendors", vendorshttp.List(app.log, app.vendorQueries))
+
+	protected("POST /imports/cashflow", importerhttp.ImportCashflow(app.log, app.importerCommands))
+	protected("POST /imports/portfolio", importerhttp.ImportPortfolio(app.log, app.importerCommands))
+	adminOnly("POST /imports/eod", importerhttp.ImportEOD(app.log, app.importerCommands))
+	protected("GET /imports/{import_id}", importerhttp.GetImport(app.log, app.importerQueries))
+
+	// Market data is shared reference data rather than account data: everyone reads it,
+	// only administrators curate it.
+	protected("GET /marketdata/listings", marketdatahttp.GetListings(app.log, app.marketDataQueries))
+	protected("GET /marketdata/listings/search", marketdatahttp.SearchListings(app.log, app.marketDataQueries))
+	protected("GET /marketdata/eods", marketdatahttp.GetEOD(app.log, app.marketDataQueries))
+	protected("GET /marketdata/quotes", marketdatahttp.SearchQuotes(app.log, app.marketDataQuotes))
+	adminOnly("POST /marketdata/listing", marketdatahttp.CreateListing(app.log, app.marketDataCommands))
+	adminOnly("PATCH /marketdata/listing", marketdatahttp.UpdateListingFields(app.log, app.marketDataCommands))
+	adminOnly("DELETE /marketdata/listing/{listing_id}", marketdatahttp.DeleteListing(app.log, app.marketDataCommands))
+	adminOnly("POST /marketdata/catalogue/search", marketdatahttp.SearchProviderCatalogue(app.log, app.marketDataCatalog, app.marketDataQueries))
+	adminOnly("POST /marketdata/catalogue/sync", marketdatahttp.StartCatalogueSync(app.log, app.marketDataCatalog))
+	adminOnly("GET /marketdata/catalogue/status", marketdatahttp.GetCatalogueStatus(app.log, app.marketDataQueries))
+	adminOnly("GET /marketdata/providers", marketdatahttp.GetProviderCredentials(app.log, app.marketDataCreds))
+	adminOnly("PATCH /marketdata/providers/{provider_id}/credentials", marketdatahttp.UpdateProviderCredentials(app.log, app.marketDataCreds))
+	adminOnly("POST /marketdata/providers/{provider_id}/credentials/reveal", marketdatahttp.RevealProviderAPIKey(app.log, app.marketDataCreds))
+
+	protected("GET /cashflow/transactions", cashflowhttp.GetTransactions(app.log, app.cashflowQueries))
+	protected("POST /cashflow/transactions/manual", cashflowhttp.CreateTransactions(app.log, app.cashflowCommands))
+	protected("GET /cashflow/analytics/monthly", cashflowhttp.GetMonthlyAnalytics(app.log, app.cashflowQueries))
+	protected("GET /cashflow/analytics/tags", cashflowhttp.GetCashflowTagDistribution(app.log, app.cashflowQueries))
+	protected("GET /cashflow/tags", cashflowhttp.GetCashflowTags(app.log, app.cashflowQueries))
+	protected("POST /cashflow/transactions/date", cashflowhttp.ChangeTransactionDate(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/tag", cashflowhttp.TagTransaction(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/tag/selection", cashflowhttp.TagTransactionsBySelection(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/tag/filter", cashflowhttp.TagTransactionsByFilter(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/ignore/selection", cashflowhttp.IgnoreTransactionsBySelection(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/ignore/filter", cashflowhttp.IgnoreTransactionsByFilter(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/selection", cashflowhttp.MarkPurposeBySelection(app.log, app.cashflowCommands))
+	protected("POST /cashflow/transactions/purpose/filter", cashflowhttp.MarkPurposeByFilter(app.log, app.cashflowCommands))
+
+	protected("GET /wealth-goal", wealthgoalhttp.GetGoal(app.log, app.wealthGoalQueries))
+	protected("PUT /wealth-goal", wealthgoalhttp.SetGoal(app.log, app.wealthGoalCommands))
+	protected("GET /wealth-goal/standing", wealthgoalhttp.GetStanding(app.log, app.wealthGoalQueries))
+
+	protected("GET /cashflow/ignore-rules", cashflowhttp.GetIgnoreRules(app.log, app.cashflowQueries))
+	protected("POST /cashflow/ignore-rules", cashflowhttp.CreateIgnoreRule(app.log, app.cashflowCommands))
+	protected("POST /cashflow/ignore-rules/preview", cashflowhttp.PreviewIgnoreRule(app.log, app.cashflowQueries))
+	protected("PUT /cashflow/ignore-rules/{rule_id}", cashflowhttp.UpdateIgnoreRule(app.log, app.cashflowCommands))
+	protected("DELETE /cashflow/ignore-rules/{rule_id}", cashflowhttp.DeleteIgnoreRule(app.log, app.cashflowCommands))
+	protected("POST /cashflow/ignore-rules/{rule_id}/apply", cashflowhttp.ApplyIgnoreRule(app.log, app.cashflowCommands))
+	protected("GET /cashflow/imports/{import_id}/ignored", cashflowhttp.GetImportIgnored(app.log, app.cashflowQueries))
+
+	// Recurring items are cashflow data for one account, so they sit in the same
+	// tier as the transactions they are built from.
+	protected("GET /cashflow/recurring", cashflowhttp.GetRecurringItems(app.log, app.recurringQueries))
+	protected("POST /cashflow/recurring", cashflowhttp.CreateRecurringItem(app.log, app.recurringCommands))
+	protected("GET /cashflow/recurring/suggestions", cashflowhttp.GetRecurringSuggestions(app.log, app.recurringQueries))
+	protected("POST /cashflow/recurring/suggestions/confirm", cashflowhttp.ConfirmRecurringSuggestion(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/suggestions/dismiss", cashflowhttp.DismissRecurringSuggestion(app.log, app.recurringCommands))
+	protected("GET /cashflow/recurring/{item_id}", cashflowhttp.GetRecurringItem(app.log, app.recurringQueries))
+	protected("PATCH /cashflow/recurring/{item_id}", cashflowhttp.UpdateRecurringItem(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/{item_id}/end", cashflowhttp.EndRecurringItem(app.log, app.recurringCommands))
+	protected("POST /cashflow/recurring/{item_id}/transactions", cashflowhttp.LinkRecurringTransactions(app.log, app.recurringCommands))
+	protected("DELETE /cashflow/recurring/{item_id}/transactions/{transaction_id}", cashflowhttp.UnlinkRecurringTransaction(app.log, app.recurringCommands))
+
+	protected("GET /portfolio/positions", portfoliohttp.GetPortfolioPositions(app.log, app.portfolioQueries))
+	protected("GET /portfolio/snapshots", portfoliohttp.GetPortfolioSnapshots(app.log, app.accountQueries, app.portfolioQueries))
+	protected("GET /portfolio/transactions", portfoliohttp.GetPortfolioTransactions(app.log, app.accountQueries, app.portfolioStore))
+	protected("POST /portfolio/transactions/manual", portfoliohttp.CreateManualPortfolioTransaction(app.log, app.portfolioCommands))
+	protected("POST /portfolio/transactions/date", portfoliohttp.ChangePortfolioTransactionDate(app.log, app.portfolioCommands))
+	protected("PUT /portfolio/transactions/{transaction_id}", portfoliohttp.UpdatePortfolioTransaction(app.log, app.portfolioCommands))
+	protected("DELETE /portfolio/transactions/{transaction_id}", portfoliohttp.DeletePortfolioTransaction(app.log, app.portfolioCommands))
+	protected("POST /portfolio/rebuild", portfoliohttp.RebuildPortfolio(app.log, app.portfolioBuilder))
+
+	protected("GET /assets/classes", assethttp.GetClasses(app.log, *app.assetsQueries))
+	protected("POST /assets/classes", assethttp.CreateClass(app.log, *app.assetsCommands))
+	protected("PATCH /assets/classes", assethttp.UpdateClass(app.log, *app.assetsCommands))
+	protected("GET /assets/classes/{class_id}", assethttp.GetClassDetails(app.log, *app.assetsQueries))
+	protected("DELETE /assets/classes/{class_id}", assethttp.DeleteClass(app.log, *app.assetsCommands))
+	protected("POST /assets", assethttp.CreateAsset(app.log, *app.assetsCommands))
+	protected("POST /assets/holdings", assethttp.CreateHolding(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/worth", assethttp.SetAssetWorth(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/adjust", assethttp.AdjustAssetWorth(app.log, *app.assetsCommands))
+	// Reading one holding hangs off /assets/holdings rather than /assets/{asset_id}/holding:
+	// the latter is ambiguous against /assets/classes/{class_id} and makes the mux panic.
+	protected("GET /assets/holdings/{asset_id}", assethttp.GetHolding(app.log, *app.assetsQueries))
+	protected("POST /assets/{asset_id}/purchases", assethttp.AddPurchase(app.log, *app.assetsCommands))
+	protected("PATCH /assets/{asset_id}", assethttp.RenameAsset(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}", assethttp.DeleteAsset(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/mutations/{mutation_id}", assethttp.UpdateMutation(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}/mutations/{mutation_id}", assethttp.DeleteMutation(app.log, *app.assetsCommands))
+	protected("PUT /assets/{asset_id}/purchases/{purchase_id}", assethttp.UpdatePurchase(app.log, *app.assetsCommands))
+	protected("DELETE /assets/{asset_id}/purchases/{purchase_id}", assethttp.DeletePurchase(app.log, *app.assetsCommands))
+	protected("GET /assets/snapshots", assethttp.GetSnapshots(app.log, *app.assetsQueries))
+	protected("GET /assets/classes/growth", assethttp.GetClassesGrowth(app.log, *app.assetsQueries))
+
+	// A backup of cashflow, portfolio or assets holds only the signed-in account's
+	// records. End-of-day prices are shared reference data, so only administrators move them.
+	protected("GET /backup/cashflow/export", backuphttp.ExportCashflow(app.log, app.backupQueries))
+	protected("POST /backup/cashflow/import", backuphttp.ImportCashflow(app.log, app.backupCommands))
+	protected("GET /backup/portfolio/export", backuphttp.ExportPortfolio(app.log, app.backupQueries))
+	protected("POST /backup/portfolio/import", backuphttp.ImportPortfolio(app.log, app.backupCommands))
+	protected("GET /backup/assets/export", backuphttp.ExportAssets(app.log, app.backupQueries))
+	protected("POST /backup/assets/import", backuphttp.ImportAssets(app.log, app.backupCommands))
+	adminOnly("GET /backup/eods/export", backuphttp.ExportEODs(app.log, app.backupQueries))
+	adminOnly("POST /backup/eods/import", backuphttp.ImportEODs(app.log, app.backupCommands))
+}
+
+func closeDB(log logging.Logger, db *storage.DB) {
+	if err := db.Close(); err != nil {
+		log.Warn(context.Background(), "failed closing database", "error", err.Error())
+	}
+}
+
+func closeBus(log logging.Logger, bus eventbus.Bus) {
+	if err := bus.Close(); err != nil {
+		log.Warn(context.Background(), "failed closing event bus", "error", err.Error())
+	}
+}
+
+func closeHub(log logging.Logger, hub *notify.Hub) {
+	if err := hub.Close(); err != nil {
+		log.Warn(context.Background(), "failed closing websocket hub", "error", err.Error())
+	}
+}

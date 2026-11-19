@@ -4,14 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lennardclaproth/my-finances-tracker/internal/config"
-	"github.com/lennardclaproth/my-finances-tracker/internal/logging"
-	"github.com/lennardclaproth/my-finances-tracker/internal/marketdata"
+	"github.com/lennardclaproth/ta11y/internal/config"
+	"github.com/lennardclaproth/ta11y/internal/logging"
+	"github.com/lennardclaproth/ta11y/internal/marketdata"
 )
-
-type providerCreator interface {
-	Create(ctx context.Context, provider *marketdata.Provider) error
-}
 
 type providerBootstrapConfig struct {
 	name    marketdata.ProviderName
@@ -20,9 +16,9 @@ type providerBootstrapConfig struct {
 }
 
 // Providers bootstraps API and manual market-data providers from configuration.
-func Providers(ctx context.Context, pc providerCreator, cfg config.Providers, logger logging.Logger) {
-	if pc == nil {
-		panic(fmt.Errorf("bootstrap providers: provider creator is required"))
+func Providers(ctx context.Context, commands *marketdata.Commands, cfg config.Providers, logger logging.Logger) {
+	if commands == nil {
+		panic(fmt.Errorf("bootstrap providers: marketdata commands are required"))
 	}
 
 	configs := []providerBootstrapConfig{
@@ -53,7 +49,7 @@ func Providers(ctx context.Context, pc providerCreator, cfg config.Providers, lo
 			if err != nil {
 				panic(fmt.Errorf("bootstrap providers: build provider %s: %w", cfg.name, err))
 			}
-			if err := pc.Create(ctx, provider); err != nil {
+			if err := commands.CreateProvider(ctx, provider); err != nil {
 				panic(fmt.Errorf("bootstrap providers: create provider %s: %w", cfg.name, err))
 			}
 		}
@@ -66,7 +62,7 @@ func Providers(ctx context.Context, pc providerCreator, cfg config.Providers, lo
 		if err != nil {
 			panic(fmt.Errorf("bootstrap providers: build manual provider %s: %w", providerName, err))
 		}
-		if err := pc.Create(ctx, provider); err != nil {
+		if err := commands.CreateProvider(ctx, provider); err != nil {
 			panic(fmt.Errorf("bootstrap providers: create manual provider %s: %w", providerName, err))
 		}
 		logger.Info(ctx, "bootstrapped manual provider", "provider", string(providerName))

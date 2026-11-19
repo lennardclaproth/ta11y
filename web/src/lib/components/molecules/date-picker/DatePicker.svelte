@@ -1,0 +1,121 @@
+<script lang="ts">
+	import Icon from '$lib/components/atoms/icon/Icon.svelte';
+	import Popover from '$lib/components/molecules/popover/Popover.svelte';
+	import Calendar from '$lib/components/molecules/calendar/Calendar.svelte';
+	import type { PopoverPlacement } from '$lib/components/molecules/popover/popover.types';
+	import type { ZLayer } from '$lib/styles/z-index';
+	import {
+		formatDisplayDate,
+		parseISODate,
+		startOfMonthUTC
+	} from '$lib/components/molecules/calendar/calendar.utils';
+
+	type Size = 'sm' | 'md' | 'lg';
+
+	type Props = {
+		/** Bindable selected date ("YYYY-MM-DD") or null. */
+		value?: string | null;
+		placeholder?: string;
+		min?: string | null;
+		max?: string | null;
+		size?: Size;
+		disabled?: boolean;
+		/**
+		 * Append the calendar to `<body>`. Leave it on to escape clipping ancestors; turn it
+		 * **off** inside a `<dialog>`, whose top layer would otherwise cover the panel and make
+		 * the date unpickable.
+		 */
+		portal?: boolean;
+		/** Where the calendar hangs off the trigger; `bottom-end` keeps it inside a narrow dialog. */
+		placement?: PopoverPlacement;
+		/**
+		 * Stacking layer of the calendar. Raise it to `filterPopover` inside a `Drawer`, whose
+		 * panel sits on the modal layer and would otherwise cover the portaled calendar.
+		 */
+		layer?: ZLayer;
+		/** Bindable open state of the calendar. */
+		open?: boolean;
+		ariaLabel?: string;
+		/** Wires a `FormField` label to the trigger. */
+		id?: string;
+		/** Wires a `FormField` hint or error to the trigger. */
+		ariaDescribedby?: string;
+		/**
+		 * Marks the trigger as rejected. The trigger is a plain button, whose role does not
+		 * support `aria-invalid`, so this is the border only — the reason reaches a screen
+		 * reader through `ariaDescribedby` pointing at the field's error text.
+		 */
+		invalid?: boolean;
+		onChange?: (value: string | null) => void;
+		class?: string;
+	};
+
+	let {
+		value = $bindable(null),
+		placeholder = 'Select date',
+		min = null,
+		max = null,
+		size = 'md',
+		disabled = false,
+		portal = true,
+		placement = 'bottom-start',
+		layer = 'popover',
+		open = $bindable(false),
+		ariaLabel = 'Select date',
+		id,
+		ariaDescribedby,
+		invalid = false,
+		onChange,
+		class: className = ''
+	}: Props = $props();
+
+	let month = $state(startOfMonthUTC(parseISODate(value) ?? new Date()));
+
+	// Re-center the calendar on the selected value whenever the popover opens.
+	$effect(() => {
+		if (open) month = startOfMonthUTC(parseISODate(value) ?? new Date());
+	});
+
+	const sizeClasses = {
+		sm: 'h-8 px-2.5 text-sm',
+		md: 'h-10 px-3 text-sm',
+		lg: 'h-12 px-3 text-base'
+	} satisfies Record<Size, string>;
+
+	const label = $derived(value ? formatDisplayDate(value) : placeholder);
+
+	function handleSelect(iso: string) {
+		value = iso;
+		onChange?.(iso);
+		open = false;
+	}
+</script>
+
+<Popover bind:open {placement} {portal} {layer} class="p-3">
+	{#snippet trigger(api)}
+		<button
+			type="button"
+			{id}
+			{disabled}
+			aria-label={ariaLabel}
+			aria-expanded={api.open}
+			aria-describedby={ariaDescribedby}
+			class={[
+				'inline-flex items-center gap-2 rounded-xl border bg-white whitespace-nowrap',
+				'transition-colors hover:bg-slate-50',
+				'focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:outline-none',
+				'disabled:pointer-events-none disabled:opacity-50',
+				invalid ? 'border-red-400' : api.open ? 'border-slate-400' : 'border-slate-300',
+				value ? 'text-slate-800' : 'text-slate-500',
+				sizeClasses[size],
+				className
+			].join(' ')}
+			onclick={api.toggle}
+		>
+			<Icon icon="heroicons:calendar-days" size="sm" class="text-slate-500" />
+			<span>{label}</span>
+		</button>
+	{/snippet}
+
+	<Calendar bind:month mode="single" selected={value} {min} {max} onSelect={handleSelect} />
+</Popover>

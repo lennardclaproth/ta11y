@@ -1,0 +1,318 @@
+package marketdata
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/date"
+	"github.com/lennardclaproth/ta11y/internal/sorting"
+)
+
+// QueryStore reads market-data listings, EOD datapoints, and providers.
+type QueryStore interface {
+	Get(ctx context.Context, id uuid.UUID) (*Listing, error)
+	GetBySymbol(ctx context.Context, symbol string) (*Listing, error)
+	GetByISIN(ctx context.Context, isin string) (*Listing, error)
+	List(ctx context.Context, limit, offset *int) ([]*Listing, error)
+	Search(ctx context.Context, q string, limit, offset *int) ([]*Listing, int, error)
+	ShouldAccumulate(ctx context.Context, lsID uuid.UUID, val bool) error
+	CountEODByListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time) (int, error)
+	GetEODForListing(ctx context.Context, lsID uuid.UUID, from, to *time.Time, limit, offset *int, sort string) ([]*EOD, error)
+	SplitsForListing(ctx context.Context, lsID uuid.UUID) ([]Split, error)
+	GetProviderByName(ctx context.Context, name ProviderName) (*Provider, error)
+	SearchCatalogue(ctx context.Context, q string, scope CatalogueScope, limit, offset int) ([]*CatalogueSearchResult, int, error)
+	CountProviderListings(ctx context.Context, source Source) (int, error)
+	LatestCatalogueSync(ctx context.Context, source Source) (*CatalogueSync, error)
+}
+
+type Queries struct {
+	qs QueryStore
+	s  *Syncer
+}
+
+// NewQueries creates market-data read-side use cases.
+func NewQueries(qs QueryStore, s *Syncer) *Queries {
+	return &Queries{qs: qs, s: s}
+}
+
+// NewListingHandler creates an empty query handler.
+//
+// Deprecated: use NewQueries with explicit store and syncer dependencies.
+func NewListingHandler() *Queries {
+	return &Queries{}
+}
+
+func (q *Queries) Listing(ctx context.Context, id uuid.UUID) (*Listing, error) {
+	ls, err := q.qs.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get listing: failed to execute query: %w", err)
+	}
+	return ls, nil
+}
+
+func (q *Queries) ListingBySymbol(ctx context.Context, symbol string) (*Listing, error) {
+	ls, err := q.qs.GetBySymbol(ctx, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("get listing by symbol: failed to execute query: %w", err)
+	}
+	return ls, nil
+}
+
+// ListingByIdentity resolves the one listing an instrument is, by exact identity:
+// the ISIN when the instrument has one, otherwise the symbol. A partial match is
+// worse than none here — a short symbol that also occurs inside a longer one would
+// silently attach a holding to somebody else's instrument — so there is no fallback
+// from a present-but-unknown ISIN to the symbol, and no match returns (nil, nil).
+func (q *Queries) ListingByIdentity(ctx context.Context, isin, symbol string) (*Listing, error) {
+	if isin = strings.TrimSpace(isin); isin != "" {
+		listing, err := q.qs.GetByISIN(ctx, isin)
+		if err != nil {
+			return nil, fmt.Errorf("listing by identity: failed to execute query: %w", err)
+		}
+		return listing, nil
+	}
+	if symbol = strings.TrimSpace(symbol); symbol == "" {
+		return nil, nil
+	}
+	listing, err := q.qs.GetBySymbol(ctx, symbol)
+	if err != nil {
+		return nil, fmt.Errorf("listing by identity: failed to execute query: %w", err)
+	}
+	return listing, nil
+}
+
+// Provider returns the best provider candidate for the given provider name,
+// wrapping ErrProviderNotFound when no matching provider exists.
+func (q *Queries) Provider(ctx context.Context, name ProviderName) (*Provider, error) {
+	provider, err := q.qs.GetProviderByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("get provider: failed to execute query: %w", err)
+	}
+	return provider, nil
+}
+
+// ListListings returns all listings in deterministic order for UI presentation.
+func (q *Queries) ListListings(ctx context.Context) ([]*Listing, error) {
+	listings, err := q.qs.List(ctx, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list listings: failed to execute query: %w", err)
+	}
+	return listings, nil
+}
+
+func (q *Queries) SearchListings(ctx context.Context, qs string, limit, offset int) ([]*Listing, int, error) {
+	listings, total, err := q.qs.Search(ctx, qs, &limit, &offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("search listings: failed to execute query: %w", err)
+	}
+	return listings, total, nil
+}
+
+// SearchCatalogue searches tracked listings and the cached provider catalogue as
+// one result set. The scope decides which sides participate; tracked rows always
+// sort ahead of catalogue rows.
+//
+// This never reaches the provider. Filling the catalogue is an explicit, metered
+// action (see Catalogue.Refresh and Catalogue.StartSeed), so a search can never
+// silently spend provider requests.
+func (q *Queries) SearchCatalogue(
+	ctx context.Context,
+	qs string,
+	scope CatalogueScope,
+	limit, offset int,
+) ([]*CatalogueSearchResult, int, error) {
+	if !scope.IsValid() {
+		return nil, 0, ErrCatalogueScopeInvalid
+	}
+	results, total, err := q.qs.SearchCatalogue(ctx, qs, scope, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("search catalogue: failed to execute query: %w", err)
+	}
+	return results, total, nil
+}
+
+// CatalogueStatus reports how much of a provider's catalogue is cached locally and
+// when it was last seeded, so callers can warn that the cache has gone stale.
+func (q *Queries) CatalogueStatus(ctx context.Context, source Source) (*CatalogueStatus, error) {
+	entries, err := q.qs.CountProviderListings(ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("catalogue status: failed to count entries: %w", err)
+	}
+	latest, err := q.qs.LatestCatalogueSync(ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("catalogue status: failed to read latest sync: %w", err)
+	}
+	return &CatalogueStatus{Source: source, Entries: entries, LatestSync: latest}, nil
+}
+
+type Metadata struct {
+	Message     string
+	ResultCount int
+	TotalCount  int
+}
+
+type EODResult struct {
+	Data     []EOD
+	Metadata Metadata
+}
+
+func (q *Queries) GetEODByListing(
+	ctx context.Context,
+	listingID uuid.UUID,
+	from, to *time.Time,
+	limit, offset int,
+	sortOrder sorting.Direction,
+) (*EODResult, error) {
+	ls, err := q.qs.Get(ctx, listingID)
+	if err != nil {
+		return nil, fmt.Errorf("handlers: GetByListing failed to get listing: %w", err)
+	}
+	if ls == nil {
+		return nil, fmt.Errorf("handlers: GetByListing: %w", ErrListingNotFound)
+	}
+	if !ls.Active {
+		return nil, fmt.Errorf("handlers: GetByListing listing with symbol %s is not active", ls.Symbol)
+	}
+	var res *EODResult
+	if ls.Provider.IsManualIngestion() {
+		res, err = getEODResult(ctx, ls, from, to, &limit, &offset, sortOrder, "Manual provider configured; automatic sync disabled", q.qs)
+		if err != nil {
+			return nil, fmt.Errorf("handlers: GetByListing failed to get EOD result: %w", err)
+		}
+		return res, nil
+	}
+
+	// If the listing is currently syncing it means that there is already a sync in progress.
+	// In this case we can just fetch the existing data from the database, we don't need to trigger another sync.
+	if ls.Syncing {
+		res, err = getEODResult(
+			ctx,
+			ls,
+			from,
+			to,
+			&limit,
+			&offset,
+			sortOrder,
+			"Data may be stale, listing is currently syncing",
+			q.qs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("handlers: GetByListing failed to get EOD result: %w", err)
+		}
+		return res, nil
+	}
+	// If the accumulated end date is nil or before the day before the current data, it means the data is not
+	// up to date, so we should trigger a sync to fetch the latest data.
+	targetEnd := date.LatestBusinessDate(time.Now(), time.Local)
+	if ls.AccumulatedEnd == nil || date.DateOnly(*ls.AccumulatedEnd, time.Local).Before(targetEnd) {
+		err := q.qs.ShouldAccumulate(ctx, ls.ID, true)
+		if err != nil {
+			return nil, fmt.Errorf("get eod by listing: %w: %w", ErrShouldAccumulateFailed, err)
+		}
+		if q.s != nil {
+			// Best effort, and deliberately not surfaced: the read below answers from whatever
+			// is already stored, so a failed refresh degrades to stale data rather than an error.
+			// The caller's range only filters the read: the sync advances from the listing's own
+			// accumulated end, since the range it records is shared by every account.
+			_, _ = q.s.SyncEOD(ctx, ls.ID, nil, nil)
+		}
+	}
+	// Fetch EOD data from the database, this will return the existing data if a sync is in progress, or the up to date data if not.
+	res, err = getEODResult(
+		ctx,
+		ls,
+		from,
+		to,
+		&limit,
+		&offset,
+		sortOrder,
+		"Sync triggered; data may be stale until sync is complete",
+		q.qs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("handlers: GetByListing failed to get EOD result: %w", err)
+	}
+	return res, nil
+}
+
+func getEODResult(
+	ctx context.Context,
+	ls *Listing,
+	from, to *time.Time,
+	limit, offset *int,
+	sortOrder sorting.Direction,
+	msg string,
+	qs QueryStore,
+) (*EODResult, error) {
+	data, err := qs.GetEODForListing(
+		ctx,
+		ls.ID,
+		from,
+		to,
+		limit,
+		offset,
+		string(sortOrder),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetEOD failed to fetch EOD data: %w", err)
+	}
+	totalCount, err := qs.CountEODByListing(ctx, ls.ID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("GetEOD failed to fetch total EOD count: %w", err)
+	}
+	res := make([]EOD, 0, len(data))
+	for _, item := range data {
+		if item == nil {
+			continue
+		}
+
+		res = append(res, *item)
+	}
+	return &EODResult{
+		Data: res,
+		Metadata: Metadata{
+			Message:     msg,
+			ResultCount: len(data),
+			TotalCount:  totalCount,
+		},
+	}, nil
+}
+
+// LatestEOD returns the most recent stored end-of-day row for a listing, or
+// (nil, nil) when it has none.
+//
+// Unlike GetEODByListing this never triggers a provider sync: callers use it to
+// label a price with the day it belongs to, and a read that quietly spends a
+// provider request would make rendering a page cost quota.
+func (q *Queries) LatestEOD(ctx context.Context, listingID uuid.UUID) (*EOD, error) {
+	limit, offset := 1, 0
+	rows, err := q.qs.GetEODForListing(ctx, listingID, nil, nil, &limit, &offset, string(sorting.DESC))
+	if err != nil {
+		return nil, fmt.Errorf("latest eod for listing %s: %w", listingID, err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
+}
+
+// Split is a share multiplier applied to a holding on a given date: a factor of 4
+// means one share became four.
+type Split struct {
+	Date   time.Time `db:"date"`
+	Factor float64   `db:"split_factor"`
+}
+
+// SplitsForListing returns the listing's splits in chronological order. It reads the
+// factors recorded on the end-of-day series rather than a separate corporate-actions
+// feed, so the splits a rebuild sees always match the price history it is walking.
+func (q *Queries) SplitsForListing(ctx context.Context, listingID uuid.UUID) ([]Split, error) {
+	splits, err := q.qs.SplitsForListing(ctx, listingID)
+	if err != nil {
+		return nil, fmt.Errorf("splits for listing %s: %w", listingID, err)
+	}
+	return splits, nil
+}

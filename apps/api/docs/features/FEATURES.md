@@ -1,0 +1,420 @@
+# Features
+
+A concise overview of what ta11y does. Each entry is the application
+capability, not its implementation; see the code under `apps/api/internal/<feature>`
+and `apps/api/transport` for details.
+
+Each capability links to a **detailed feature doc** (with class, ERD, state-machine, and
+sequence diagrams) in this same `features/` directory. Tightly-related capabilities share a
+doc (e.g. all cashflow and all market-data features).
+
+## Core (user-facing)
+
+### Web portal [020]
+Cashflow, assets, portfolio, and admin pages share ta11y's editorial shell: a ruled masthead,
+visible desktop navigation, a labeled mobile menu, serif headings, flat analytics sections,
+and square paper table surfaces. Narrow screens scroll through analytics to a dedicated table
+region; wide tables scroll horizontally without widening the page.
+
+Every page arranges its controls the same way, so where a control sits says what it affects. The
+top bar is navigation only. To the right of it sits your overview: the signed-in account, net
+worth with its change over the selected period, one period choice, and sign out — open in the
+masthead on a wide screen, behind a single entry on a narrow one. That period applies to the
+charts and the table of whichever page you are on and stays put when you change page; admin pages
+have no charts and no period, and Recurring looks back over your whole history, so it has none
+either. Actions that recompute a chart, such as rebuilding the portfolio,
+hang on that chart's rule. Everything that acts on the rows — searching, row filters, adding,
+importing, acting on a selection — lives in the ledger header above the table. The header
+checkbox selects the page you see; when the rows run over several pages, a line above the table
+offers to select every row matching the filters, and a selection holds across pages until the
+filters or the period change.
+
+On Cashflow, Portfolio and Assets the overview charts take the screen's height and the page
+scrolls to the table, which keeps a screen-high panel of its own below them. The ghost button at
+the far right of the ledger header opens the same toolbar and table in a near-full-width
+slide-over. Cashflow's incoming and outgoing tags read as rings or as ranked bars, and selecting a
+tag in either filters the table to it. Dragging across Cashflow's net trend, Portfolio's chart,
+Assets' stacked chart or an asset class's chart zooms the period to that stretch, named on the
+chart's rule with a way back. Positions on Portfolio and classes on Assets are ranked bars. Portfolio and the asset
+class page shade the gain between worth and what was put in, and Portfolio's return view draws the
+growth over the period as a line with each day's change as bars. Assets stacks worth by class
+across the whole period instead of repeating net worth, and its distribution gives each class's
+worth at the period's end and its growth within it.
+
+Every notification uses one shape: a ruled band. Feedback after an action appears as a dismissible
+toast floating in the top-right corner under the masthead; a problem that stays sits at the content it
+concerns with its recovery action; a refused save stays in the modal or form that caused it, with
+the entry preserved and no second notice on top of it.
+
+### Authentication [030]
+People sign in through OpenID Connect. The API runs the Authorization Code + PKCE flow
+itself, verifies the ID token once and throws it away, then issues its own opaque,
+revocable session cookie -- no provider token is ever stored and the browser never handles
+one. Google ships first; any compliant provider is added by configuration alone, since
+every provider is resolved through discovery.
+
+The application keeps as little as it can about a person: an account id, an email, and one
+pseudonymous `(issuer, subject)` row per identity provider. Signing in through a second
+provider with the same **verified** email resolves to the same account; an unverified email
+is refused, because a provider that accepts arbitrary addresses could otherwise claim
+someone else’s data.
+
+Access is allowlisted: authenticating with a provider proves who someone is, `auth.allowed_emails`
+decides who is admitted. It is checked on every sign-in and again on every request, so removing an
+address ends the sessions it already holds rather than waiting for them to expire.
+
+Authentication is enforced. Routes are default-deny — only health, the API docs and the sign-in
+endpoints are public, and account administration, market-data curation, provider credentials and
+EOD imports additionally require the `admin` flag, which the API answers 403 on rather than merely
+hiding the screen. Every account-scoped request takes its account from the session; clients no
+longer send an `account_id` anywhere.
+
+Sign-in is off by default (`auth.enabled`) so a fresh checkout boots without provider credentials,
+in which case the API runs as the single bootstrapped account -- for requests that come from and are
+addressed to this machine only, since that account is an admin. Configuration refuses that outside
+development, and refuses an empty allowlist and a `*` CORS origin there too; an unset
+`server.environment` counts as production.
+
+### Account management
+Users create and list accounts. An account is the shared scope that imports, cashflow,
+portfolio, and assets all hang off of.
+
+→ Details: [Account management](%5B003%5D_ACCOUNT_MANAGEMENT.md)
+
+### CSV imports
+Users upload a vendor CSV for an account and it is accepted immediately, stored durably,
+and processed asynchronously. Three explicit import types are supported — cashflow,
+portfolio, and end-of-day market data — with vendor-specific parsers (DeGiro, ING, N26
+for cashflow; DeGiro for portfolio; BrandNewDay for EOD).
+
+`GET /imports/{import_id}` reads one import back: its lifecycle state, its row counters,
+and a classified reason when the vendor's parser refused the file. The stored upload is
+removed once an import finishes, successfully or not. An import a restart interrupted is
+failed at the next start-up with a message asking for the file again, since the upload did
+not survive the restart.
+
+→ Details: [CSV imports](%5B002%5D_CSV_IMPORTS.md)
+
+### Brokerage import [032]
+**Import CSV** on Cashflow and on Portfolio opens one import panel. A monthly broker
+account statement is uploaded once and fills both destinations, and the result reports
+per destination what was new, what was already imported and what failed, plus the
+products it brought in that no listing matches yet. On Cashflow, **Import CSV** opens a
+bank statement panel instead (ING, N26), which fills Cashflow only, says when a file is
+not that bank's export, and counts rows it could not read as failed; a DEGIRO statement
+is handed over from there to the brokerage panel.
+
+Repeating the import is safe. Consecutive exports overlap, so a row is recognised by
+what it is — date, product, amount and quantity — and no
+longer by where it sits in the file; two identical rows inside one export still stay two
+transactions. Rows imported before this change are not converted.
+
+→ Details: [Brokerage import](%5B032%5D_BROKERAGE_IMPORT.md)
+
+### Cashflow insights
+Users query bank/payment transactions with filtering, sorting, and pagination, and add
+manual transactions. They can view monthly and per-tag analytics, tag transactions
+(individually, by selection, or by filter), and ignore/unignore transactions to exclude
+them from totals. Tagging a selection on Cashflow opens a dialog that searches every tag the
+account has used, with how often, or starts a new one, and shows per row what the tag replaces
+before anything is saved; it can also take the tag off.
+
+A manual transaction is entered on any day up to and including today, and a transaction
+entered by hand can later be moved to another day — the one correction the application
+allows after the fact. Imported transactions keep their statement date: the fingerprint
+that recognises a re-imported row carries its date, so moving one would make the next
+import of the same file add the old row alongside it.
+
+A transaction also carries a **purpose** for the monthly wealth goal ([038]) — income, a
+contribution towards wealth, or nothing — set per selection or per filter, independently of
+its tag and its ignored state.
+
+→ Details: [Cashflow](%5B009%5D_CASHFLOW.md)
+
+### Ignore rules [035]
+Around a third of an imported statement is transfers between the owner's own accounts and
+credit-card settlements. They say nothing about income or spending, so users write **ignore
+rules** that recognise them: text in the description or the note, optionally narrowed to a
+direction and to one bank. Matching rows arrive from an import already ignored, and the
+import reports how many — alongside what was new and what was a duplicate — with the rows
+grouped under the rule that caught each one.
+
+A rule is the same shape as a ledger filter, so what it would catch is shown before it is
+saved and nothing is inferred; there is no learning, and the two sides of a transfer are
+never matched against each other. A rule only ever touches rows the import it ran for
+inserted, unless it is explicitly applied to the ledger, which names its count and asks
+first. Nothing is deleted: ignored rows are shown on Cashflow with the rule that ignored
+them and put back one by one — and a row put back by hand stays back, because rules leave
+anything you decided yourself alone.
+
+→ Details: [Ignore rules](%5B035%5D_IGNORE_RULES.md)
+
+### Monthly wealth goal [038]
+Users set one goal: the share of the income they mark each month that should go towards
+wealth. Marking transactions on Cashflow as income or as a contribution feeds a monthly
+standing that scores each calendar month against the goal that applied in it, shows how many
+of its transactions are still unmarked, and keeps the run of met months as the one
+encouragement. Only incoming money can be income and only outgoing money a contribution, so
+the two sides of a transfer between your own accounts are never both counted. A new goal
+applies from the month it is set in; the running month is never scored. On Cashflow the
+standing reads as the running month, one chart of every month's share against its goal (with
+the run of met months under it), and the month rows.
+
+→ Details: [Monthly wealth goal](%5B038%5D_WEALTH_GOAL.md)
+
+### Recurring items [033]
+Users see their subscriptions, fixed costs and recurring income in one place: to or from
+whom, how often (monthly, quarterly or yearly), how the amount moved over time, and when the
+next one is expected. An item is created by pointing cashflow transactions at it — a new item
+or an existing one — or by confirming a pattern ta11y found in the account's history. Nothing
+becomes an item without that confirmation, and a dismissed suggestion is not offered again.
+Pointing works for income and expenses alike, from a selection in the ledger or from one
+transaction's drawer, at any amount — but only in the item's direction, never for an ignored
+row, and a transaction belongs to one item at most.
+
+Once an item is confirmed, the rows of a later cashflow import that match it (same
+counterparty, same direction, an amount within a quarter of the last one) are linked to it, so
+a recurring payment is pointed at once rather than after every statement. A row that does not
+belong is unlinked in the item; the transaction itself stays in Cashflow. Ending an item is a
+date, not a delete: from the chosen month it is no longer expected and nothing new is linked,
+while everything before it keeps its history.
+
+Items are unrelated to tags and the ignored status: marking changes neither, so the tag
+distribution and monthly totals on Cashflow do not move. ta11y reports the amounts as they
+were charged and labels none of them expensive, and raises no notification anywhere.
+
+→ Details: [Recurring items](%5B033%5D_RECURRING_ITEMS.md)
+
+### Portfolio management
+Users read portfolio snapshots, current positions, and transaction history, add manual
+portfolio transactions, and request asynchronous portfolio rebuilds that recompute
+positions and snapshots from transactions and market data.
+
+A manual transaction is entered on any day up to and including today, and one entered by
+hand can later be edited (date, type, listing, quantity, amount, description) or deleted;
+imported transactions stay as the statement records them.
+Because a backdated or moved trade lands elsewhere in the stream a rebuild reads, the
+write asks for one itself. It answers without waiting: the rebuild runs in the background,
+one per account at a time with later requests folded into a single follow-up, and the page
+refreshes on the `portfolio.rebuilt` event. A rebuild runs as one database transaction, so
+the previous result stays visible until the new one is complete.
+
+Rebuilds account for share splits. A split changes the share count without changing the
+money invested, so it is replayed as an event in the same chronological stream as the
+trades: holdings are rescaled on the split date, before any trade that day, which is
+already quoted in post-split shares. Cost basis, realized profit and income are untouched.
+The factors come from the end-of-day series the provider already returns, so no separate
+corporate-actions feed is fetched; manually imported price files report no splits.
+
+Every rebuild re-links positions to listings, so adding a listing and rebuilding links
+transactions imported earlier. The match is exact: the ISIN, or the symbol when the
+instrument has none. No match leaves the position unlinked — it still counts as a
+position, it just contributes no market value — rather than attaching it to a listing
+that merely looks similar. A linked position, and the transactions mapped to it, show the
+listing's symbol when the statement carried only an ISIN.
+
+→ Details: [Portfolio](%5B013%5D_PORTFOLIO.md)
+
+### Asset management
+Users manage account-scoped asset classes and the items within them, set or adjust each
+item's worth, inspect class details and mutations, and read total net-worth snapshots
+across all classes. Classes and items can be renamed and deleted, and an item's past worth
+changes edited or removed; every change replays the class's history in date order, so
+back-dated and corrected entries carry through to net worth. Every live class's worth over
+time comes in one request, for the stacked chart and the per-class trend on Assets.
+
+→ Details: [Assets](%5B024%5D_ASSETS.md)
+
+### Asset sync
+When a portfolio rebuild completes, the computed portfolio worth is synced into a
+read-only "portfolio" asset class and the total asset snapshots are rebuilt, so net worth
+always reflects the latest portfolio value.
+
+→ Details: [Assets](%5B024%5D_ASSETS.md)
+
+### Daily-priced asset holdings [034]
+An asset item can be linked to a daily-priced instrument instead of carrying a worth the
+user sets. Purchases (date, quantity, unit price) drive its worth from the instrument's
+daily price, back to the first purchase, so it counts in net worth without daily upkeep.
+Crypto is quoted in euro by Alpha Vantage; metals have no euro source and stay manual.
+The class page (`/assets/{class_id}`) opens on the whole class and shows worth against paid
+in over the top-bar period for every class: daily-priced items, items with a worth you set
+(where adding or withdrawing money moves paid in and setting a new worth is growth), and the
+Portfolio against its cost basis.
+
+→ Details: [Daily-priced asset holdings](%5B034%5D_ASSET_HOLDINGS.md)
+
+### Realtime updates (WebSocket)
+Clients subscribe to an account-scoped WebSocket (`/ws/accounts/{account_id}`) and receive
+push notifications when long-running work finishes — import completed, portfolio rebuilt,
+and asset snapshots rebuilt — so the UI can refresh without polling. The client only holds
+the socket while the tab is visible and in use: it closes when the tab is hidden, the server
+closes it after five quiet minutes, and it reopens on the next interaction or when the tab
+comes back, refreshing once to catch what it missed. An idle tab holds no connection.
+
+→ Details: [Realtime updates](%5B001%5D_REALTIME_UPDATES.md)
+
+## Market data & admin
+
+Admin screens (listings, dailies, provider credentials) are shown only to accounts flagged
+`admin`; the bootstrapped account is one. Non-admin accounts do not see them in the
+navigation and get an unavailable notice on a direct link. Hiding them is a convenience:
+the routes behind them are registered admin-only and the API answers 403 on its own, so a
+non-admin who reaches one directly is refused rather than merely un-navigated.
+
+### Listing management
+Admins create, edit, delete, list, and search market-data listings. Listings are the canonical
+instruments referenced by portfolio transactions and end-of-day pricing. In the web app,
+open **Listings** from the navigation -- it is present only for admin accounts -- then
+choose **Add listing**. The form accepts a name, symbol and supported data source, with optional
+instrument metadata. It preserves input on errors and identifies duplicate symbol/source
+pairs. Demo-mode additions remain available to lists and searches until a page reload.
+
+Each row offers **Edit** and **Delete**. Editing patches instrument metadata only — symbol,
+name and source identify the instrument at the provider, so they are shown rather than
+offered, and only the fields actually changed are sent. Deleting is guarded: every listing
+foreign key either cascades (position snapshots, end-of-day prices, upload records) or nulls
+(open positions), so `DELETE /marketdata/listing/{listing_id}` refuses with 409 when a
+portfolio still references the listing rather than destroying the valuation history that
+depends on it. Price history is not counted as usage — it is the listing's own derived data
+and is re-fetchable — so a listing nothing holds deletes cleanly.
+
+Listing search covers both the instruments you track and a locally cached copy of the
+provider's ticker catalogue, selected with `scope` (`tracked` by default, plus `catalogue`
+and `all`); tracked rows always sort first and each row reports whether it is `tracked`
+and whether it can be adopted.
+
+→ Details: [Market data](%5B005%5D_MARKET_DATA.md)
+
+### Provider catalogue search
+**Listings → Browse catalogue** searches the provider's instrument catalogue and adds
+entries to your listings in bulk. Searching the local cache is free; **Search provider**
+makes one metered provider request and merges the results into the cache.
+
+The cache is filled two ways because it can never be assumed complete: the provider
+matches substrings across its whole universe, so a search for `ASM` has far more matches
+(125) than `ASML` (31), and cached results for one query say nothing about another. A
+bounded seed run therefore caches the provider's most-traded instruments — its catalogue
+comes back in popularity order, so a small page budget goes a long way — and each explicit
+provider search tops the cache up for the terms you actually use. The drawer reports how many
+entries are cached and how long ago they were seeded, and **Resync catalogue** starts a seed
+run from there: it costs one provider request per page, so the button names the budget it
+spends. The run is detached from the request that starts it, so the drawer polls its progress
+(pages fetched, entries cached) and reports the outcome; reopening while one is in flight
+picks it back up, and the API refuses a second run while one is running. A run a restart
+interrupted is marked failed at the next start-up, so it no longer blocks the next one, and a
+deployment can lower the page cap (`marketdata.max_seed_pages`) so a run fits inside the
+lifetime of an instance that stops when idle. A provider search fetches
+a single page: results are relevance-ranked, so the intended instrument is on the first
+page, and the UI says so when the provider matched more than it returned.
+
+Rows the provider gives no name for, or no end-of-day history for, are shown but cannot be
+adopted — a listing requires a name, and one without price history would never yield
+prices. Adopting does not fetch price history; that happens the first time the listing's
+prices are viewed, so adding a batch cannot stall the request or drain the request budget.
+
+→ Details: [Market data](%5B005%5D_MARKET_DATA.md)
+
+### EOD market data
+Admins retrieve end-of-day price history and upload manual EOD price files. **Dailies**
+searches a listing, shows its OHLCV rows, and **Upload prices** posts a CSV for it.
+
+Only listings on a manual provider accept uploads; the API answers 422 for the rest, and
+the form reports that in place rather than hiding the action behind a client-side guess at
+which providers are manual. The CSV is the Brand New Day shape — columns `date`, `nav`,
+`ask`, `bid`, `dividend`, dates as `dd/mm/yyyy` — and each row's NAV is stored as that day's
+open, high, low and close, since a fund publishes one price a day rather than a candle.
+
+Processing is asynchronous and there is **no status endpoint**: EOD imports are not
+account-scoped, so they raise no websocket event either, and the upload is accepted with an
+import id that nothing can be asked about afterwards. The page therefore re-reads the
+listing's prices for a short window and reports how many rows landed, falling back to
+"still processing" rather than claiming a result it cannot see. Per-row parse errors are
+counted server-side but never surfaced.
+
+→ Details: [Market data](%5B005%5D_MARKET_DATA.md)
+
+### Provider support
+The API supports both API-based market-data providers (MarketStack, Alpha Vantage) and a
+manual provider; the configured provider mode controls listing synchronization and whether
+manual EOD uploads are allowed.
+
+### Provider credentials
+**Credentials** (admin) lists each provider with its base URL, request quota and whether an
+API key is configured, and lets you set or replace a key. Stored keys are never included in
+the listing -- only a hint like `****9876` -- so reading one back is a separate, logged
+action. A base URL must be `https` on a public host, since every request carries the key to it.
+Manual providers ingest uploaded files and have no credentials to configure.
+
+Keys supplied through the environment are seeded at startup, so a key that is still set in
+the environment is re-added on restart alongside anything changed here.
+
+→ Details: [Market data](%5B005%5D_MARKET_DATA.md)
+
+### Vendor listing
+Lists the active import vendors along with capability metadata, so clients can show which
+vendors support CSV imports and which are disabled.
+
+→ Details: [Vendor listing](%5B004%5D_VENDORS.md)
+
+## Platform
+
+### Event-driven messaging
+An in-memory event bus fans domain events out to many features — for example, creating an
+account projects it into portfolio, cashflow, assets, and importer, and completion events
+bridge into the realtime WebSocket notifications. On shutdown the bus drains for up to four
+seconds, follow-up events included, before it closes.
+
+→ Details: [Event-driven messaging](%5B017%5D_EVENT_DRIVEN_MESSAGING.md)
+
+### Observability
+Every request carries an identifier and structured logs with trace propagation and
+sensitive-data redaction, wired through Elastic APM across HTTP and SQL.
+
+→ Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
+
+### Database bootstrap & migrations
+The service runs goose migrations (mirrored for Postgres and SQLite) and seeds baseline
+records on startup before serving traffic. Configuration is `config.yaml` (or the file named by
+`CONFIG_PATH`) with environment overrides for every deployment-specific value, including
+`PORT`, so one image serves local and hosted deployments.
+
+→ Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
+
+### Health & API docs
+A lightweight `/health` endpoint reports liveness, and Swagger/OpenAPI publishes the
+generated API contract with an interactive UI at `/swagger/`. When the server also serves the
+web app (deployed), both live under `/api`.
+
+→ Details: [Platform operations](%5B018%5D_PLATFORM_OPERATIONS.md)
+
+### GCP deployment [036]
+One Cloud Run container runs the API and serves the built web app from the same origin — the app
+at `/`, the API under `/api` — with Cloud SQL Postgres as the only always-on piece. It scales to
+zero and never beyond one instance, because the event bus, websockets and import uploads live in
+the process. Terraform in `deploy/terraform` defines the infrastructure; pushing to `main` builds
+the image and rolls it out.
+
+→ Details: [GCP deployment](%5B036%5D_GCP_DEPLOYMENT.md)
+
+### Export and import [037]
+The work put into a ledger survives a broken database or a move to another instance. From the
+account menu, **Export and import data** exports one dataset at a time to its own JSON file —
+cashflow (with tags, ignored state, ignore rules and recurring items), portfolio transactions, or
+the asset classes kept by hand — and imports such a file back. Administrators also move the
+shared end-of-day prices this way.
+
+An import is checked first: its counts, new and already here, are shown before anything is
+written. It merges rather than replaces — what the account has is left alone — and the whole
+file lands or nothing does. A file naming a bank or listing this instance lacks is refused with
+those named. Positions and snapshots are not in a file; they are rebuilt after an import.
+
+→ Details: [Export and import](%5B037%5D_EXPORT_IMPORT.md)
+
+### Web app
+A SvelteKit (Svelte 5) frontend in `web/`, built from an Atomic-Design component library
+catalogued in Storybook. It consumes the API over REST plus a per-account WebSocket, and runs
+standalone on fixtures when no API URL is configured. Most application logic still lives in the
+Go backend.
+
+→ Details: [Web app](%5B020%5D_WEB_APP.md)

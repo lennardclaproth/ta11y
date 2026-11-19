@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/*
+  Canonical theme stylesheet. Loaded by BOTH the running app (via routes/layout.css, which imports
+  this file) and Storybook (.storybook/preview.ts imports this file directly), so the two render
+  identically. Fonts are served from /fonts/* (SvelteKit `static/`; Storybook serves it via
+  `staticDirs` in .storybook/main.ts).
+*/
+
+@font-face {
+  font-family: 'Noto Sans';
+  src: url('/fonts/noto-sans.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+  One static regular is all that ships, so the descriptor says 400 and nothing wider. Claiming a
+  range this file does not cover (it was `400 700`) told the browser the face already answered
+  every weight in it, which suppressed synthetic bolding -- `font-semibold` on a heading then
+  resolved to this same regular and rendered identically to 400. Widen this only alongside a real
+  bold file.
+*/
+@font-face {
+  font-family: 'EB Garamond';
+  src: url('/fonts/eb-garamond-v32-latin-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Noto Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Noto Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'EB Garamond', ui-serif, serif;
+
+  /* Warm neutral background family — the app surface the user sees first. */
+  --color-taupe-50: #faf8f4;
+  --color-taupe-100: #f2ede4;
+  --color-taupe-200: #e7dfd1;
+  --color-taupe-300: #d8ccb8;
+  --color-taupe-400: #bfae93;
+  --color-taupe-500: #a48f70;
+  --color-taupe-600: #877458;
+  --color-taupe-700: #6b5b46;
+  --color-taupe-800: #4c4031;
+  --color-taupe-900: #2f271e;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    @apply bg-taupe-100 text-slate-800 antialiased;
+  }
+
+  /*
+    Headings render at the one EB Garamond weight that ships, so nothing is ever synthesized.
+    Setting it here rather than only on the Heading atom keeps bare `<h1>`..`<h6>` that bypass
+    the atom on the same weight. A `font-*` utility on a heading still wins over this.
+  */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    font-weight: 400;
+    @apply text-slate-900;
+  }
+}

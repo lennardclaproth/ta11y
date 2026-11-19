@@ -12,6 +12,19 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Claude Code: the shared project config is committed (settings.json, rules/,
+# commands/, skills/, agents/, hooks/, launch.json). Only personal or generated
+# files are ignored.
+.claude/settings.local.json
+.claude/*.local.json
+.claude/.cache/
+CLAUDE.local.md
+worktrees/*
+.impeccable/*
+# local code-index cache (embedded DB + write-ahead log), machine-specific
+.gitnexus/
+tmp/*
+scripts/*
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
@@ -21,8 +34,7 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Go workspace file
-go.work
+# Go workspace checksums (go.work itself is committed)
 go.work.sum
 
 # env file

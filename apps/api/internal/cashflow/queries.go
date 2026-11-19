@@ -1,0 +1,199 @@
+package cashflow
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/lennardclaproth/ta11y/internal/sorting"
+)
+
+// Queries exposes read-side cashflow use cases.
+type Queries struct {
+	qs   QueryStore
+	irqs IgnoreRuleQueryStore
+}
+
+// QueryStore reads cashflow transactions and analytics.
+type QueryStore interface {
+	GetMonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error)
+	GetTagDistribution(ctx context.Context, filter AnalyticsFilter) (*TagDistribution, error)
+	ListTags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error)
+	ListTransactions(ctx context.Context, query TransactionListQuery) (*TransactionListResult, error)
+	CountByFilter(ctx context.Context, filters TransactionFilters) (int, error)
+	GetTransaction(ctx context.Context, accountID, id uuid.UUID) (*Transaction, error)
+	GetTransactionByChecksum(ctx context.Context, accountID uuid.UUID, checksum string) (*Transaction, error)
+}
+
+// NewQueries creates cashflow read-side use cases.
+func NewQueries(qs QueryStore, ruleQueryStore IgnoreRuleQueryStore) *Queries {
+	return &Queries{qs: qs, irqs: ruleQueryStore}
+}
+
+// AnalyticsFilter describes the filters used for cashflow analytics queries.
+type AnalyticsFilter struct {
+	// AccountID scopes the aggregate to one account. It is always the authenticated
+	// caller's account -- analytics must never span accounts.
+	AccountID      uuid.UUID
+	From           *time.Time
+	To             *time.Time
+	IncludeIgnored bool
+}
+
+// MonthlyAnalyticsPoint contains cashflow totals for a single calendar month.
+type MonthlyAnalyticsPoint struct {
+	Month         time.Time
+	IncomingCents int64
+	OutgoingCents int64
+	NetCents      int64
+}
+
+// TagDistributionEntry contains the total amount for a single cashflow tag.
+type TagDistributionEntry struct {
+	Tag        string
+	TotalCents int64
+}
+
+// TagDistribution contains cashflow tag totals grouped by direction.
+type TagDistribution struct {
+	Combined []TagDistributionEntry
+	Incoming []TagDistributionEntry
+	Outgoing []TagDistributionEntry
+}
+
+// TagUsage is one tag an account has used and on how many of its transactions.
+type TagUsage struct {
+	Tag   string
+	Count int
+}
+
+// MonthlyAnalytics returns incoming, outgoing, and net totals grouped by month.
+func (q *Queries) MonthlyAnalytics(ctx context.Context, filter AnalyticsFilter) ([]MonthlyAnalyticsPoint, error) {
+	points, err := q.qs.GetMonthlyAnalytics(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow monthly analytics: %w", err)
+	}
+	return points, nil
+}
+
+// TagDistribution returns tag totals for combined, incoming, and outgoing cashflows.
+func (q *Queries) TagDistribution(ctx context.Context, filter AnalyticsFilter) (*TagDistribution, error) {
+	dist, err := q.qs.GetTagDistribution(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow tag distribution: %w", err)
+	}
+	if dist == nil {
+		return &TagDistribution{}, nil
+	}
+	return dist, nil
+}
+
+// Tags lists every tag the account has used, most used first, so a tag can be picked
+// again rather than retyped. Unlike the tag distribution it has no period: a tag last
+// used a year ago is still the user's.
+func (q *Queries) Tags(ctx context.Context, accountID uuid.UUID) ([]TagUsage, error) {
+	tags, err := q.qs.ListTags(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow tags: %w", err)
+	}
+	return tags, nil
+}
+
+const (
+	// TransactionSortFieldDate sorts cashflow transactions by transaction date.
+	TransactionSortFieldDate sorting.Field = "date"
+	// TransactionSortFieldDescription sorts cashflow transactions by description.
+	TransactionSortFieldDescription sorting.Field = "description"
+	// TransactionSortFieldNote sorts cashflow transactions by note.
+	TransactionSortFieldNote sorting.Field = "note"
+	// TransactionSortFieldTag sorts cashflow transactions by tag.
+	TransactionSortFieldTag sorting.Field = "tag"
+	// TransactionSortFieldSource sorts cashflow transactions by source.
+	TransactionSortFieldSource sorting.Field = "source"
+	// TransactionSortFieldAmount sorts cashflow transactions by amount.
+	TransactionSortFieldAmount sorting.Field = "amount"
+)
+
+// TransactionListQuery describes filters, sorting, and pagination for cashflow transactions.
+type TransactionListQuery struct {
+	// AccountID scopes the page to one account and is never taken from client input.
+	AccountID   uuid.UUID
+	Limit       int
+	Offset      int
+	Sort        sorting.Sort
+	Q           string
+	Description string
+	Note        string
+	Source      string
+	// SourceExact narrows to one bank by name rather than by text it contains.
+	SourceExact string
+	Direction   *CashFlowDirection
+	Tags        []string
+	Untagged    bool
+	HideIgnored bool
+	// ImportID narrows the page to the rows one import brought in.
+	ImportID *uuid.UUID
+	// IgnoredByRuleID narrows the page to the rows one ignore rule ignored.
+	IgnoredByRuleID *uuid.UUID
+	// Purposes OR-matches the goal purpose; PurposeNone matches the rows nobody has
+	// pointed at yet. Empty means no filter on purpose at all.
+	Purposes []Purpose
+	From     *time.Time
+	To       *time.Time
+}
+
+// TransactionListResult contains a page of cashflow transactions and the total match count.
+type TransactionListResult struct {
+	Total        int
+	Transactions []*Transaction
+}
+
+// ListTransactions returns a filtered and paginated cashflow transaction page.
+func (q *Queries) ListTransactions(ctx context.Context, query TransactionListQuery) (*TransactionListResult, error) {
+	result, err := q.qs.ListTransactions(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("cashflow transactions: %w", err)
+	}
+	if result == nil {
+		return &TransactionListResult{Transactions: []*Transaction{}}, nil
+	}
+	if result.Transactions == nil {
+		result.Transactions = []*Transaction{}
+	}
+	return result, nil
+}
+
+// ParseTransactionSort converts raw transaction sort inputs into a validated
+// sort value using the supported cashflow transaction fields.
+func ParseTransactionSort(fieldRaw, directionRaw string) (sorting.Sort, error) {
+	return sorting.ParseSort(
+		fieldRaw,
+		directionRaw,
+		sorting.DESC,
+		parseTransactionSortField,
+	)
+}
+
+func parseTransactionSortField(raw string) (sorting.Field, error) {
+	switch sorting.Field(strings.ToLower(strings.TrimSpace(raw))) {
+	case "":
+		return TransactionSortFieldDate, nil
+	case TransactionSortFieldDate:
+		return TransactionSortFieldDate, nil
+	case TransactionSortFieldDescription:
+		return TransactionSortFieldDescription, nil
+	case TransactionSortFieldNote:
+		return TransactionSortFieldNote, nil
+	case TransactionSortFieldTag:
+		return TransactionSortFieldTag, nil
+	case TransactionSortFieldSource:
+		return TransactionSortFieldSource, nil
+	case TransactionSortFieldAmount:
+		return TransactionSortFieldAmount, nil
+	default:
+		return "", fmt.Errorf("sort_by must be one of: date, description, note, tag, source, amount")
+	}
+}

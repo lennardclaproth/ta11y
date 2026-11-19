@@ -1,0 +1,55 @@
+package assets
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lennardclaproth/ta11y/internal/money"
+)
+
+var (
+	ErrAssetNameEmpty = errors.New("asset name cannot be empty")
+)
+
+// Asset is one concrete asset tracked inside a class.
+type Asset struct {
+	ID           uuid.UUID   `db:"id"`
+	ClassID      uuid.UUID   `db:"class_id"`
+	Class        *Class      `db:"-"`
+	Mutations    *[]Mutation `db:"-"`
+	AccountID    uuid.UUID   `db:"account_id"`
+	Name         string      `db:"name"`
+	CurrentWorth money.Price `db:"current_worth"`
+	Archived     bool        `db:"archived"`
+	// ListingID links the item to a market-data listing. When it is set the item's
+	// worth is derived from that listing's daily price and its purchases, and the
+	// manual set/adjust path is refused.
+	ListingID *uuid.UUID `db:"listing_id"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at"`
+}
+
+func NewAsset(
+	accID, classID uuid.UUID,
+	name string,
+	initialWorth money.Price,
+	note string,
+) (*Asset, error) {
+	n := strings.TrimSpace(name)
+	if name == "" {
+		return nil, ErrAssetNameEmpty
+	}
+
+	return &Asset{
+		ID:           uuid.New(),
+		ClassID:      classID,
+		AccountID:    accID,
+		Name:         n,
+		CurrentWorth: initialWorth,
+		Archived:     false,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}, nil
+}
