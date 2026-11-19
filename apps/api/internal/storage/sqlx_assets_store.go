@@ -280,6 +280,30 @@ func (s *SQLXAssetsStore) ClassBounds(ctx context.Context, classIDs []uuid.UUID)
 	return result, nil
 }
 
+// MutationsForClasses returns the mutations of the given classes keyed by class ID,
+// newest first within each class, in one query.
+func (s *SQLXAssetsStore) MutationsForClasses(ctx context.Context, classIDs []uuid.UUID) (map[uuid.UUID][]assets.Mutation, error) {
+	result := make(map[uuid.UUID][]assets.Mutation, len(classIDs))
+	if len(classIDs) == 0 {
+		return result, nil
+	}
+	query, args, err := sqlx.In(fmt.Sprintf(`
+		SELECT %s FROM %s WHERE class_id IN (?)
+		ORDER BY class_id, effective_date DESC, created_at DESC
+	`, assetMutationSelectColumns, s.mutationsTable), classIDs)
+	if err != nil {
+		return nil, fmt.Errorf("assets store: class mutations expand: %w", err)
+	}
+	var muts []assets.Mutation
+	if err := sqlx.SelectContext(ctx, s.db.GetExecutor(ctx), &muts, s.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("assets store: class mutations: %w", err)
+	}
+	for _, m := range muts {
+		result[m.ClassID] = append(result[m.ClassID], m)
+	}
+	return result, nil
+}
+
 // AggregateValue returns the summed worth of a class's non-archived items.
 func (s *SQLXAssetsStore) AggregateValue(ctx context.Context, accID, classID uuid.UUID) (money.Price, error) {
 	query := s.db.Rebind(fmt.Sprintf(`

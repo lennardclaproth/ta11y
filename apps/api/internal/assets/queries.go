@@ -35,6 +35,9 @@ type QueryStore interface {
 	PurchasesForClass(ctx context.Context, classID uuid.UUID) ([]*Purchase, error)
 	PurchasesForAsset(ctx context.Context, assetID uuid.UUID) ([]*Purchase, error)
 	MutationsForAsset(ctx context.Context, assetID uuid.UUID) ([]*Mutation, error)
+	// MutationsForClasses returns the mutations of the given classes keyed by class ID,
+	// newest first within each class.
+	MutationsForClasses(ctx context.Context, classIDs []uuid.UUID) (map[uuid.UUID][]Mutation, error)
 }
 
 type ClassBounds struct {
@@ -352,18 +355,19 @@ func (q *Queries) ClassGrowth(ctx context.Context, accID uuid.UUID, from, to *ti
 	if err != nil {
 		return nil, fmt.Errorf("class growth: failed to get classes for account %s: %w", accID, err)
 	}
-	out := make([]ClassGrowthSeries, 0, len(classes))
+	ids := make([]uuid.UUID, 0, len(classes))
 	for id := range classes {
-		class, err := q.qs.Class(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("class growth: failed to get class %s: %w", id, err)
-		}
-		if class == nil {
-			continue
-		}
+		ids = append(ids, id)
+	}
+	mutations, err := q.qs.MutationsForClasses(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("class growth: failed to get class mutations: %w", err)
+	}
+	out := make([]ClassGrowthSeries, 0, len(classes))
+	for id, class := range classes {
 		series := ClassGrowthSeries{ClassID: class.ID, Name: class.Name, Growth: []GrowthPoint{}}
 		var before *GrowthPoint
-		for _, point := range growthPointsFromMutations(class.Mutations) {
+		for _, point := range growthPointsFromMutations(mutations[id]) {
 			if from != nil && point.Date.Before(*from) {
 				before = &point
 				continue

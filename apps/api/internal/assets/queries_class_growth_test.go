@@ -9,8 +9,9 @@ import (
 	"github.com/lennardclaproth/ta11y/internal/money"
 )
 
-// fakeClassGrowthStore serves ClassesForAccount and Class from memory; the
-// embedded interface panics on any other read, which ClassGrowth must not make.
+// fakeClassGrowthStore serves ClassesForAccount and MutationsForClasses from memory;
+// the embedded interface panics on any other read (such as a per-class Class call),
+// which ClassGrowth must not make.
 type fakeClassGrowthStore struct {
 	QueryStore
 	classes         map[uuid.UUID]*Class
@@ -26,8 +27,14 @@ func (f *fakeClassGrowthStore) ClassesForAccount(_ context.Context, _ uuid.UUID,
 	return out, nil
 }
 
-func (f *fakeClassGrowthStore) Class(_ context.Context, id uuid.UUID) (*Class, error) {
-	return f.classes[id], nil
+func (f *fakeClassGrowthStore) MutationsForClasses(_ context.Context, ids []uuid.UUID) (map[uuid.UUID][]Mutation, error) {
+	out := make(map[uuid.UUID][]Mutation, len(ids))
+	for _, id := range ids {
+		if class, ok := f.classes[id]; ok {
+			out[id] = class.Mutations
+		}
+	}
+	return out, nil
 }
 
 func TestClassGrowthReturnsSortedFilteredSeries(t *testing.T) {
