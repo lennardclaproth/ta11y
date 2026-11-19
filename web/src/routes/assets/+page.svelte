@@ -36,6 +36,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decimalStringToNumber } from '$lib/api/money';
 	import { categoryRamp } from '$lib/charts/theme';
+	import { forwardFill, unionDates } from '$lib/charts/stack';
 	import type { NoticeMessage } from '$lib/components/molecules/notice-band/notice-band.types';
 	import type { AssetClass, AssetClassDetails, AssetClassGrowthSeries } from '$lib/api/types';
 
@@ -92,26 +93,24 @@
 	// period runs on — so the chart spans the whole period even where nothing changed in it.
 	const periodEnd = $derived(to && to < todayISO() ? to : todayISO());
 	const stackDates = $derived(
-		[...new Set([from, ...growth.flatMap((g) => g.growth.map((p) => p.date)), periodEnd])]
-			.filter((date) => !!date && date >= from && date <= periodEnd)
-			.sort()
+		unionDates(
+			growth.map((g) => g.growth.map((p) => p.date)),
+			from,
+			periodEnd
+		)
 	);
 	const classSeries = $derived(
 		ranked
 			.map((c) => growth.find((g) => g.class_id === c.id))
 			.filter((g): g is AssetClassGrowthSeries => !!g && g.growth.length > 0)
-			.map((g) => {
-				let last = 0;
-				let i = 0;
-				const data = stackDates.map((date) => {
-					while (i < g.growth.length && g.growth[i].date <= date) {
-						last = decimalStringToNumber(g.growth[i].total_worth);
-						i += 1;
-					}
-					return last;
-				});
-				return { id: g.class_id, name: g.name, data };
-			})
+			.map((g) => ({
+				id: g.class_id,
+				name: g.name,
+				data: forwardFill(
+					g.growth.map((p) => ({ date: p.date, value: decimalStringToNumber(p.total_worth) })),
+					stackDates
+				)
+			}))
 	);
 	const stacked = $derived(
 		classSeries.map((s) => ({
