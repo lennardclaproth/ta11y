@@ -340,8 +340,11 @@ manual provider; the configured provider mode controls listing synchronization a
 manual EOD uploads are allowed.
 
 ### Provider credentials
-**Credentials** (admin) lists each provider with its base URL, request quota and whether an
-API key is configured, and lets you set or replace a key. Stored keys are never included in
+**Credentials** (admin) lists each provider key with its base URL and request quota, and lets
+you replace a key. MarketStack and Alpha Vantage are always listed, showing "No key yet" when
+none is configured, and **Add key** adds another key for either one -- with the default base
+URL prefilled -- next to the keys it already has; a key the provider already has is refused.
+Keys cannot be deleted from the app. Stored keys are never included in
 the listing -- only a hint like `****9876` -- so reading one back is a separate, logged
 action. A base URL must be `https` on a public host, since every request carries the key to it.
 Manual providers ingest uploaded files and have no credentials to configure.
