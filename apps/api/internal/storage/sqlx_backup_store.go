@@ -491,19 +491,21 @@ func (s *SQLXBackupStore) InsertAssetPurchases(ctx context.Context, purchases []
 	return err
 }
 
-// InsertListings writes new listings with their instrument data and provider. The
-// accumulated range stays empty: nothing has been synced from the provider yet.
+// InsertListings writes new listings with their instrument data, provider and
+// accumulated range.
 func (s *SQLXBackupStore) InsertListings(ctx context.Context, listings []*marketdata.Listing) error {
 	query := s.db.Rebind(fmt.Sprintf(`
 		INSERT INTO %s (
 			id, symbol, name, source, type, ticker, isin, description, exchange, region,
-			currency, provider, active, should_accumulate, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			currency, provider, active, should_accumulate, accumulated_start, accumulated_end,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, s.listingsTable))
 	for _, l := range listings {
 		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query,
 			l.ID, l.Symbol, l.Name, l.Source, l.Type, l.Ticker, l.ISIN, l.Description, l.Exchange, l.Region,
-			l.Currency, l.ProviderID, l.Active, l.ShouldAccumulate, l.CreatedAt, l.UpdatedAt,
+			l.Currency, l.ProviderID, l.Active, l.ShouldAccumulate, l.AccumulatedStart, l.AccumulatedEnd,
+			l.CreatedAt, l.UpdatedAt,
 		); err != nil {
 			return fmt.Errorf("backup store: insert listing %s: %w", l.Symbol, err)
 		}

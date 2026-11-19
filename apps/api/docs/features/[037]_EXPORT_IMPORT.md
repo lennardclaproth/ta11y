@@ -40,8 +40,10 @@ What counts as already here:
   its own history: worth changes carry running totals that two histories would corrupt.
 - **Listings** by symbol and source. One that exists keeps its own data; a missing one is
   created from the file's instrument data, before its prices, and linked to this instance's
-  provider for its source when there is one. A listing without instrument data (a file from
-  before listings travelled) must exist, or the file is refused naming it.
+  provider for its source when there is one. Its accumulated range is set to the file's first
+  and last day, so an API source's first end-of-day read only syncs the days after the file.
+  A listing without instrument data (a file from before listings travelled) must exist, or
+  the file is refused naming it.
 - **End-of-day prices** by listing and day.
 
 ## Events
@@ -62,7 +64,5 @@ What counts as already here:
 ## Gaps
 
 - An EOD import does not revalue portfolios or daily-priced items, the same as an EOD CSV upload.
-- A listing an EOD import creates has no accumulated range, like an adopted catalogue entry: for
-  an API source its first end-of-day read syncs the full history from the provider again.
 - After an import the open page is not refreshed; it shows the new records on its next load.
 - A cashflow file restores the ignore rule a row was ignored by only when that rule is in the file.

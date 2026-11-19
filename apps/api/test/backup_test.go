@@ -525,6 +525,16 @@ func TestEODBackupCreatesMissingListings(t *testing.T) {
 			if l.Symbol == file.Listings[0].Symbol && (l.ISIN == nil || *l.ISIN != isin) {
 				t.Fatalf("listing %s lost its instrument data: %+v", l.Symbol, l)
 			}
+			// The file's days count as synced, so only the gap after them is fetched.
+			if l.Symbol == "NEW-ASML.AS" {
+				if l.AccumulatedStart == nil || l.AccumulatedEnd == nil ||
+					l.AccumulatedStart.UTC().Format(time.DateOnly) != "2026-06-01" ||
+					l.AccumulatedEnd.UTC().Format(time.DateOnly) != "2026-06-01" {
+					t.Fatalf("listing %s accumulated range: %v – %v", l.Symbol, l.AccumulatedStart, l.AccumulatedEnd)
+				}
+			} else if l.AccumulatedStart != nil || l.AccumulatedEnd != nil {
+				t.Fatalf("listing %s without prices must have no accumulated range: %v – %v", l.Symbol, l.AccumulatedStart, l.AccumulatedEnd)
+			}
 		}
 		if created != 2 {
 			t.Fatalf("expected both listings created, found %d", created)

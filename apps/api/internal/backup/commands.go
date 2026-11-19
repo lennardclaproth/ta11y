@@ -314,8 +314,9 @@ func (c *Commands) ImportEODs(ctx context.Context, file *EODFile, dryRun bool) (
 
 // createListings writes the file's listings this instance lacks and adds their ids to
 // listingIDs. Each is linked to this instance's provider for its source, when there is
-// one. Like an adopted catalogue entry it has no accumulated range, so for an API source
-// the first end-of-day read syncs what the file did not bring.
+// one. Its accumulated range spans the file's first and last day, so for an API source
+// the first end-of-day read only syncs the gap after the file; a listing the file
+// brings without prices has no range and syncs its full history.
 func (c *Commands) createListings(ctx context.Context, create []EODListing, listingIDs map[ListingRef]uuid.UUID, now time.Time) error {
 	if len(create) == 0 {
 		return nil
@@ -335,6 +336,15 @@ func (c *Commands) createListings(ctx context.Context, create []EODListing, list
 		listing.Description, listing.Exchange, listing.Region = in.Description, in.Exchange, in.Region
 		listing.Currency, listing.Active = in.Currency, in.Active
 		listing.CreatedAt, listing.UpdatedAt = now, now
+		for _, e := range l.EODs {
+			d := e.Date.Time
+			if listing.AccumulatedStart == nil || d.Before(*listing.AccumulatedStart) {
+				listing.AccumulatedStart = &d
+			}
+			if listing.AccumulatedEnd == nil || d.After(*listing.AccumulatedEnd) {
+				listing.AccumulatedEnd = &d
+			}
+		}
 		if name, err := marketdata.ProviderNameFromSource(l.Source); err == nil {
 			if id, ok := providerIDs[name]; ok {
 				listing.ProviderID = &id
