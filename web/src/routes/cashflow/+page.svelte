@@ -575,8 +575,9 @@
 	}
 	const draggedRange = createDraggedRange();
 	function onRangeSelect(rangeFrom: string, rangeTo: string) {
+		if (rangeFrom === rangeTo) return;
 		scopedMonth = null;
-		draggedRange.select(rangeFrom, rangeTo);
+		draggedRange.select(rangeFrom, monthRange(rangeTo).to);
 	}
 
 	// A tag bar filters the ledger to that tag; the untagged bar to the untagged rows.
