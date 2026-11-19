@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestProviderCredentialsRoundTrip(t *testing.T) {
 	eachDialect(t, func(t *testing.T, db *storage.DB) {
 		ctx := context.Background()
 		store := storage.NewSQLXMarketDataStore(db)
-		credentials := marketdata.NewCredentials(store)
+		credentials := marketdata.NewCredentials(store, nil)
 
 		provider, err := marketdata.NewAPIProviderWithAPIKey(
 			marketdata.ProviderMarketStack, "https://api.marketstack.com/v2", "ms_original_key_1234")
@@ -97,13 +98,52 @@ func TestProviderCredentialsRoundTrip(t *testing.T) {
 	})
 }
 
+// TestProviderCredentialsAddKey checks that a key can be added for a provider that has
+// none yet and a second one next to it, with the default base URI, and that adding a
+// key the provider already has is refused instead of silently skipped.
+func TestProviderCredentialsAddKey(t *testing.T) {
+	eachDialect(t, func(t *testing.T, db *storage.DB) {
+		ctx := context.Background()
+		store := storage.NewSQLXMarketDataStore(db)
+		credentials := marketdata.NewCredentials(store, []marketdata.APIProviderDefault{
+			{Name: marketdata.ProviderMarketStack, BaseURI: "https://api.marketstack.com/v2"},
+		})
+
+		first, err := credentials.Add(ctx, marketdata.ProviderMarketStack, "ms_first_key_1111", nil)
+		if err != nil {
+			t.Fatalf("add first key: %v", err)
+		}
+		if first.BaseURI == nil || *first.BaseURI != "https://api.marketstack.com/v2" {
+			t.Fatalf("first key base uri = %v, want the default", first.BaseURI)
+		}
+		if _, err := credentials.Add(ctx, marketdata.ProviderMarketStack, "ms_second_key_2222", nil); err != nil {
+			t.Fatalf("add second key: %v", err)
+		}
+		if _, err := credentials.Add(ctx, marketdata.ProviderMarketStack, "ms_first_key_1111", nil); !errors.Is(err, marketdata.ErrProviderAPIKeyExists) {
+			t.Fatalf("duplicate key: got %v, want ErrProviderAPIKeyExists", err)
+		}
+
+		listed, err := credentials.List(ctx)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(listed) != 2 {
+			t.Fatalf("got %d credentials, want 2", len(listed))
+		}
+		revealed, err := credentials.Reveal(ctx, first.ID)
+		if err != nil || revealed != "ms_first_key_1111" {
+			t.Fatalf("reveal first key = %q, %v", revealed, err)
+		}
+	})
+}
+
 // TestProviderCredentialsRejectManualProviders checks that a provider ingesting
 // uploaded files cannot be given an endpoint or key it would never use.
 func TestProviderCredentialsRejectManualProviders(t *testing.T) {
 	eachDialect(t, func(t *testing.T, db *storage.DB) {
 		ctx := context.Background()
 		store := storage.NewSQLXMarketDataStore(db)
-		credentials := marketdata.NewCredentials(store)
+		credentials := marketdata.NewCredentials(store, nil)
 
 		provider, err := marketdata.NewManualProvider(marketdata.ProviderBrandNewDay)
 		if err != nil {

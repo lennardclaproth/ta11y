@@ -37,6 +37,7 @@ type SQLXBackupStore struct {
 	purchasesTable          string
 	listingsTable           string
 	eodsTable               string
+	providersTable          string
 }
 
 var (
@@ -64,6 +65,7 @@ func NewSQLXBackupStore(db *DB) *SQLXBackupStore {
 		purchasesTable:          qualifyTableAs(db, SchemaAssets, TableAssetPurchases, "asset_purchases"),
 		listingsTable:           qualifyTable(db, SchemaMarketData, TableListings),
 		eodsTable:               qualifyTable(db, SchemaMarketData, TableEOD),
+		providersTable:          qualifyTable(db, SchemaMarketData, TableProviders),
 	}
 }
 
@@ -199,15 +201,11 @@ func (s *SQLXBackupStore) AssetPurchases(ctx context.Context, accID uuid.UUID) (
 
 // --- Reading market data ------------------------------------------------------------
 
-// ListingsWithEODs returns the listings that hold at least one end-of-day price.
-func (s *SQLXBackupStore) ListingsWithEODs(ctx context.Context) ([]backup.ListingRecord, error) {
-	var out []backup.ListingRecord
-	err := s.selectAll(ctx, &out, "listings", fmt.Sprintf(`
-		SELECT l.id, l.symbol, l.source, l.name
-		FROM %s l
-		WHERE EXISTS (SELECT 1 FROM %s e WHERE e.listing_id = l.id)
-		ORDER BY l.source ASC, l.symbol ASC
-	`, s.listingsTable, s.eodsTable))
+// Listings returns every listing, with or without end-of-day prices.
+func (s *SQLXBackupStore) Listings(ctx context.Context) ([]*marketdata.Listing, error) {
+	var out []*marketdata.Listing
+	err := s.selectAll(ctx, &out, "listings",
+		fmt.Sprintf(`SELECT * FROM %s ORDER BY source ASC, symbol ASC`, s.listingsTable))
 	return out, err
 }
 
@@ -257,6 +255,35 @@ func (s *SQLXBackupStore) ListingIDs(ctx context.Context) (map[backup.ListingRef
 	out := make(map[backup.ListingRef]uuid.UUID, len(rows))
 	for _, r := range rows {
 		out[backup.ListingRef{Symbol: r.Symbol, Source: r.Source}] = r.ID
+	}
+	return out, nil
+}
+
+// ProviderIDs returns one provider per name, preferring the one GetProviderByName
+// would pick: a manual provider, else an API key with quota left.
+func (s *SQLXBackupStore) ProviderIDs(ctx context.Context) (map[marketdata.ProviderName]uuid.UUID, error) {
+	var rows []struct {
+		ID   uuid.UUID               `db:"id"`
+		Name marketdata.ProviderName `db:"name"`
+	}
+	if err := s.selectAll(ctx, &rows, "providers", fmt.Sprintf(`
+		SELECT id, name
+		FROM %s
+		WHERE ingestion_mode = 'MANUAL' OR ingestion_mode = 'API'
+		ORDER BY
+			CASE WHEN ingestion_mode = 'MANUAL' THEN 0 ELSE 1 END ASC,
+			CASE WHEN total > 0 AND remaining <= 0 THEN 1 ELSE 0 END ASC,
+			remaining DESC,
+			used ASC,
+			api_key ASC
+	`, s.providersTable)); err != nil {
+		return nil, err
+	}
+	out := make(map[marketdata.ProviderName]uuid.UUID, len(rows))
+	for _, r := range rows {
+		if _, ok := out[r.Name]; !ok {
+			out[r.Name] = r.ID
+		}
 	}
 	return out, nil
 }
@@ -462,6 +489,28 @@ func (s *SQLXBackupStore) InsertAssetPurchases(ctx context.Context, purchases []
 		VALUES (:id, :account_id, :item_id, :purchased_on, :quantity, :unit_price, :created_at)
 	`, s.purchasesTable), purchases)
 	return err
+}
+
+// InsertListings writes new listings with their instrument data, provider and
+// accumulated range.
+func (s *SQLXBackupStore) InsertListings(ctx context.Context, listings []*marketdata.Listing) error {
+	query := s.db.Rebind(fmt.Sprintf(`
+		INSERT INTO %s (
+			id, symbol, name, source, type, ticker, isin, description, exchange, region,
+			currency, provider, active, should_accumulate, accumulated_start, accumulated_end,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, s.listingsTable))
+	for _, l := range listings {
+		if _, err := s.db.GetExecutor(ctx).ExecContext(ctx, query,
+			l.ID, l.Symbol, l.Name, l.Source, l.Type, l.Ticker, l.ISIN, l.Description, l.Exchange, l.Region,
+			l.Currency, l.ProviderID, l.Active, l.ShouldAccumulate, l.AccumulatedStart, l.AccumulatedEnd,
+			l.CreatedAt, l.UpdatedAt,
+		); err != nil {
+			return fmt.Errorf("backup store: insert listing %s: %w", l.Symbol, err)
+		}
+	}
+	return nil
 }
 
 // InsertEODs writes end-of-day prices with their split factor, skipping a day the

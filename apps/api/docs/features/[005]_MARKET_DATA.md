@@ -12,8 +12,12 @@ Market data owns the canonical instruments (**listings**) and their **end-of-day
 history, backed by pluggable **providers**:
 
 - **[005] Providers** — two ingestion modes: `API` (MarketStack, Alpha Vantage) and `MANUAL`
-  (BrandNewDay). API keys come from env only and a provider may hold several keys (token
-  quota tracked per key). The mode controls whether a listing auto-syncs and whether manual
+  (BrandNewDay). API keys come from env (seeded at startup) or are added on **Credentials**
+  ([028]); a provider may hold several keys, one provider row each (token quota tracked per
+  key). An API provider with no key has no row; the "no key yet" state is a UI rendering of
+  `GET /marketdata/providers/api`, the configured list of API providers and their default base
+  URLs. Adding a key the provider already has is refused (409), unlike the env seeding, which
+  skips it silently. The mode controls whether a listing auto-syncs and whether manual
   EOD uploads are allowed.
 - **[006] Listings** — create, partial update (PATCH), list all, and search with pagination.
 - **[007] EOD retrieval** — `GET /marketdata/eods` filters by listing or symbol, with a

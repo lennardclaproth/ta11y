@@ -44,4 +44,6 @@ var (
 var (
 	ErrNoCredentialFieldsToUpdate = errors.New("no credential fields to update")
 	ErrCredentialsNotConfigurable = errors.New("manual providers have no credentials to configure")
+	ErrProviderKeyNotSupported    = errors.New("api keys cannot be added for this provider")
+	ErrProviderAPIKeyExists       = errors.New("this api key is already configured for the provider")
 )

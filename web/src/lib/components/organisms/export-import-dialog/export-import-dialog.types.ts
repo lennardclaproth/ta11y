@@ -33,7 +33,8 @@ export const datasetOptions: DatasetOption[] = [
 	{
 		value: 'eods',
 		title: 'End-of-day prices',
-		holds: 'Every listing’s daily prices with their splits. Shared by every account.',
+		holds:
+			'Every listing with its instrument details, and its daily prices with their splits. Shared by every account — on a new instance, import it before the other datasets.',
 		adminOnly: true
 	}
 ];

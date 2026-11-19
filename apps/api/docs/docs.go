@@ -1701,7 +1701,7 @@ const docTemplate = `{
         },
         "/backup/eods/export": {
             "get": {
-                "description": "Returns the end-of-day prices of every listing that has any, with their split factors, as one JSON file. Listings are named by symbol and source.",
+                "description": "Returns every listing — named by symbol and source, with its instrument data — and its end-of-day prices with their split factors, as one JSON file. A listing without prices is included. Provider settings and API keys are never in the file.",
                 "produces": [
                     "application/json"
                 ],
@@ -1730,7 +1730,7 @@ const docTemplate = `{
         },
         "/backup/eods/import": {
             "post": {
-                "description": "Merges an EOD backup file: days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A file naming listings this instance lacks is refused with 409 and the missing ones listed.",
+                "description": "Merges an EOD backup file: listings this instance lacks are created from their instrument data and linked to this instance's provider for their source; an existing listing is left as it is. Days a listing has are skipped, new ones are added with their split factor, and the whole file lands or nothing does. With dry_run the counts are reported and nothing is written. A listing carried without instrument data (an older file) must exist here; otherwise the file is refused with 409 and the missing ones listed.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -4595,6 +4595,88 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "description": "Add an API key for an API market-data provider. An omitted base URI uses the provider's default; a given one must be https on a public host. The response withholds the stored key. A key the provider already has is rejected with 409.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Add a provider API key",
+                "parameters": [
+                    {
+                        "description": "API key payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AddProviderAPIKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProviderCredentialResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/providers/api": {
+            "get": {
+                "description": "Return the API market-data providers an API key can be added for, with the base URI a new key defaults to. Listed whether or not a key is configured.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "List API providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.APIProviderResponse"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/marketdata/providers/{provider_id}/credentials": {
@@ -6499,6 +6581,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/backup.EOD"
                     }
                 },
+                "instrument": {
+                    "$ref": "#/definitions/backup.Instrument"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -6582,6 +6667,35 @@ const docTemplate = `{
                     "$ref": "#/definitions/importer.ImportType"
                 },
                 "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "backup.Instrument": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "exchange": {
+                    "type": "string"
+                },
+                "isin": {
+                    "type": "string"
+                },
+                "region": {
+                    "type": "string"
+                },
+                "ticker": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -7568,6 +7682,31 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rhythm": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.APIProviderResponse": {
+            "type": "object",
+            "properties": {
+                "default_base_uri": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.AddProviderAPIKeyRequest": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "base_uri": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }
