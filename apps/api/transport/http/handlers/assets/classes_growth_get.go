@@ -3,18 +3,18 @@ package assets
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lennardclaproth/ta11y/internal/assets"
+	"github.com/lennardclaproth/ta11y/internal/date"
 	"github.com/lennardclaproth/ta11y/internal/logging"
 	httpx "github.com/lennardclaproth/ta11y/transport/http"
 )
 
 // GetClassesGrowthRequest contains the date window for the class worth histories.
 type GetClassesGrowthRequest struct {
-	From *string `json:"from,omitempty" query:"from"`
-	To   *string `json:"to,omitempty" query:"to"`
+	From string `json:"from,omitempty" query:"from"`
+	To   string `json:"to,omitempty" query:"to"`
 }
 
 // ClassGrowthResponse is the worth history of one asset class.
@@ -48,27 +48,10 @@ func GetClassesGrowth(log logging.Logger, queries assets.Queries) http.Handler {
 			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid query parameters"})
 			return
 		}
-		var from *time.Time
-		if req.From != nil && len(strings.TrimSpace(*req.From)) != 0 {
-			parsed, err := time.Parse("2006-01-02", *req.From)
-			if err != nil {
-				_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{
-					"from": "from must be in YYYY-MM-DD format",
-				})
-				return
-			}
-			from = &parsed
-		}
-		var to *time.Time
-		if req.To != nil && len(strings.TrimSpace(*req.To)) != 0 {
-			parsed, err := time.Parse("2006-01-02", *req.To)
-			if err != nil {
-				_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{
-					"to": "to must be in YYYY-MM-DD format",
-				})
-				return
-			}
-			to = &parsed
+		from, to, err := date.ParseFromTo(strings.TrimSpace(req.From), strings.TrimSpace(req.To))
+		if err != nil {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"date_range": err.Error()})
+			return
 		}
 		series, err := queries.ClassGrowth(r.Context(), accountID, from, to)
 		if err != nil {
