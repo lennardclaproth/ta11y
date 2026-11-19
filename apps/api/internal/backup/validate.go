@@ -191,6 +191,18 @@ func (f *EODFile) validate() error {
 			return invalid("listing %s (%s) is repeated", l.Symbol, l.Source)
 		}
 		seen[l.ListingRef] = struct{}{}
+		if l.Instrument == nil {
+			continue
+		}
+		if !l.Source.IsValid() {
+			return invalid("listing %s has unknown source %q", l.Symbol, l.Source)
+		}
+		if strings.TrimSpace(l.Name) == "" {
+			return invalid("listing %s (%s) has no name", l.Symbol, l.Source)
+		}
+		if c := l.Instrument.Currency; c != nil && !c.IsValid() {
+			return invalid("listing %s (%s) has unknown currency %q", l.Symbol, l.Source, *c)
+		}
 	}
 	return nil
 }

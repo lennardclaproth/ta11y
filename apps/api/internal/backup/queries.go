@@ -32,14 +32,6 @@ type LinkRecord struct {
 	TransactionID uuid.UUID `db:"transaction_id"`
 }
 
-// ListingRecord is a listing that holds end-of-day prices.
-type ListingRecord struct {
-	ID     uuid.UUID         `db:"id"`
-	Symbol string            `db:"symbol"`
-	Source marketdata.Source `db:"source"`
-	Name   string            `db:"name"`
-}
-
 // AccountReader reads an account's source records, everything that is not derived.
 type AccountReader interface {
 	// AccountImports returns the account's imports of one type, with their vendor.
@@ -59,9 +51,10 @@ type AccountReader interface {
 	AssetPurchases(ctx context.Context, accID uuid.UUID) ([]*assets.Purchase, error)
 }
 
-// EODReader reads the instance's end-of-day prices.
+// EODReader reads the instance's listings and their end-of-day prices.
 type EODReader interface {
-	ListingsWithEODs(ctx context.Context) ([]ListingRecord, error)
+	// Listings returns every listing, with or without prices.
+	Listings(ctx context.Context) ([]*marketdata.Listing, error)
 	ListingEODs(ctx context.Context, listingID uuid.UUID) ([]*marketdata.EOD, error)
 }
 
@@ -158,9 +151,10 @@ func (q *Queries) ExportAssets(ctx context.Context, accID uuid.UUID) (*AssetsFil
 	}, nil
 }
 
-// ExportEODs returns the end-of-day prices of every listing that has any.
+// ExportEODs returns every listing with its instrument data and end-of-day prices. A
+// listing without prices goes along too: a portfolio or assets file may name it.
 func (q *Queries) ExportEODs(ctx context.Context) (*EODFile, error) {
-	listings, err := q.eods.ListingsWithEODs(ctx)
+	listings, err := q.eods.Listings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("backup export: listings: %w", err)
 	}
@@ -170,7 +164,15 @@ func (q *Queries) ExportEODs(ctx context.Context) (*EODFile, error) {
 		if err != nil {
 			return nil, fmt.Errorf("backup export: eods of %s: %w", l.Symbol, err)
 		}
-		out := EODListing{ListingRef: ListingRef{Symbol: l.Symbol, Source: l.Source}, Name: l.Name, EODs: make([]EOD, 0, len(eods))}
+		out := EODListing{
+			ListingRef: ListingRef{Symbol: l.Symbol, Source: l.Source},
+			Name:       l.Name,
+			Instrument: &Instrument{
+				Type: l.Type, Ticker: l.Ticker, ISIN: l.ISIN, Description: l.Description,
+				Exchange: l.Exchange, Region: l.Region, Currency: l.Currency, Active: l.Active,
+			},
+			EODs: make([]EOD, 0, len(eods)),
+		}
 		for _, e := range eods {
 			out.EODs = append(out.EODs, EOD{
 				Date: dayOf(e.Date), Open: e.Open, High: e.High, Low: e.Low, Close: e.Close,

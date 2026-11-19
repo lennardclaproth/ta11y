@@ -405,7 +405,8 @@ The work put into a ledger survives a broken database or a move to another insta
 account menu, **Export and import data** exports one dataset at a time to its own JSON file —
 cashflow (with tags, ignored state, ignore rules and recurring items), portfolio transactions, or
 the asset classes kept by hand — and imports such a file back. Administrators also move the
-shared end-of-day prices this way.
+shared listings and their end-of-day prices this way; on a new instance that file goes first, so
+the listings a portfolio or assets file names exist when it lands.
 
 An import is checked first: its counts, new and already here, are shown before anything is
 written. It merges rather than replaces — what the account has is left alone — and the whole

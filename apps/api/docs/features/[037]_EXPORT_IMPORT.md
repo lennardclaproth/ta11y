@@ -16,7 +16,7 @@ Vendors are named by name, listings by `{symbol, source}`.
 | `cashflow` | transactions (tag, note, ignored state, the rule that ignored them), their imports, ignore rules, recurring items with their links, refused suggestions | — |
 | `portfolio` | transactions and their imports | positions, snapshots |
 | `assets` | hand-kept classes, items (with listing), worth changes of unlisted items, purchases | the portfolio class, mutations of daily-priced items, snapshots |
-| `eods` | per listing, every day's prices with its split factor | — |
+| `eods` | every listing — with or without prices — with its name and instrument data (type, ticker, ISIN, description, exchange, region, currency, active), and every day's prices with its split factor | provider rows, API keys, the cached provider catalogue |
 
 ## Import
 
@@ -38,6 +38,12 @@ What counts as already here:
 - **Recurring items** by name; links and refused suggestions skip what exists.
 - **Asset classes** by name, **items** by class and name. An item the account already holds keeps
   its own history: worth changes carry running totals that two histories would corrupt.
+- **Listings** by symbol and source. One that exists keeps its own data; a missing one is
+  created from the file's instrument data, before its prices, and linked to this instance's
+  provider for its source when there is one. Its accumulated range is set to the file's first
+  and last day, so an API source's first end-of-day read only syncs the days after the file.
+  A listing without instrument data (a file from before listings travelled) must exist, or
+  the file is refused naming it.
 - **End-of-day prices** by listing and day.
 
 ## Events
