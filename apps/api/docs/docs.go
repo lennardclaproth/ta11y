@@ -4595,6 +4595,88 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "description": "Add an API key for an API market-data provider. An omitted base URI uses the provider's default; a given one must be https on a public host. The response withholds the stored key. A key the provider already has is rejected with 409.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Add a provider API key",
+                "parameters": [
+                    {
+                        "description": "API key payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.AddProviderAPIKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProviderCredentialResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/marketdata/providers/api": {
+            "get": {
+                "description": "Return the API market-data providers an API key can be added for, with the base URI a new key defaults to. Listed whether or not a key is configured.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "providers"
+                ],
+                "summary": "List API providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.APIProviderResponse"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/marketdata/providers/{provider_id}/credentials": {
@@ -7600,6 +7682,31 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rhythm": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.APIProviderResponse": {
+            "type": "object",
+            "properties": {
+                "default_base_uri": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.AddProviderAPIKeyRequest": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "base_uri": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }

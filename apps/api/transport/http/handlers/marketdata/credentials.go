@@ -47,6 +47,34 @@ func (r UpdateProviderCredentialsRequest) isValid() (bool, map[string]string) {
 	return len(problems) == 0, problems
 }
 
+// AddProviderAPIKeyRequest adds an API key for an API provider. An omitted base URI
+// uses the provider's default.
+type AddProviderAPIKeyRequest struct {
+	Name    string  `json:"name"`
+	APIKey  string  `json:"api_key"`
+	BaseURI *string `json:"base_uri,omitempty"`
+}
+
+func (r AddProviderAPIKeyRequest) isValid() (bool, map[string]string) {
+	problems := make(map[string]string)
+	if strings.TrimSpace(r.Name) == "" {
+		problems["name"] = "name is required"
+	}
+	if strings.TrimSpace(r.APIKey) == "" {
+		problems["api_key"] = "api key cannot be empty"
+	}
+	if r.BaseURI != nil && strings.TrimSpace(*r.BaseURI) == "" {
+		problems["base_uri"] = "base uri cannot be empty"
+	}
+	return len(problems) == 0, problems
+}
+
+// APIProviderResponse is an API provider keys can be added for.
+type APIProviderResponse struct {
+	Name           string `json:"name"`
+	DefaultBaseURI string `json:"default_base_uri"`
+}
+
 // RevealProviderAPIKeyResponse carries a provider's API key in full.
 type RevealProviderAPIKeyResponse struct {
 	ID     string `json:"id"`
@@ -74,6 +102,70 @@ func GetProviderCredentials(
 			return
 		}
 		_ = httpx.JSONEncode(w, http.StatusOK, toProviderCredentialResponses(found))
+	})
+}
+
+// GetAPIProviders lists the API providers keys can be added for.
+//
+// @Summary List API providers
+// @Description Return the API market-data providers an API key can be added for, with the base URI a new key defaults to. Listed whether or not a key is configured.
+// @Tags providers
+// @Produce json
+// @Success 200 {array} APIProviderResponse
+// @Router /marketdata/providers/api [get]
+func GetAPIProviders(credentials *marketdata.Credentials) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defaults := credentials.APIProviders()
+		responses := make([]APIProviderResponse, 0, len(defaults))
+		for _, def := range defaults {
+			responses = append(responses, APIProviderResponse{Name: string(def.Name), DefaultBaseURI: def.BaseURI})
+		}
+		_ = httpx.JSONEncode(w, http.StatusOK, responses)
+	})
+}
+
+// AddProviderAPIKey adds an API key for an API provider, next to any it already has.
+//
+// @Summary Add a provider API key
+// @Description Add an API key for an API market-data provider. An omitted base URI uses the provider's default; a given one must be https on a public host. The response withholds the stored key. A key the provider already has is rejected with 409.
+// @Tags providers
+// @Accept json
+// @Produce json
+// @Param request body AddProviderAPIKeyRequest true "API key payload"
+// @Success 201 {object} ProviderCredentialResponse
+// @Failure 400 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /marketdata/providers [post]
+func AddProviderAPIKey(
+	log logging.Logger,
+	credentials *marketdata.Credentials,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := httpx.JSONDecode[AddProviderAPIKeyRequest](r)
+		if err != nil {
+			if httpx.WriteDecodeError(w, err) {
+				return
+			}
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+			return
+		}
+		isValid, problems := req.isValid()
+		if !isValid {
+			_ = httpx.JSONEncode(w, http.StatusBadRequest, problems)
+			return
+		}
+
+		credential, err := credentials.Add(r.Context(), marketdata.ProviderName(strings.TrimSpace(req.Name)), req.APIKey, trimmedPtr(req.BaseURI))
+		if err != nil {
+			writeCredentialError(w, log, r, "add provider api key", err)
+			return
+		}
+
+		log.Info(r.Context(), "provider api key added",
+			"provider", credential.Name, "provider_id", credential.ID.String())
+
+		_ = httpx.JSONEncode(w, http.StatusCreated, toProviderCredentialResponse(credential))
 	})
 }
 
@@ -181,6 +273,10 @@ func writeCredentialError(w http.ResponseWriter, log logging.Logger, r *http.Req
 		_ = httpx.JSONEncode(w, http.StatusNotFound, map[string]string{"provider": "provider not found"})
 	case errors.Is(err, marketdata.ErrCredentialsNotConfigurable):
 		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"provider": err.Error()})
+	case errors.Is(err, marketdata.ErrProviderAPIKeyExists):
+		_ = httpx.JSONEncode(w, http.StatusConflict, map[string]string{"api_key": err.Error()})
+	case errors.Is(err, marketdata.ErrProviderKeyNotSupported):
+		_ = httpx.JSONEncode(w, http.StatusBadRequest, map[string]string{"name": err.Error()})
 	case errors.Is(err, marketdata.ErrNoCredentialFieldsToUpdate),
 		errors.Is(err, marketdata.ErrProviderAPIKeyEmpty),
 		errors.Is(err, marketdata.ErrProviderBaseURIInvalid):

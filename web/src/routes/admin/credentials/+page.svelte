@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { ApiError } from '$lib/api/client';
-	import type { ProviderCredential } from '$lib/api/types';
+	import type { APIProvider, ProviderCredential } from '$lib/api/types';
 	import AppShellTemplate from '$lib/components/templates/app-shell/AppShellTemplate.svelte';
 	import PageContentTemplate from '$lib/components/templates/page-content/PageContentTemplate.svelte';
 	import TopNavbar from '$lib/components/organisms/top-navbar/TopNavbar.svelte';
@@ -14,16 +14,61 @@
 	import Button from '$lib/components/atoms/button/Button.svelte';
 	import Icon from '$lib/components/atoms/icon/Icon.svelte';
 	import Input from '$lib/components/atoms/input/Input.svelte';
+	import Select from '$lib/components/atoms/select/Select.svelte';
 	import {
+		addProviderApiKey,
+		listApiProviders,
 		listProviderCredentials,
 		revealProviderApiKey,
 		updateProviderCredentials
 	} from '$lib/services/marketdata';
 	import { toast } from '$lib/stores/toast.svelte';
 
+	/** A table row: a stored key, or an API provider that has no key yet. */
+	type CredentialRow = ProviderCredential & { missing?: boolean };
+
 	let providers = $state<ProviderCredential[]>([]);
+	let apiProviders = $state<APIProvider[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+
+	/**
+	 * Every API provider is listed, keys grouped under it, and one without a key gets a
+	 * "no key yet" row rather than disappearing. Manual providers follow.
+	 */
+	let rows = $derived.by<CredentialRow[]>(() => {
+		const apiNames = new Set(apiProviders.map((provider) => provider.name));
+		const grouped: CredentialRow[] = [];
+		for (const api of apiProviders) {
+			const keys = providers.filter((provider) => provider.name === api.name);
+			grouped.push(
+				...(keys.length > 0
+					? keys
+					: [
+							{
+								id: `missing:${api.name}`,
+								name: api.name,
+								ingestion_mode: 'API' as const,
+								base_uri: api.default_base_uri,
+								has_api_key: false,
+								api_key_hint: '',
+								remaining: 0,
+								used: 0,
+								total: 0,
+								missing: true
+							}
+						])
+			);
+		}
+		return [...grouped, ...providers.filter((provider) => !apiNames.has(provider.name))];
+	});
+
+	let adding = $state(false);
+	let addName = $state('');
+	let addKeyInput = $state('');
+	let addBaseUriInput = $state('');
+	let addSaving = $state(false);
+	let addError = $state('');
 
 	/** Keys revealed in this session, held only in memory and cleared on reload. */
 	let revealed = $state<Record<string, string>>({});
@@ -39,7 +84,10 @@
 		loading = true;
 		error = null;
 		try {
-			providers = await listProviderCredentials();
+			[providers, apiProviders] = await Promise.all([
+				listProviderCredentials(),
+				listApiProviders()
+			]);
 		} catch {
 			error = 'Failed to load provider credentials';
 		} finally {
@@ -102,6 +150,67 @@
 		}
 	}
 
+	function defaultBaseUri(name: string): string {
+		return apiProviders.find((provider) => provider.name === name)?.default_base_uri ?? '';
+	}
+
+	function openAdd(name: string = apiProviders[0]?.name ?? '') {
+		adding = true;
+		addName = name;
+		addKeyInput = '';
+		addBaseUriInput = defaultBaseUri(name);
+		addError = '';
+	}
+
+	function closeAdd() {
+		adding = false;
+		addKeyInput = '';
+		addBaseUriInput = '';
+		addError = '';
+	}
+
+	function changeAddProvider(name: string) {
+		// Only follow the new provider's default while the field still holds the old one,
+		// so a URL typed by hand is not thrown away.
+		if (addBaseUriInput.trim() === defaultBaseUri(addName)) {
+			addBaseUriInput = defaultBaseUri(name);
+		}
+		addName = name;
+	}
+
+	async function add() {
+		const key = addKeyInput.trim();
+		const baseUri = addBaseUriInput.trim();
+		if (key === '') {
+			addError = 'Enter the API key to add.';
+			return;
+		}
+
+		addSaving = true;
+		addError = '';
+		try {
+			const created = await addProviderApiKey({
+				name: addName,
+				api_key: key,
+				...(baseUri === '' || baseUri === defaultBaseUri(addName) ? {} : { base_uri: baseUri })
+			});
+			providers = [...providers, created];
+			toast.success(`${created.name} key added`);
+			closeAdd();
+		} catch (cause) {
+			if (cause instanceof ApiError && cause.status === 409) {
+				addError = `This key is already configured for ${addName}.`;
+			} else if (cause instanceof ApiError && cause.status === 400) {
+				addError =
+					'The key could not be added. Check the values — a base URL must be https on a public host.';
+			} else {
+				addError = 'Could not confirm the key was added. Check your connection.';
+			}
+		} finally {
+			addSaving = false;
+		}
+	}
+
 	async function reveal(provider: ProviderCredential) {
 		revealing = provider.id;
 		try {
@@ -146,15 +255,23 @@
 					<Icon icon="heroicons:arrow-path" />
 					Refresh
 				</Button>
+				<Button
+					shape="default"
+					disabled={loading || apiProviders.length === 0}
+					onclick={() => openAdd()}
+				>
+					<Icon icon="heroicons:plus" />
+					Add key
+				</Button>
 			{/snippet}
 		</LedgerToolbar>
 
 		<DataTable
-			rows={providers}
+			{rows}
 			{loading}
 			error={error ? `${error}. Check your connection and try again.` : null}
 			onRetry={load}
-			getRowId={(row: ProviderCredential) => row.id}
+			getRowId={(row: CredentialRow) => row.id}
 			emptyText="No providers are configured yet."
 			columns={[
 				{ key: 'name', header: 'Provider', width: 'w-40', cell: nameCell },
@@ -190,9 +307,11 @@
 	{/if}
 {/snippet}
 
-{#snippet keyCell(row: ProviderCredential)}
+{#snippet keyCell(row: CredentialRow)}
 	{#if row.ingestion_mode === 'MANUAL'}
 		<Badge intent="neutral" variant="soft" size="sm">Uploads only</Badge>
+	{:else if row.missing}
+		<Badge intent="warning" variant="soft" size="sm">No key yet</Badge>
 	{:else if !row.has_api_key}
 		<Badge intent="warning" variant="soft" size="sm">Not set</Badge>
 	{:else if revealed[row.id]}
@@ -214,9 +333,11 @@
 	{/if}
 {/snippet}
 
-{#snippet actionsCell(row: ProviderCredential)}
+{#snippet actionsCell(row: CredentialRow)}
 	{#if row.ingestion_mode === 'MANUAL'}
 		<span class="text-xs text-slate-400">No credentials</span>
+	{:else if row.missing}
+		<Button variant="outline" size="sm" onclick={() => openAdd(row.name)}>Add key</Button>
 	{:else}
 		<Button variant="outline" size="sm" onclick={() => openEditor(row)}>
 			{row.has_api_key ? 'Replace key' : 'Set key'}
@@ -291,4 +412,87 @@
 			</div>
 		</form>
 	{/if}
+</Dialog>
+
+<Dialog
+	open={adding}
+	title="Add API key"
+	dismissible={!addSaving}
+	closeOnBackdrop={!addSaving}
+	closeOnEscape={!addSaving}
+	onClose={closeAdd}
+>
+	{#if addError}
+		<NoticeBand intent="error" surface="inset" gutter="dialog" class="-mx-5 -mt-4 mb-4">
+			{addError}
+		</NoticeBand>
+	{/if}
+	<form
+		class="space-y-4"
+		novalidate
+		aria-busy={addSaving}
+		onsubmit={(event) => {
+			event.preventDefault();
+			void add();
+		}}
+	>
+		<p class="text-sm text-slate-600">
+			The key is added next to any keys this provider already has; existing keys stay as they are.
+		</p>
+		<fieldset disabled={addSaving} class="space-y-4">
+			<FormField label="Provider" id="add-provider-name">
+				{#snippet children(ctx)}
+					<Select
+						id={ctx.id}
+						value={addName}
+						options={apiProviders.map((provider) => ({
+							value: provider.name,
+							label: provider.name
+						}))}
+						ariaDescribedby={ctx.describedby}
+						onchange={(event) =>
+							changeAddProvider((event.currentTarget as HTMLSelectElement).value)}
+					/>
+				{/snippet}
+			</FormField>
+			<FormField
+				label="API key"
+				id="add-provider-api-key"
+				hint="Stored server-side. It is not shown again unless you reveal it."
+			>
+				{#snippet children(ctx)}
+					<Input
+						id={ctx.id}
+						type="password"
+						bind:value={addKeyInput}
+						autocomplete="off"
+						placeholder="Paste the provider API key"
+						ariaDescribedby={ctx.describedby}
+					/>
+				{/snippet}
+			</FormField>
+			<FormField
+				label="Base URL"
+				id="add-provider-base-uri"
+				hint="Prefilled with the provider's default."
+			>
+				{#snippet children(ctx)}
+					<Input
+						id={ctx.id}
+						bind:value={addBaseUriInput}
+						placeholder="https://api.example.com/v2"
+						ariaDescribedby={ctx.describedby}
+					/>
+				{/snippet}
+			</FormField>
+		</fieldset>
+		<div class="flex justify-end gap-2 border-t border-slate-200 pt-4">
+			<Button variant="ghost" intent="secondary" disabled={addSaving} onclick={closeAdd}>
+				Cancel
+			</Button>
+			<Button type="submit" disabled={addSaving} loading={addSaving}>
+				{addSaving ? 'Adding…' : 'Add key'}
+			</Button>
+		</div>
+	</form>
 </Dialog>

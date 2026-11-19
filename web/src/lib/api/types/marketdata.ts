@@ -213,6 +213,19 @@ export interface UpdateProviderCredentialsRequest {
 	base_uri?: string;
 }
 
+/** `GET /marketdata/providers/api` — an API provider a key can be added for. */
+export interface APIProvider {
+	name: string;
+	default_base_uri: string;
+}
+
+/** `POST /marketdata/providers` — an omitted base URI uses the provider's default. */
+export interface AddProviderAPIKeyRequest {
+	name: string;
+	api_key: string;
+	base_uri?: string;
+}
+
 /** `POST /marketdata/providers/{id}/credentials/reveal` — returns the key in full. */
 export interface RevealProviderAPIKeyResponse {
 	id: string;

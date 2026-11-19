@@ -1,6 +1,8 @@
 import { ApiError, apiGet, apiSend } from '$lib/api/client';
 import { useMocks } from '$lib/api/config';
 import type {
+	AddProviderAPIKeyRequest,
+	APIProvider,
 	CatalogueSearchRequest,
 	CatalogueSearchResponse,
 	CatalogueStatus,
@@ -28,7 +30,12 @@ import {
 	upstreamTotals,
 	type CatalogueEntry
 } from '$lib/data/fixtures/catalogue';
-import { maskKey, mockKeys, providerCredentials } from '$lib/data/fixtures/credentials';
+import {
+	apiProviders,
+	maskKey,
+	mockKeys,
+	providerCredentials
+} from '$lib/data/fixtures/credentials';
 import { eodByListing, listings, quotes } from '$lib/data/fixtures/marketdata';
 import { portfolioPositions } from '$lib/data/fixtures/portfolio';
 import { clone, delay, mockId } from './_mock';
@@ -348,6 +355,59 @@ export async function listProviderCredentials(): Promise<ProviderCredential[]> {
 		return clone(providerCredentials);
 	}
 	return apiGet<ProviderCredential[]>('/marketdata/providers');
+}
+
+/** `GET /marketdata/providers/api` — the API providers a key can be added for. */
+export async function listApiProviders(): Promise<APIProvider[]> {
+	if (useMocks) {
+		await delay();
+		return clone(apiProviders);
+	}
+	return apiGet<APIProvider[]>('/marketdata/providers/api');
+}
+
+/**
+ * `POST /marketdata/providers` — adds a key next to any the provider already has.
+ * A key the provider already has is refused with 409.
+ */
+export async function addProviderApiKey(
+	body: AddProviderAPIKeyRequest
+): Promise<ProviderCredential> {
+	if (useMocks) {
+		await delay();
+		const provider = apiProviders.find((candidate) => candidate.name === body.name);
+		if (!provider) {
+			throw new ApiError(400, 'API keys cannot be added for this provider', {
+				name: 'api keys cannot be added for this provider'
+			});
+		}
+		const key = body.api_key.trim();
+		const duplicate = providerCredentials.some(
+			(credential) => credential.name === body.name && mockKeys[credential.id] === key
+		);
+		if (duplicate) {
+			throw new ApiError(409, 'This API key is already configured for the provider', {
+				api_key: 'this api key is already configured for the provider'
+			});
+		}
+		const id = mockId();
+		mockKeys[id] = key;
+		const created: ProviderCredential = {
+			id,
+			name: provider.name,
+			ingestion_mode: 'API',
+			base_uri: body.base_uri?.trim() || provider.default_base_uri,
+			has_api_key: true,
+			api_key_hint: maskKey(key),
+			remaining: 0,
+			used: 0,
+			total: 0,
+			resets_at: ''
+		};
+		providerCredentials.push(created);
+		return clone(created);
+	}
+	return apiSend<ProviderCredential>('POST', '/marketdata/providers', body);
 }
 
 /** `PATCH /marketdata/providers/{id}/credentials` */

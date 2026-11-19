@@ -66,11 +66,19 @@ func (p *Provider) ToCredential() *ProviderCredential {
 	}
 }
 
-// CredentialStore reads and updates provider connection records.
+// CredentialStore reads, adds and updates provider connection records.
 type CredentialStore interface {
 	ListProviders(ctx context.Context) ([]*Provider, error)
 	GetProviderByID(ctx context.Context, id uuid.UUID) (*Provider, error)
+	CreateProvider(ctx context.Context, provider *Provider) error
 	UpdateProviderCredentials(ctx context.Context, id uuid.UUID, apiKey, baseURI *string) error
+}
+
+// APIProviderDefault names an API provider keys can be added for, with the base URI a
+// new key is stored with unless another is given.
+type APIProviderDefault struct {
+	Name    ProviderName
+	BaseURI string
 }
 
 // Credentials manages the API keys and base URIs of external market-data providers.
@@ -78,12 +86,66 @@ type CredentialStore interface {
 // Manual providers ingest from uploaded files and have no endpoint or key to store,
 // so they are listed for completeness but reject credential updates.
 type Credentials struct {
-	cs CredentialStore
+	cs       CredentialStore
+	defaults []APIProviderDefault
 }
 
-// NewCredentials creates the provider-credential use cases.
-func NewCredentials(cs CredentialStore) *Credentials {
-	return &Credentials{cs: cs}
+// NewCredentials creates the provider-credential use cases. defaults lists the API
+// providers keys can be added for, in display order.
+func NewCredentials(cs CredentialStore, defaults []APIProviderDefault) *Credentials {
+	return &Credentials{cs: cs, defaults: defaults}
+}
+
+// APIProviders returns the API providers keys can be added for, whether or not any
+// key is configured yet.
+func (c *Credentials) APIProviders() []APIProviderDefault {
+	return append([]APIProviderDefault(nil), c.defaults...)
+}
+
+// Add stores a new API key for an API provider, next to any keys it already has. A nil
+// baseURI uses the provider's default. Adding a key the provider already has fails with
+// ErrProviderAPIKeyExists rather than being skipped, so the caller can say so.
+func (c *Credentials) Add(ctx context.Context, name ProviderName, apiKey string, baseURI *string) (*ProviderCredential, error) {
+	var def *APIProviderDefault
+	for i := range c.defaults {
+		if c.defaults[i].Name == name {
+			def = &c.defaults[i]
+			break
+		}
+	}
+	if def == nil {
+		return nil, ErrProviderKeyNotSupported
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, ErrProviderAPIKeyEmpty
+	}
+	base := def.BaseURI
+	if baseURI != nil {
+		if err := ValidateBaseURI(*baseURI); err != nil {
+			return nil, err
+		}
+		base = *baseURI
+	}
+
+	existing, err := c.cs.ListProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, provider := range existing {
+		if provider != nil && provider.Name == name && provider.ApiKey != nil && strings.TrimSpace(*provider.ApiKey) == apiKey {
+			return nil, ErrProviderAPIKeyExists
+		}
+	}
+
+	provider, err := NewAPIProviderWithAPIKey(name, base, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.cs.CreateProvider(ctx, provider); err != nil {
+		return nil, err
+	}
+	return provider.ToCredential(), nil
 }
 
 // List returns every provider record with its secret withheld.
